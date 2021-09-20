@@ -387,7 +387,7 @@ def train_and_predict_input_setup(data, disc_steps=0, train_sync_steps=0,
         data (np.ndarray): data to be split/setup
         disc_steps (int): steps to discard completely before training begins
         train_sync_steps (int): steps to sync the reservoir with before training
-        train_steps (int): steps to use for training and fitting w_in
+        train_steps (int): steps to use for training and fitting w_out
         pred_sync_steps (int): steps to sync the reservoir with before prediction
         pred_steps (int): how many steps to predict the evolution for
 
