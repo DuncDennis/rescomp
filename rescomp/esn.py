@@ -1219,3 +1219,146 @@ class ESNGenLoc(utilities._ESNLogging):
             esn = self._esn_instances[0]
             esn._last_r = last_r
 
+
+class ESNHybrid(ESNWrapper):
+    """
+    Added by Dennis Duncan: Knowledge-based Hybrid Reservoir Computing:
+    Combining Knowledge based models with purely data-driven reservoir computing
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.logger.debug("Create ESNWrapper instance")
+        self.model = None
+
+    def set_model(self, model):
+        '''
+        :param model:
+        :return:
+        '''
+        self.model = model
+        # dt = 0.1
+        # self.model = lambda x: model(x)*dt + x
+
+    def _fit_w_out(self, x_train, r):
+        """
+        --DD: Altered to work for hybrid reservoir computing--
+
+        Fit the output matrix self._w_out after training
+
+        Uses linear regression and Tikhonov regularization.
+
+        Args:
+            y_train (np.ndarray): Desired prediction from the reservoir states
+            r (np.ndarray): reservoir states
+        Returns:
+            np.ndarray: r_gen, generalized nonlinear transformed r
+
+        """
+
+        # DD: In the Hybrid RC, the whole x_train has to be used for the training,
+        # thus _train_synced and _fit_w_out have to be overwritten
+        y_train = x_train[1:]
+
+        # u_train = self.model(x_train[:-1])
+        u_train = np.zeros(x_train[:-1].shape)
+        for i, x in enumerate(x_train[:-1]):
+            u_train[i] = self.model(x)
+
+
+        self.logger.debug('Fit _w_out according to method %s' %
+                          str(self._w_out_fit_flag))
+
+        r_gen = self._r_to_generalized_r(r)
+        print("r_gen shape: ", r_gen.shape)
+        print("u_train shape: ", u_train.shape)
+        # --DD: Stack the model-based prediction on top of r_gen--
+        r_gen = np.concatenate((r_gen, u_train), axis = 1)
+
+        # If we are using local states we only want to use the core dimensions
+        # for the fit of W_out, i.e. the dimensions where the corresponding
+        # locality matrix is 2
+        if self._loc_nbhd is None:
+            self._w_out = np.linalg.solve(
+                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
+                r_gen.T @ y_train).T
+        else:
+            self._w_out = np.linalg.solve(
+                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
+                r_gen.T @ y_train[:, self._loc_nbhd == 2]).T
+
+        return r_gen
+
+    def _train_synced(self, x_train, w_out_fit_flag="simple"):
+        """ Train a synchronized reservoir
+
+        Args:
+            x_train (np.ndarray): input to be used for the training, shape (T,d)
+            w_out_fit_flag (str): Type of nonlinear transformation applied to
+                the reservoir states r to be used during the fit (and future
+                prediction
+
+        Returns:
+            tuple: 2-element tuple containing:
+
+            - **r** (*np.ndarray*) reservoir states
+            - **r_gen** (*np.ndarray*): generalized reservoir states
+
+        """
+
+        self._w_out_fit_flag = \
+            self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
+
+        self.logger.debug('Start training')
+
+        # The last value of r can't be used for the training, see comment below
+        r = self.synchronize(x_train[:-1], save_r=True)
+
+        # Note: This is slightly different than the old ESN as y_train was as
+        # long as x_train, but shifted by one time step. Hence to get the same
+        # results as for the old ESN one has to specify an x_train one time step
+        # longer than before. Nonetheless, it's still true that r[t] is
+        # calculated from x[t] and used to calculate y[t] (all the same t)
+
+        # y_train = x_train[1:] #DD removed for Hybrid RC
+
+        r_gen = self._fit_w_out(x_train, r)
+
+        return r, r_gen
+
+    def _predict_step(self, x=None):
+        """ Predict a single time step
+
+        Assumes a synchronized reservoir.
+        Changes self._last_r and self._last_r_gen to stay synchronized to the
+        new system state y
+
+        Args:
+            x (np.ndarray): input for the d-dim. system, shape (d,). If x is
+            None the internal reservoir states will be used to generate x
+            using w_out
+
+        Returns:
+            np.ndarray: y, the next time step as predicted from last_x, _w_out
+            and _last_r, shape (d,)
+
+        """
+
+        if x is None: # DD: not sure when used?
+            x = self._w_out @ self._r_to_generalized_r(self._last_r)
+
+        self._last_r = self._act_fct(x, self._last_r)
+        self._last_r_gen = self._r_to_generalized_r(self._last_r)
+
+        u_i = self.model(x)
+        r_gen_and_model = np.concatenate((self._last_r_gen, u_i))
+
+        y = self._w_out @ r_gen_and_model
+
+        if self._loc_nbhd is not None:
+            temp = np.empty(self._loc_nbhd.shape)
+            temp[:] = np.nan
+            temp[self._loc_nbhd == 2] = y
+            y = temp
+
+        return y
