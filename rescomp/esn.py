@@ -1224,6 +1224,8 @@ class ESNHybrid(ESNWrapper):
     """
     Added by Dennis Duncan: Knowledge-based Hybrid Reservoir Computing:
     Combining Knowledge based models with purely data-driven reservoir computing
+
+    Following: (1) ArXiv ID: 1803.04779
     """
 
     def __init__(self):
@@ -1231,14 +1233,23 @@ class ESNHybrid(ESNWrapper):
         self.logger.debug("Create ESNWrapper instance")
         self.model = None
 
-    def set_model(self, model):
+        self.add_model_to_input = None #If True the input to the reservoir is both the model(x) and x. See (1)
+        self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input
+
+    def set_model(self, model, add_model_to_input = False, gamma = 0.5):
         '''
         :param model:
         :return:
         '''
         self.model = model
-        # dt = 0.1
-        # self.model = lambda x: model(x)*dt + x
+        self.add_model_to_input = add_model_to_input
+        self.gamma = gamma
+
+    def model_array(self, x):
+        u_train = np.zeros(x.shape)
+        for i, x_i in enumerate(x):
+            u_train[i] = self.model(x_i)
+        return u_train
 
     def _fit_w_out(self, x_train, r):
         """
@@ -1261,9 +1272,10 @@ class ESNHybrid(ESNWrapper):
         y_train = x_train[1:]
 
         # u_train = self.model(x_train[:-1])
-        u_train = np.zeros(x_train[:-1].shape)
-        for i, x in enumerate(x_train[:-1]):
-            u_train[i] = self.model(x)
+        u_train = self.model_array(x_train[:-1])
+        # u_train = np.zeros(x_train[:-1].shape)
+        # for i, x in enumerate(x_train[:-1]):
+        #     u_train[i] = self.model(x)
 
 
         self.logger.debug('Fit _w_out according to method %s' %
@@ -1344,10 +1356,17 @@ class ESNHybrid(ESNWrapper):
 
         """
 
+
+
         if x is None: # DD: not sure when used?
             x = self._w_out @ self._r_to_generalized_r(self._last_r)
 
-        self._last_r = self._act_fct(x, self._last_r)
+        if self.add_model_to_input:
+            x_in = np.concatenate((x, self.model(x)), axis = 0)
+        else:
+            x_in = x
+
+        self._last_r = self._act_fct(x_in, self._last_r)
         self._last_r_gen = self._r_to_generalized_r(self._last_r)
 
         u_i = self.model(x)
@@ -1362,3 +1381,112 @@ class ESNHybrid(ESNWrapper):
             y = temp
 
         return y
+
+    def _create_w_in(self):
+        """  Create the input matrix w_in
+
+        Specification done via protected members
+
+        """
+        self.logger.debug("Create w_in")
+
+        if self._w_in_sparse and not self._w_in_ordered:
+            if self.add_model_to_input:
+                x_dim = 2*self._x_dim
+            else:
+                x_dim = self._x_dim
+            self._w_in = np.zeros((self._n_dim, x_dim))
+
+            if self.add_model_to_input:
+                nr_of_raw_input_res_nodes = int(self.gamma * self._n_dim)
+            else:
+                nr_of_raw_input_res_nodes = self._n_dim
+            # nr_of_model_input_res_nodes = self._n_dim - nr_of_raw_input_res_nodes
+
+            nodes_connected_to_raw = np.random.choice(np.arange(self._n_dim), size=nr_of_raw_input_res_nodes, replace=False)
+
+            for index in nodes_connected_to_raw:
+                random_x_coord = np.random.choice(np.arange(self._x_dim))
+                self._w_in[index, random_x_coord] = np.random.uniform(
+                    low=-self._w_in_scale,
+                    high=self._w_in_scale)
+
+            if self.add_model_to_input:
+                nodes_connected_to_model = np.delete(np.arange(self._n_dim), nodes_connected_to_raw)
+
+                for index in nodes_connected_to_model:
+                    random_x_coord = np.random.choice(np.arange(self._x_dim))
+                    self._w_in[index, random_x_coord + self._x_dim] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)
+
+            # for i in range(self._n_dim):
+            #     # First choose wether the node connect to a model-input or raw connection:
+            #     # np.random.choice([0,1], [self.gamma, 1- self.gamma])
+            #     random_x_coord = np.random.choice(np.arange(self._x_dim))
+            #     self._w_in[i, random_x_coord] = np.random.uniform(
+            #         low=-self._w_in_scale,
+            #         high=self._w_in_scale)  # maps input values to reservoir
+
+        elif self._w_in_sparse and self._w_in_ordered:
+            self._w_in = np.zeros((self._n_dim, self._x_dim))
+            dim_wise = np.array([int(self._n_dim / self._x_dim)] * self._x_dim)
+            dim_wise[:self._n_dim % self._x_dim] += 1
+
+            s = 0
+
+            dim_wise_2 = dim_wise[:]
+
+            for i in range(len(dim_wise_2)):
+                s += dim_wise_2[i]
+                dim_wise[i] = s
+
+            dim_wise = np.append(dim_wise, 0)
+
+            for d in range(self._x_dim):
+                for i in range(dim_wise[d - 1], dim_wise[d]):
+                    self._w_in[i, d] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)  # maps input values to reservoir
+        else:
+            self._w_in = np.random.uniform(low=-self._w_in_scale,
+                                           high=self._w_in_scale,
+                                           size=(self._n_dim, self._x_dim))
+
+    def synchronize(self, x, save_r=False):
+        """ Synchronize the reservoir state with the input time series
+
+        This is usually done automatically in the training and prediction
+        functions.
+        DD: Add model input
+
+        Args:
+            x (np.ndarray): Input data to be used for the synchronization,
+                shape (T, d)
+            save_r (bool): If true, saves and returns r
+
+        Returns:
+            np.ndarray_or_None: All r states if save_r is True, None if False
+
+        """
+        self.logger.debug('Start syncing the reservoir state')
+
+        if self.add_model_to_input:
+            print("xshape and model(x) shape: ", x.shape, self.model_array(x).shape)
+            x = np.concatenate((x, self.model_array(x)), axis = 1)
+            print("xshape after: ", x.shape)
+            print("win  shape: ", self._w_in.shape)
+        if self._last_r is None:
+            self._last_r = np.zeros(self._network.shape[0])
+
+        if save_r:
+            r = np.zeros((x.shape[0], self._network.shape[0]))
+            r[0] = self._act_fct(x[0], self._last_r)
+            for t in np.arange(x.shape[0] - 1):
+                r[t+1] = self._act_fct(x[t + 1], r[t])
+            self._last_r = deepcopy(r[-1])
+            return r
+        else:
+            for t in np.arange(x.shape[0]):
+                self._last_r = self._act_fct(x[t], self._last_r)
+            return None
