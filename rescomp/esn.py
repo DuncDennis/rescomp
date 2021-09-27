@@ -1271,12 +1271,7 @@ class ESNHybrid(ESNWrapper):
         # thus _train_synced and _fit_w_out have to be overwritten
         y_train = x_train[1:]
 
-        # u_train = self.model(x_train[:-1])
         u_train = self.model_array(x_train[:-1])
-        # u_train = np.zeros(x_train[:-1].shape)
-        # for i, x in enumerate(x_train[:-1]):
-        #     u_train[i] = self.model(x)
-
 
         self.logger.debug('Fit _w_out according to method %s' %
                           str(self._w_out_fit_flag))
@@ -1390,20 +1385,26 @@ class ESNHybrid(ESNWrapper):
         """
         self.logger.debug("Create w_in")
 
+        if self.add_model_to_input:
+            x_dim = 2 * self._x_dim
+            nr_res_nodes_connected_to_raw_in = int(self.gamma * self._n_dim) #DDtest
+            nr_res_nodes_connected_to_model_in = self._n_dim - nr_res_nodes_connected_to_raw_in
+            print("Actual percentage of Reservoir nodes connected to raw input: ", np.round(nr_res_nodes_connected_to_raw_in*100/self._n_dim, 1))
+        else:
+            x_dim = self._x_dim
+            nr_res_nodes_connected_to_raw_in = self._n_dim #DDtest
+
         if self._w_in_sparse and not self._w_in_ordered:
-            if self.add_model_to_input:
-                x_dim = 2*self._x_dim
-            else:
-                x_dim = self._x_dim
             self._w_in = np.zeros((self._n_dim, x_dim))
 
-            if self.add_model_to_input:
-                nr_of_raw_input_res_nodes = int(self.gamma * self._n_dim)
-            else:
-                nr_of_raw_input_res_nodes = self._n_dim
+            # if self.add_model_to_input:
+            #     nr_of_raw_input_res_nodes = int(self.gamma * self._n_dim)
+            # else:
+            #     nr_of_raw_input_res_nodes = self._n_dim
             # nr_of_model_input_res_nodes = self._n_dim - nr_of_raw_input_res_nodes
 
-            nodes_connected_to_raw = np.random.choice(np.arange(self._n_dim), size=nr_of_raw_input_res_nodes, replace=False)
+            nodes_connected_to_raw = np.random.choice(np.arange(self._n_dim), size=nr_res_nodes_connected_to_raw_in, replace=False)
+            nodes_connected_to_raw = np.sort(nodes_connected_to_raw)
 
             for index in nodes_connected_to_raw:
                 random_x_coord = np.random.choice(np.arange(self._x_dim))
@@ -1429,29 +1430,68 @@ class ESNHybrid(ESNWrapper):
             #         high=self._w_in_scale)  # maps input values to reservoir
 
         elif self._w_in_sparse and self._w_in_ordered:
-            self._w_in = np.zeros((self._n_dim, self._x_dim))
-            dim_wise = np.array([int(self._n_dim / self._x_dim)] * self._x_dim)
-            dim_wise[:self._n_dim % self._x_dim] += 1
+            # DD: hybrid model missing here sofar
+            # new:
+            raw_input_node_indices = np.arange(0, self._x_dim)
+            res_node_ind_connected_to_raw = np.arange(0, nr_res_nodes_connected_to_raw_in)
 
-            s = 0
+            self._w_in = np.zeros((self._n_dim, x_dim))
 
-            dim_wise_2 = dim_wise[:]
+            dim_wise = np.array([int(nr_res_nodes_connected_to_raw_in / self._x_dim)] * self._x_dim)
+            dim_wise[:nr_res_nodes_connected_to_raw_in % self._x_dim] += 1
 
-            for i in range(len(dim_wise_2)):
-                s += dim_wise_2[i]
-                dim_wise[i] = s
-
-            dim_wise = np.append(dim_wise, 0)
-
-            for d in range(self._x_dim):
-                for i in range(dim_wise[d - 1], dim_wise[d]):
-                    self._w_in[i, d] = np.random.uniform(
+            c = 0
+            for d in raw_input_node_indices:
+                nr_of_connections_to_dim = dim_wise[d]
+                for con in range(nr_of_connections_to_dim):
+                    reservoir_node = res_node_ind_connected_to_raw[c]
+                    c+=1
+                    self._w_in[reservoir_node, d] = np.random.uniform(
                         low=-self._w_in_scale,
                         high=self._w_in_scale)  # maps input values to reservoir
+
+            if self.add_model_to_input:
+                model_input_node_indices = np.arange(self._x_dim, 2*self._x_dim)
+                res_node_ind_connected_to_model = np.arange(nr_res_nodes_connected_to_raw_in, nr_res_nodes_connected_to_model_in + nr_res_nodes_connected_to_raw_in)
+
+                dim_wise = np.array([int(nr_res_nodes_connected_to_model_in / self._x_dim)] * self._x_dim)
+                dim_wise[:nr_res_nodes_connected_to_model_in % self._x_dim] += 1
+                c = 0
+                for i, d in enumerate(model_input_node_indices):
+                    nr_of_connections_to_dim = dim_wise[i]
+                    for con in range(nr_of_connections_to_dim):
+                        reservoir_node = res_node_ind_connected_to_model[c]
+                        c += 1
+                        self._w_in[reservoir_node, d] = np.random.uniform(
+                            low=-self._w_in_scale,
+                            high=self._w_in_scale)  # maps input values to reservoir
+
+
+            #
+            # # old
+            # self._w_in = np.zeros((self._n_dim, self._x_dim))
+            # dim_wise = np.array([int(self._n_dim / self._x_dim)] * self._x_dim)
+            # dim_wise[:self._n_dim % self._x_dim] += 1
+            #
+            # s = 0
+            #
+            # dim_wise_2 = dim_wise[:]
+            #
+            # for i in range(len(dim_wise_2)):
+            #     s += dim_wise_2[i]
+            #     dim_wise[i] = s
+            #
+            # dim_wise = np.append(dim_wise, 0)
+            #
+            # for d in range(self._x_dim):
+            #     for i in range(dim_wise[d - 1], dim_wise[d]):
+            #         self._w_in[i, d] = np.random.uniform(
+            #             low=-self._w_in_scale,
+            #             high=self._w_in_scale)  # maps input values to reservoir
         else:
             self._w_in = np.random.uniform(low=-self._w_in_scale,
                                            high=self._w_in_scale,
-                                           size=(self._n_dim, self._x_dim))
+                                           size=(self._n_dim, x_dim))
 
     def synchronize(self, x, save_r=False):
         """ Synchronize the reservoir state with the input time series
