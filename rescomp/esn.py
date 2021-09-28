@@ -1233,15 +1233,17 @@ class ESNHybrid(ESNWrapper):
         self.logger.debug("Create ESNWrapper instance")
         self.model = None
 
+        self.add_model_to_output = None #If True, the model-prediction is included into the output layer. See (1)
         self.add_model_to_input = None #If True the input to the reservoir is both the model(x) and x. See (1)
         self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input
 
-    def set_model(self, model, add_model_to_input = False, gamma = 0.5):
+    def set_model(self, model, add_model_to_output = False,  add_model_to_input = False, gamma = 0.5):
         '''
         :param model:
         :return:
         '''
         self.model = model
+        self.add_model_to_output = add_model_to_output
         self.add_model_to_input = add_model_to_input
         self.gamma = gamma
 
@@ -1271,16 +1273,17 @@ class ESNHybrid(ESNWrapper):
         # thus _train_synced and _fit_w_out have to be overwritten
         y_train = x_train[1:]
 
-        u_train = self.model_array(x_train[:-1])
-
         self.logger.debug('Fit _w_out according to method %s' %
                           str(self._w_out_fit_flag))
 
         r_gen = self._r_to_generalized_r(r)
         print("r_gen shape: ", r_gen.shape)
-        print("u_train shape: ", u_train.shape)
+
         # --DD: Stack the model-based prediction on top of r_gen--
-        r_gen = np.concatenate((r_gen, u_train), axis = 1)
+        if self.add_model_to_output:
+            u_train = self.model_array(x_train[:-1])
+            print("u_train shape: ", u_train.shape)
+            r_gen = np.concatenate((r_gen, u_train), axis = 1)
 
         # If we are using local states we only want to use the core dimensions
         # for the fit of W_out, i.e. the dimensions where the corresponding
@@ -1364,10 +1367,13 @@ class ESNHybrid(ESNWrapper):
         self._last_r = self._act_fct(x_in, self._last_r)
         self._last_r_gen = self._r_to_generalized_r(self._last_r)
 
-        u_i = self.model(x)
-        r_gen_and_model = np.concatenate((self._last_r_gen, u_i))
+        last_r_gen = self._last_r_gen
 
-        y = self._w_out @ r_gen_and_model
+        if self.add_model_to_output:
+            u_i = self.model(x)
+            last_r_gen = np.concatenate((last_r_gen, u_i))
+
+        y = self._w_out @ last_r_gen
 
         if self._loc_nbhd is not None:
             temp = np.empty(self._loc_nbhd.shape)

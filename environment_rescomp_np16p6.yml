@@ -19,4 +19,5 @@ dependencies:
   - seaborn=0.9
   - setuptools=42.0
   - wheel=0.33
-
+  - plotly=5.3.1 # Add by DD just for Jupyter
+  - jupyter=1.0.0 # Added by DD just for Jupyter
