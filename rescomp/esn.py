@@ -1277,12 +1277,12 @@ class ESNHybrid(ESNWrapper):
                           str(self._w_out_fit_flag))
 
         r_gen = self._r_to_generalized_r(r)
-        print("r_gen shape: ", r_gen.shape)
+        #print("r_gen shape: ", r_gen.shape)
 
         # --DD: Stack the model-based prediction on top of r_gen--
         if self.add_model_to_output:
             u_train = self.model_array(x_train[:-1])
-            print("u_train shape: ", u_train.shape)
+            #print("u_train shape: ", u_train.shape)
             r_gen = np.concatenate((r_gen, u_train), axis = 1)
 
         # If we are using local states we only want to use the core dimensions
@@ -1395,7 +1395,7 @@ class ESNHybrid(ESNWrapper):
             x_dim = 2 * self._x_dim
             nr_res_nodes_connected_to_raw_in = int(self.gamma * self._n_dim) #DDtest
             nr_res_nodes_connected_to_model_in = self._n_dim - nr_res_nodes_connected_to_raw_in
-            print("Actual percentage of Reservoir nodes connected to raw input: ", np.round(nr_res_nodes_connected_to_raw_in*100/self._n_dim, 1))
+            # print("Actual percentage of Reservoir nodes connected to raw input: ", np.round(nr_res_nodes_connected_to_raw_in*100/self._n_dim, 1))
         else:
             x_dim = self._x_dim
             nr_res_nodes_connected_to_raw_in = self._n_dim #DDtest
@@ -1518,10 +1518,10 @@ class ESNHybrid(ESNWrapper):
         self.logger.debug('Start syncing the reservoir state')
 
         if self.add_model_to_input:
-            print("xshape and model(x) shape: ", x.shape, self.model_array(x).shape)
+            #print("xshape and model(x) shape: ", x.shape, self.model_array(x).shape)
             x = np.concatenate((x, self.model_array(x)), axis = 1)
-            print("xshape after: ", x.shape)
-            print("win  shape: ", self._w_in.shape)
+            #print("xshape after: ", x.shape)
+            #print("win  shape: ", self._w_in.shape)
         if self._last_r is None:
             self._last_r = np.zeros(self._network.shape[0])
 
