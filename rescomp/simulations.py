@@ -560,7 +560,7 @@ def _kuramoto_sivashinsky_old(dimensions, system_size, dt, time_steps):
     return uu
 
 # reproduce_ETDRK4_Kassam2005_KS_simulation
-def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_point):
+def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_point, eps = 0):
     """ This function simulates the Kuramoto–Sivashinsky PDE
 
     Even though it doesn't use the RK4 algorithm, it is bundled with the other
@@ -579,6 +579,7 @@ def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_poin
         time_steps (int): nr. of time steps to simulate
         starting_point (np.ndarray): starting point for the simulation of shape
             (dimensions, )
+        eps (float): If non-zero, vary the parameter infront of the y_xx term: (1+eps)*y_xx
 
     Returns:
         (np.ndarray): simulated trajectory of shape (time_steps, dimensions)
@@ -607,7 +608,7 @@ def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_poin
                                 np.arange(-n / 2 + 1, 0))))) * 2 * np.pi / size
 
     # Just copied from the paper, it works
-    L = k ** 2 - k ** 4
+    L = (1 + eps) * k ** 2 - k ** 4
     E = np.exp(h * L)
     E_2 = np.exp(h * L / 2)
     M = int(np.ceil(size/(2 * np.pi)))
