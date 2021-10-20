@@ -1,7 +1,7 @@
 # __init__.py
 
 # from . import *
-from . import simulations, utilities, measures, esn, locality_measures
+from . import simulations, utilities, measures, esn, locality_measures, statistical_tests
 from .esn import ESN, ESNWrapper, ESNGenLoc
 from .utilities import read_pickle
 from .simulations import simulate_trajectory
