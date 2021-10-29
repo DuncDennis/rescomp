@@ -30,7 +30,10 @@ class StatisticalModelTester():
         :return: (int) The timesteps where the error is bigger than self.error_threshhold
         '''
         f = self.error_threshhold
-        return np.argmax(error_array>f)
+        if np.max(error_array) < f:
+            return len(error_array) - 1
+        else:
+            return np.argmax(error_array>f)
         #
         # for i, error in enumerate(error_array):
         #     if error > f:

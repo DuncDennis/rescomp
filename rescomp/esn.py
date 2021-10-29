@@ -1247,7 +1247,7 @@ class ESNHybrid(ESNWrapper):
 
         self.add_model_to_output = None #If True, the model-prediction is included into the output layer. See (1)
         self.add_model_to_input = None #If True the input to the reservoir is both the model(x) and x. See (1)
-        self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input
+        self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input, Only has influence if add_model_to_input = True
 
     def set_model(self, model, add_model_to_output = False,  add_model_to_input = False, gamma = 0.5):
         '''
