@@ -1548,3 +1548,19 @@ class ESNHybrid(ESNWrapper):
             for t in np.arange(x.shape[0]):
                 self._last_r = self._act_fct(x[t], self._last_r)
             return None
+
+    def set_w_out_to_only_model(self):
+
+        if self.add_model_to_output:
+            # modify _w_out:
+            print("Rewire all connections to model: Change W_out")
+            n_dim_mod = self._n_dim + self._x_dim
+            x_dim = self._x_dim
+            matrix = np.zeros((x_dim, n_dim_mod))
+            for i in range(0, x_dim):
+                to_add = np.zeros(x_dim)
+                to_add[i] = 1
+                matrix[:, n_dim_mod - x_dim + i] = to_add
+            self._w_out = matrix
+        else:
+            print("Error: This function only has an effect if add_model_to_output is True")

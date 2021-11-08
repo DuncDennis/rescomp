@@ -123,10 +123,10 @@ def data_simulation(simulation_function, t_train_disc, t_train_sync, t_train, t_
     x_train = sim_data[train_disc_steps : train_disc_steps + train_sync_steps + train_steps]
 
     x_pred_list = []
-    start = train_disc_steps + train_sync_steps + train_steps
+    start = train_disc_steps + train_sync_steps + train_steps - 1
     n_period = pred_disc_steps + pred_sync_steps + pred_steps
     for i in range(nr_of_time_intervals):
-        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period]
+        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period + 1]
         x_pred_list.append(x_pred)
     x_pred_list = np.array(x_pred_list)
 
