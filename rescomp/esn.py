@@ -1372,7 +1372,8 @@ class ESNHybrid(ESNWrapper):
             x = self._w_out @ self._r_to_generalized_r(self._last_r)
 
         if self.add_model_to_input:
-            x_in = np.concatenate((x, self.model(x)), axis = 0)
+            model_x = self.model(x)
+            x_in = np.concatenate((x, model_x), axis = 0)
         else:
             x_in = x
 
@@ -1382,8 +1383,9 @@ class ESNHybrid(ESNWrapper):
         last_r_gen = self._last_r_gen
 
         if self.add_model_to_output:
-            u_i = self.model(x)
-            last_r_gen = np.concatenate((last_r_gen, u_i))
+            if not self.add_model_to_input: # dont calculate it twice to save time
+                model_x = self.model(x)
+            last_r_gen = np.concatenate((last_r_gen, model_x))
 
         y = self._w_out @ last_r_gen
 
