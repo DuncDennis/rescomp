@@ -1249,3 +1249,262 @@ class ESNGenLoc(utilities._ESNLogging):
             esn = self._esn_instances[0]
             esn._last_r = last_r
 
+
+class ESNHybrid(ESNWrapper):
+    """
+    Added by Dennis Duncan: Knowledge-based Hybrid Reservoir Computing:
+    Combining Knowledge based models with purely data-driven reservoir computing
+
+    Following: (1) ArXiv ID: 1803.04779
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.logger.debug("Create ESNWrapper instance")
+        self.model = None
+
+        self.add_model_to_output = None #If True, the model-prediction is included into the output layer. See (1)
+        self.add_model_to_input = None #If True the input to the reservoir is both the model(x) and x. See (1)
+        self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input, Only has influence if add_model_to_input = True
+
+    def set_model(self, model, add_model_to_output = False,  add_model_to_input = False, gamma = 0.5):
+        '''
+        :param model:
+        :return:
+        '''
+        self.model = model
+        self.add_model_to_output = add_model_to_output
+        self.add_model_to_input = add_model_to_input
+        self.gamma = gamma
+
+    def model_array(self, x):
+        u_train = np.zeros(x.shape)
+        for i, x_i in enumerate(x):
+            u_train[i] = self.model(x_i)
+        return u_train
+
+    def _fit_w_out(self, x_train, r):
+        """
+        --DD: Altered to work for hybrid reservoir computing--
+
+        Fit the output matrix self._w_out after training
+
+        Uses linear regression and Tikhonov regularization.
+
+        Args:
+            y_train (np.ndarray): Desired prediction from the reservoir states
+            r (np.ndarray): reservoir states
+        Returns:
+            np.ndarray: r_gen, generalized nonlinear transformed r
+
+        """
+
+        # DD: In the Hybrid RC, the whole x_train has to be used for the training,
+        # thus _train_synced and _fit_w_out have to be overwritten
+        y_train = x_train[1:]
+
+        self.logger.debug('Fit _w_out according to method %s' %
+                          str(self._w_out_fit_flag))
+
+        r_gen = self._r_to_generalized_r(r)
+
+        # --DD: Stack the model-based prediction on top of r_gen--
+        if self.add_model_to_output:
+            u_train = self.model_array(x_train[:-1])
+            r_gen = np.concatenate((r_gen, u_train), axis = 1)
+
+        # If we are using local states we only want to use the core dimensions
+        # for the fit of W_out, i.e. the dimensions where the corresponding
+        # locality matrix is 2
+        # TODO: localstates and hybrid not combined yet
+        if self._loc_nbhd is None:
+            self._w_out = np.linalg.solve(
+                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
+                r_gen.T @ y_train).T
+        else:
+            self._w_out = np.linalg.solve(
+                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
+                r_gen.T @ y_train[:, self._loc_nbhd == 2]).T
+
+        return r_gen
+
+    def _predict_step(self, x=None):
+        """ Predict a single time step
+
+        Assumes a synchronized reservoir.
+        Changes self._last_r and self._last_r_gen to stay synchronized to the
+        new system state y
+
+        Args:
+            x (np.ndarray): input for the d-dim. system, shape (d,). If x is
+            None the internal reservoir states will be used to generate x
+            using w_out
+
+        Returns:
+            np.ndarray: y, the next time step as predicted from last_x, _w_out
+            and _last_r, shape (d,)
+
+        """
+
+        if x is None:
+            x = self._w_out @ self._r_to_generalized_r(self._last_r)
+
+        if self.add_model_to_input:
+            model_x = self.model(x)
+            x_in = np.concatenate((x, model_x), axis = 0)
+        else:
+            x_in = x
+
+        self._last_r = self._act_fct(x_in, self._last_r)
+        self._last_r_gen = self._r_to_generalized_r(self._last_r)
+
+        last_r_gen = self._last_r_gen
+
+        if self.add_model_to_output:
+            if not self.add_model_to_input: # dont calculate it twice to save time
+                model_x = self.model(x)
+            last_r_gen = np.concatenate((last_r_gen, model_x))
+
+        y = self._w_out @ last_r_gen
+
+        if self._loc_nbhd is not None:
+            temp = np.empty(self._loc_nbhd.shape)
+            temp[:] = np.nan
+            temp[self._loc_nbhd == 2] = y
+            y = temp
+
+        return y
+
+    def _create_w_in(self):
+        """  Create the input matrix w_in
+
+        Specification done via protected members
+        TODO: All behaviours should be tested more thoroughly
+        """
+        self.logger.debug("Create w_in")
+
+        if self.add_model_to_input:
+            x_dim = 2 * self._x_dim
+            nr_res_nodes_connected_to_raw_in = int(self.gamma * self._n_dim)
+            nr_res_nodes_connected_to_model_in = self._n_dim - nr_res_nodes_connected_to_raw_in
+            # print("Actual percentage of Reservoir nodes connected to raw input: ", np.round(nr_res_nodes_connected_to_raw_in*100/self._n_dim, 1))
+        else:
+            x_dim = self._x_dim
+            nr_res_nodes_connected_to_raw_in = self._n_dim
+
+        if self._w_in_sparse and not self._w_in_ordered:
+            self._w_in = np.zeros((self._n_dim, x_dim))
+
+            nodes_connected_to_raw = np.random.choice(np.arange(self._n_dim), size=nr_res_nodes_connected_to_raw_in, replace=False)
+            nodes_connected_to_raw = np.sort(nodes_connected_to_raw)
+
+            for index in nodes_connected_to_raw:
+                random_x_coord = np.random.choice(np.arange(self._x_dim))
+                self._w_in[index, random_x_coord] = np.random.uniform(
+                    low=-self._w_in_scale,
+                    high=self._w_in_scale)
+
+            if self.add_model_to_input:
+                nodes_connected_to_model = np.delete(np.arange(self._n_dim), nodes_connected_to_raw)
+
+                for index in nodes_connected_to_model:
+                    random_x_coord = np.random.choice(np.arange(self._x_dim))
+                    self._w_in[index, random_x_coord + self._x_dim] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)
+
+        elif self._w_in_sparse and self._w_in_ordered:
+            # DD: hybrid model missing here sofar
+            # new:
+            raw_input_node_indices = np.arange(0, self._x_dim)
+            res_node_ind_connected_to_raw = np.arange(0, nr_res_nodes_connected_to_raw_in)
+
+            self._w_in = np.zeros((self._n_dim, x_dim))
+
+            dim_wise = np.array([int(nr_res_nodes_connected_to_raw_in / self._x_dim)] * self._x_dim)
+            dim_wise[:nr_res_nodes_connected_to_raw_in % self._x_dim] += 1
+
+            c = 0
+            for d in raw_input_node_indices:
+                nr_of_connections_to_dim = dim_wise[d]
+                for con in range(nr_of_connections_to_dim):
+                    reservoir_node = res_node_ind_connected_to_raw[c]
+                    c+=1
+                    self._w_in[reservoir_node, d] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)  # maps input values to reservoir
+
+            if self.add_model_to_input:
+                model_input_node_indices = np.arange(self._x_dim, 2*self._x_dim)
+                res_node_ind_connected_to_model = np.arange(nr_res_nodes_connected_to_raw_in, nr_res_nodes_connected_to_model_in + nr_res_nodes_connected_to_raw_in)
+
+                dim_wise = np.array([int(nr_res_nodes_connected_to_model_in / self._x_dim)] * self._x_dim)
+                dim_wise[:nr_res_nodes_connected_to_model_in % self._x_dim] += 1
+                c = 0
+                for i, d in enumerate(model_input_node_indices):
+                    nr_of_connections_to_dim = dim_wise[i]
+                    for con in range(nr_of_connections_to_dim):
+                        reservoir_node = res_node_ind_connected_to_model[c]
+                        c += 1
+                        self._w_in[reservoir_node, d] = np.random.uniform(
+                            low=-self._w_in_scale,
+                            high=self._w_in_scale)  # maps input values to reservoir
+        else:
+            self._w_in = np.random.uniform(low=-self._w_in_scale,
+                                           high=self._w_in_scale,
+                                           size=(self._n_dim, x_dim))
+
+    def synchronize(self, x, save_r=False):
+        """ Synchronize the reservoir state with the input time series
+
+        This is usually done automatically in the training and prediction
+        functions.
+        DD: Add model input
+
+        Args:
+            x (np.ndarray): Input data to be used for the synchronization,
+                shape (T, d)
+            save_r (bool): If true, saves and returns r
+
+        Returns:
+            np.ndarray_or_None: All r states if save_r is True, None if False
+
+        """
+        self.logger.debug('Start syncing the reservoir state')
+
+        if self.add_model_to_input:
+            x = np.concatenate((x, self.model_array(x)), axis = 1)
+        if self._last_r is None:
+            self._last_r = np.zeros(self._network.shape[0])
+
+        if save_r:
+            r = np.zeros((x.shape[0], self._network.shape[0]))
+            r[0] = self._act_fct(x[0], self._last_r)
+            for t in np.arange(x.shape[0] - 1):
+                r[t+1] = self._act_fct(x[t + 1], r[t])
+            self._last_r = deepcopy(r[-1])
+            return r
+        else:
+            for t in np.arange(x.shape[0]):
+                self._last_r = self._act_fct(x[t], self._last_r)
+            return None
+
+    def set_w_out_to_only_model(self):
+        '''
+        Just a experimental function that wires all connection in w_out to only read
+        the model based prediction (if output_hybrid)
+        :return:
+        '''
+        if self.add_model_to_output:
+            # modify _w_out:
+            print("Rewire all connections to model: Change W_out")
+            n_dim_mod = self._n_dim + self._x_dim
+            x_dim = self._x_dim
+            matrix = np.zeros((x_dim, n_dim_mod))
+            for i in range(0, x_dim):
+                to_add = np.zeros(x_dim)
+                to_add[i] = 1
+                matrix[:, n_dim_mod - x_dim + i] = to_add
+            self._w_out = matrix
+        else:
+            print("Error: This function only has an effect if add_model_to_output is True")
