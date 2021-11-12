@@ -1249,6 +1249,20 @@ class ESNHybrid(ESNWrapper):
         self.add_model_to_input = None #If True the input to the reservoir is both the model(x) and x. See (1)
         self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input, Only has influence if add_model_to_input = True
 
+        self.bayesian_regression = False # Temporary -> should be implemented like _w_out_fit_flag_synonyms in the main ESN Class
+
+    def set_bayesian_regression(self, initial_sigma, initial_alpha_vector, mean_w_out_prior, bayesian_iterations):
+        '''
+        TEMPORARY FUNCTION FOR TESTING: ability for different regression types for fitting
+        W_out should be implement in the "Train" function.
+        '''
+        self.bayesian_regression = True
+        self.initial_sigma = initial_sigma
+        self.initial_alpha_vector = initial_alpha_vector
+        self.mean_w_out_prior = mean_w_out_prior
+        self.bayesian_iterations = bayesian_iterations
+
+
     def set_model(self, model, add_model_to_output = False,  add_model_to_input = False, gamma = 0.5):
         '''
         :param model:
@@ -1301,6 +1315,50 @@ class ESNHybrid(ESNWrapper):
         # for the fit of W_out, i.e. the dimensions where the corresponding
         # locality matrix is 2
         if self._loc_nbhd is None:
+            # added for testing (bayesian regression): check https://doi.org/10.1007/s00521-020-05477-3
+            # and for technical stuff: https://www.cs.ubc.ca/~murphyk/Teaching/CS340-Fall07/reading/gauss.pdf
+            if self.bayesian_regression:
+                w_out_prior = self.mean_w_out_prior
+                alpha = self.initial_alpha_vector
+                sigma = self.initial_sigma
+                iterations = self.bayesian_iterations
+                self.alphas = np.zeros((iterations, alpha.size))
+                self.sigmas = np.zeros(iterations)
+                P = y_train.shape[0]
+                print(f"P: {P}")
+                for i in range(iterations):
+                    self.alphas[i, :] = alpha
+                    self.sigmas[i] = sigma
+                    alpha_matrix = np.diag(alpha)
+                    covariance = np.linalg.inv(alpha_matrix + sigma**(-2) * r_gen.T @ r_gen)
+                    to_add =  alpha_matrix @ w_out_prior  # This was added by me
+                    mean = sigma**(-2) * covariance @ (r_gen.T @ y_train + to_add)
+                    cov_diag = np.diag(covariance)
+                    mean_squared_vec = (mean*mean).sum(axis = 1)
+                    print("here: ", mean_squared_vec.shape)
+                    sigma = np.linalg.norm(y_train - r_gen @ mean)/(P - (1-alpha*cov_diag).sum())
+                    alpha = (1 - alpha*cov_diag)/mean_squared_vec
+                    print("covariance: ", covariance.shape)
+                    print("mean: ", mean.shape)
+                self._w_out = mean.T
+                return r_gen
+
+            # sigma = 0.1
+            # alpha = self._reg_param/(sigma**2)
+            # print(f"alpha: {alpha}")
+            # # alpha = 0.01
+            # alpha_matrix = np.eye(r_gen.shape[1])*alpha
+            # covariance = np.linalg.inv(alpha_matrix + sigma ** (-2) * r_gen.T @ r_gen)
+            # self._w_out = sigma**(-2) * covariance @ (r_gen.T @ y_train)
+            # covariance_sig = np.linalg.inv(self._reg_param * np.eye(r_gen.shape[1]) + r_gen.T@r_gen)
+            # self._w_out = covariance_sig @ r_gen.T @ y_train
+            # self._w_out = np.linalg.inv(r_gen.T@r_gen + self._reg_param * np.eye(r_gen.shape[1])) @ r_gen.T @ y_train
+            # self._w_out = self._w_out.T
+            # return r_gen
+            # end of bayesian_regression (whole code between codes can be removed, when functionality is coded properly)
+
+
+
             self._w_out = np.linalg.solve(
                 r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
                 r_gen.T @ y_train).T
@@ -1365,8 +1423,6 @@ class ESNHybrid(ESNWrapper):
             and _last_r, shape (d,)
 
         """
-
-
 
         if x is None: # DD: not sure when used?
             x = self._w_out @ self._r_to_generalized_r(self._last_r)
