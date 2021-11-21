@@ -11,6 +11,7 @@ import pickle
 from copy import deepcopy
 import gc
 import pandas.io.pickle
+import tensorflow.keras as keras
 from . import utilities
 from ._version import __version__
 
@@ -1566,3 +1567,128 @@ class ESNHybrid(ESNWrapper):
             self._w_out = matrix
         else:
             print("Error: This function only has an effect if add_model_to_output is True")
+
+class ESNDnn(ESNWrapper):
+    """
+    Added by Dennis Duncan: Testing to fit the reservoir state via a deep-neural-net (feed forward)
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.logger.debug("Create ESNWrapper instance")
+        self.dnn_model = None
+
+    def _predict_step(self, x=None):
+        """ Predict a single time step
+
+        Assumes a synchronized reservoir.
+        Changes self._last_r and self._last_r_gen to stay synchronized to the
+        new system state y
+
+        Args:
+            x (np.ndarray): input for the d-dim. system, shape (d,). If x is
+            None the internal reservoir states will be used to generate x
+            using w_out
+
+        Returns:
+            np.ndarray: y, the next time step as predicted from last_x, _w_out
+            and _last_r, shape (d,)
+
+        """
+        if x is None:
+            x = self.dnn_model.predict(np.expand_dims(self._r_to_generalized_r(self._last_r), 0))
+
+        self._last_r = self._act_fct(x, self._last_r)
+        self._last_r_gen = self._r_to_generalized_r(self._last_r)
+
+        # print("shape: ", self._last_r_gen.shape)
+        y = self.dnn_model.predict(np.expand_dims(self._last_r_gen, 0))[0, :]
+        # print("shapey : ", y.shape)
+
+        if self._loc_nbhd is not None:
+            raise Exception("Note available in this class")
+
+        return y
+
+    def _train_synced(self, x_train, w_out_fit_flag="simple"):
+        """ Train a synchronized reservoir
+
+        Args:
+            x_train (np.ndarray): input to be used for the training, shape (T,d)
+            w_out_fit_flag (str): Type of nonlinear transformation applied to
+                the reservoir states r to be used during the fit (and future
+                prediction
+
+        Returns:
+            tuple: 2-element tuple containing:
+
+            - **r** (*np.ndarray*) reservoir states
+            - **r_gen** (*np.ndarray*): generalized reservoir states
+
+        """
+
+        self._w_out_fit_flag = \
+            self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
+
+        self.logger.debug('Start training')
+
+        # The last value of r can't be used for the training, see comment below
+        r = self.synchronize(x_train[:-1], save_r=True)
+
+        # Note: This is slightly different than the old ESN as y_train was as
+        # long as x_train, but shifted by one time step. Hence to get the same
+        # results as for the old ESN one has to specify an x_train one time step
+        # longer than before. Nonetheless, it's still true that r[t] is
+        # calculated from x[t] and used to calculate y[t] (all the same t)
+        y_train = x_train[1:]
+
+        # r_gen = self._fit_w_out(y_train, r)
+
+        r_gen = self._train_dnn(y_train, r)
+
+        return r, r_gen
+
+    def _set_dnn_model(self, input_dim, output_dim):
+        # https://www.tensorflow.org/tutorials/keras/regression?hl=en#regression_with_a_deep_neural_network_dnn
+        print("Building dnn model")
+
+        self.dnn_model = keras.Sequential([
+              keras.layers.Dense(256, input_dim=input_dim, activation='relu'),
+              keras.layers.Dense(64, activation='relu'),
+              keras.layers.Dense(output_dim)
+          ])
+        self.dnn_model.compile(loss='mean_absolute_error',
+                optimizer=keras.optimizers.Adam(learning_rate=0.0001))
+        self.dnn_model.summary()
+
+    def _train_dnn(self, y_train, r):
+        """ Train the dnn model that fits the reservoir to the output
+
+        Args:
+            y_train (np.ndarray): Desired prediction from the reservoir states
+            r (np.ndarray): reservoir states
+        Returns:
+            np.ndarray: r_gen, generalized nonlinear transformed r
+
+        """
+
+        self.logger.debug('Fit _w_out according to method %s' %
+                          str(self._w_out_fit_flag))
+
+        r_gen = self._r_to_generalized_r(r)
+
+        self._set_dnn_model(input_dim=r_gen.shape[1], output_dim=y_train.shape[1])
+
+        # If we are using local states we only want to use the core dimensions
+        # for the fit of W_out, i.e. the dimensions where the corresponding
+        # locality matrix is 2
+        epochs = 500
+        if self._loc_nbhd is None:
+            self.dnn_model.fit(r_gen, y_train, epochs = epochs)
+            # train the dnn with trainingsdata_ r_gen and target y_train
+            # TODO:
+
+        else:
+            raise Exception("Note available in this class")
+
+        return r_gen
