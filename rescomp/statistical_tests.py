@@ -109,44 +109,6 @@ class StatisticalModelTester():
             to_return.append(example_trajectory)
         return to_return
 
-def data_simulation(simulation_function, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred, dt, nr_of_time_intervals, v = 1, sim_data_return = False):
-    train_disc_steps = int(t_train_disc / dt)
-    train_sync_steps = int(t_train_sync / dt)
-    train_steps = int(t_train / dt)
-    pred_disc_steps = int(t_pred_disc / dt)
-    pred_sync_steps = int(t_pred_sync / dt)
-    pred_steps = int(t_pred / dt)
-    total_time_steps = train_disc_steps + train_sync_steps + train_steps + (
-                pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
-
-    sim_data = simulation_function(total_time_steps)
-    x_train = sim_data[train_disc_steps : train_disc_steps + train_sync_steps + train_steps]
-
-    x_pred_list = []
-    start = train_disc_steps + train_sync_steps + train_steps - 1
-    n_period = pred_disc_steps + pred_sync_steps + pred_steps
-    for i in range(nr_of_time_intervals):
-        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period + 1]
-        x_pred_list.append(x_pred)
-    x_pred_list = np.array(x_pred_list)
-
-    if v == 1:
-        print("train_disc_steps: ", train_disc_steps)
-        print("train_sync_steps: ", train_sync_steps)
-        print("train_steps: ", train_steps)
-        print("pred_disc_steps: ", pred_disc_steps)
-        print("pred_sync_steps: ", pred_sync_steps)
-        print("pred_steps: ", pred_steps)
-        print("total_time_steps: ", total_time_steps)
-        print("................................")
-        print("x_train shape: ", x_train.shape)
-        print("x_pred_list shape :", x_pred_list.shape)
-
-    if sim_data_return:
-        print("sim_data shape :", sim_data.shape)
-        return x_train, x_pred_list, sim_data
-
-    return x_train, x_pred_list
 
 class ST_sweeper():
     '''
@@ -300,3 +262,42 @@ def load_results(path):
     if sweep_bool:
         to_return_dict["sweep_array_models"] = sweep_array_models
     return to_return_dict
+
+def data_simulation(simulation_function, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred, dt, nr_of_time_intervals, v = 1, sim_data_return = False):
+    train_disc_steps = int(t_train_disc / dt)
+    train_sync_steps = int(t_train_sync / dt)
+    train_steps = int(t_train / dt)
+    pred_disc_steps = int(t_pred_disc / dt)
+    pred_sync_steps = int(t_pred_sync / dt)
+    pred_steps = int(t_pred / dt)
+    total_time_steps = train_disc_steps + train_sync_steps + train_steps + (
+                pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
+
+    sim_data = simulation_function(total_time_steps)
+    x_train = sim_data[train_disc_steps : train_disc_steps + train_sync_steps + train_steps]
+
+    x_pred_list = []
+    start = train_disc_steps + train_sync_steps + train_steps - 1
+    n_period = pred_disc_steps + pred_sync_steps + pred_steps
+    for i in range(nr_of_time_intervals):
+        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period + 1]
+        x_pred_list.append(x_pred)
+    x_pred_list = np.array(x_pred_list)
+
+    if v == 1:
+        print("train_disc_steps: ", train_disc_steps)
+        print("train_sync_steps: ", train_sync_steps)
+        print("train_steps: ", train_steps)
+        print("pred_disc_steps: ", pred_disc_steps)
+        print("pred_sync_steps: ", pred_sync_steps)
+        print("pred_steps: ", pred_steps)
+        print("total_time_steps: ", total_time_steps)
+        print("................................")
+        print("x_train shape: ", x_train.shape)
+        print("x_pred_list shape :", x_pred_list.shape)
+
+    if sim_data_return:
+        print("sim_data shape :", sim_data.shape)
+        return x_train, x_pred_list, sim_data
+
+    return x_train, x_pred_list
