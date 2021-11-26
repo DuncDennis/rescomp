@@ -131,7 +131,7 @@ def rmse(pred_time_series, meas_time_series, normalization=None):
 
     return error
 
-def error_over_time(pred_time_series, meas_time_series, distance_measure = "L2", normalization = None):
+def error_over_time(pred_time_series, meas_time_series, distance_measure = "L2", normalization = None, remove_nans=True):
     """ Calculates a general error between two time series
 
     The time series must be of equal length and dimension
@@ -162,12 +162,22 @@ def error_over_time(pred_time_series, meas_time_series, distance_measure = "L2",
             - "historic": Old, weird way to normalize the NRMSE, kept here
               purely for backwards compatibility. Don't use if you are not 100%
               sure that's what you want.
+        remove_nans: if True, turn all nans into np.inf. This is useful when comparisons
+                    of error and number has to made, e.g. in valid_times_index
     Returns:
         (np.ndarray): error array, shape (T,):
     """
 
     pred = pred_time_series
     meas = meas_time_series
+
+    if remove_nans:
+        is_nan = np.isnan(pred)
+        if is_nan.any():
+            pred[is_nan] = np.inf
+        is_nan = np.isnan(meas)
+        if is_nan.any():
+            meas[is_nan] = np.inf
 
     if len(pred.shape) == 1:
         pred = np.expand_dims(pred, axis = 1)
