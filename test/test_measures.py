@@ -4,6 +4,8 @@
 import unittest
 import numpy as np
 from rescomp import measures
+import pytest
+
 
 class testMeasures(unittest.TestCase):
     def setUp(self):
@@ -71,8 +73,8 @@ class testMeasures(unittest.TestCase):
         np.testing.assert_equal(rmse, rmse_desired)
 
     def test_divergence_time(self):
-        pred = np.array([[i, i+1] for i in range(10)])
-        meas = np.array([[i*2, i+1] for i in range(10)])
+        pred = np.array([[i, i + 1] for i in range(10)])
+        meas = np.array([[i * 2, i + 1] for i in range(10)])
 
         epsilon = 5
 
@@ -81,6 +83,7 @@ class testMeasures(unittest.TestCase):
 
         np.testing.assert_equal(div_time, div_time_desired)
 
+    # @pytest.mark.skip(reason='measures.error_over_time not yet implemented')
     def test_error_over_time_same_as_rmse_over_time(self):
         length = np.random.randint(1, 100)
         dim = np.random.randint(1, 100)
@@ -90,8 +93,9 @@ class testMeasures(unittest.TestCase):
         meas = np.random.random((length, dim))
         rmse = measures.rmse_over_time(pred, meas, normalization=norm)
         error = measures.error_over_time(pred, meas, distance_measure="rmse", normalization=norm)
-        np.testing.assert_almost_equal(rmse, error, decimal = 15)
+        np.testing.assert_almost_equal(rmse, error, decimal=15)
 
+    # @pytest.mark.skip(reason='measures.error_over_time not yet implemented')
     def test_error_over_time_custom_function(self):
         length = np.random.randint(1, 100)
         dim = np.random.randint(1, 100)
@@ -100,11 +104,15 @@ class testMeasures(unittest.TestCase):
         pred = np.random.random((length, dim))
         meas = np.random.random((length, dim))
         error_str_distance_measure = measures.error_over_time(pred, meas, distance_measure="L2", normalization=norm)
-        def L2_function(delta):
-            return np.linalg.norm(delta, axis = 1)
-        error_fct_distance_measure = measures.error_over_time(pred, meas, distance_measure=L2_function, normalization=norm)
-        np.testing.assert_almost_equal(error_str_distance_measure, error_fct_distance_measure, decimal = 15)
 
+        def L2_function(delta):
+            return np.linalg.norm(delta, axis=1)
+
+        error_fct_distance_measure = measures.error_over_time(pred, meas, distance_measure=L2_function,
+                                                              normalization=norm)
+        np.testing.assert_almost_equal(error_str_distance_measure, error_fct_distance_measure, decimal=15)
+
+    # @pytest.mark.skip(reason='measures.error_over_time not yet implemented')
     def test_error_over_time_special_norm(self):
         length = np.random.randint(1, 100)
         dim = np.random.randint(1, 100)
@@ -113,9 +121,10 @@ class testMeasures(unittest.TestCase):
         pred = np.random.random((length, dim))
         meas = np.random.random((length, dim))
         error = measures.error_over_time(pred, meas, distance_measure="L2", normalization=norm)
-        error_manually = np.linalg.norm(pred - meas, axis = 1)/np.sqrt(np.mean(np.linalg.norm(meas)**2))
-        np.testing.assert_almost_equal(error, error_manually, decimal = 15)
+        error_manually = np.linalg.norm(pred - meas, axis=1) / np.sqrt(np.mean(np.linalg.norm(meas, axis=1) ** 2))
+        np.testing.assert_almost_equal(error, error_manually, decimal=15)
 
+    # @pytest.mark.skip(reason='measures.valid_time_index not yet implemented')
     def test_valid_time_index(self):
         error_series = np.linspace(0, 10, 11)
         epsilon = 5
@@ -123,12 +132,14 @@ class testMeasures(unittest.TestCase):
         measured_valid_time_index = measures.valid_time_index(error_series, epsilon)
         np.testing.assert_equal(desired_valid_time_index, measured_valid_time_index)
 
+    # @pytest.mark.skip(reason='measures.valid_time_index not yet implemented')
     def test_valid_times_zero_error(self):
         error_series = np.zeros(5)
         epsilon = 0
         desired_valid_time_index = 4
         measured_valid_time_index = measures.valid_time_index(error_series, epsilon)
         np.testing.assert_equal(desired_valid_time_index, measured_valid_time_index)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
