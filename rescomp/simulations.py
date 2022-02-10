@@ -588,7 +588,7 @@ def _kuramoto_sivashinsky_old(dimensions, system_size, dt, time_steps):
     g = -0.5j * k
 
     # See paper for details
-    for n in range(1, nmax + 1):
+    for n in range(1, nmax):
         Nv = g * np.fft.fft(np.real(np.fft.ifft(v)) ** 2)
         a = E_2 * v + Q * Nv
         Na = g * np.fft.fft(np.real(np.fft.ifft(a)) ** 2)
@@ -674,7 +674,7 @@ def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_poin
     g = -0.5j * k
 
     # See paper for details
-    for n in range(1, nmax + 1):
+    for n in range(1, nmax):
         Nv = g * np.fft.fft(np.real(np.fft.ifft(v)) ** 2)
         a = E_2 * v + Q * Nv
         Na = g * np.fft.fft(np.real(np.fft.ifft(a)) ** 2)
@@ -806,7 +806,7 @@ def _kuramoto_sivashinsky_custom(dimensions, system_size, dt, time_steps, starti
     if change_precision: g = g.astype(c_dtype)
 
     # See paper for details
-    for n in range(1, nmax + 1):
+    for n in range(1, nmax):
         Nv = g * custom_fft(np.real(custom_ifft(v)) ** 2)
         if change_precision: Nv = Nv.astype(c_dtype)
         a = E_2 * v + Q * Nv
@@ -917,9 +917,9 @@ def _kuramoto_sivashinsky_Bhatt(dimensions, system_size, dt, time_steps, startin
     bracket = a * L2.dot(M2) + b * np.linalg.matrix_power(M2, 2)
     L = L_2_inv_sq.dot(bracket)
 
-    sim_data = np.zeros((M + 1, dimensions))
+    sim_data = np.zeros((M, dimensions))
     sim_data[0, :] = starting_point
-    for i in range(1, M + 1):
+    for i in range(1, M):
         u_prev = sim_data[i - 1, :]
 
         Fn = F(u_prev)
@@ -995,11 +995,11 @@ def _kuramoto_sivashinsky_rkstiff(dimensions, system_size, dt, time_steps, start
 
     # uFFT = if34.evolve(u0FFT, t0=0, tf=50, store_data=True, store_freq=20)
 
-    results = np.zeros((steps+1, dimensions))
+    results = np.zeros((steps, dimensions))
     results[0, :] = u0
     uFFT = u0FFT.copy()
     t = 0
-    for i in range(1, steps+1):
+    for i in range(1, steps):
         uFFT, h, h_suggest = if34.step(uFFT, h)
         t += h
         # use suggested step (or not for a constant step size scheme)
