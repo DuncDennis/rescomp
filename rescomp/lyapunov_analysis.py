@@ -82,7 +82,7 @@ def compare_simulations_leqr(create_sim_func, create_sp_func, create_sim_func_ke
     def param_dict_to_name(d):
         name = ""
         for key, val in d.items():
-            param_to_str(val)
+            val = param_to_str(val)
             if name == "":
                 add = ""
             else:
@@ -265,7 +265,7 @@ def compare_simulations_div(create_sim_func, create_sp_func, create_sim_func_key
     def param_dict_to_name(d):
         name = ""
         for key, val in d.items():
-            param_to_str(val)
+            val = param_to_str(val)
             if name == "":
                 add = ""
             else:
@@ -696,7 +696,6 @@ def plot_leqr_file(ax, file_name, prepath="", exp_name="", mean_axs="all", le_in
     ax.set_xlabel("Nqr")
 
 def file_name_to_params(file_name):
-
     if "." in file_name:
         file_name = file_name.split(".")[0]
 
