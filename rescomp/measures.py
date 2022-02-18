@@ -836,6 +836,125 @@ def fourier_spectrum(time_series, period=False, dt=1):
     return xout, yout
 
 
+def lyapunov_rosenstein(time_series, dt=1.0, freq_cut=True, pnts_to_try=50, steps=100, verb=1,
+                        debug=False):
+    """
+    A variation of the rosenstein algorithm to extract the lyapunov exponent from a time_series. Embedding is not
+    implemented.
+    Original Paper: Rosenstein et. al. (1992)
+    https://doi.org/10.1016/0167-2789(93)90009-P
+
+    Returns the mean logarithmic distance between close trajectories and the corresponding x axis
+    -> by fitting the linear region of this curve, the largest lyapunov exponent can be obtained by the sloap.
+
+    Args:
+        time_series (np.ndarray): the time series, shape (T, d)
+        dt (float): the time step of the time series
+        freq_cut (bool): If true, only consider neighbouring points that are at least the mean period (temporaly) apart
+        pnts_to_try (int): If freq_cut is True -> Nr of nearest neighbours to try, to check if the they are at least +
+                           the mean period apart
+        steps (int): The nr of steps to follow the base and neighbour point
+        verb (int): If 1: Print out more info
+        debug(bool): If true-> return more quantities that might be useful for debugging
+
+    Returns:
+        By fitting the linear region in t_list vs. avg_log_dist, the sloap is the largest Lyapunov Exponent
+        if debug False:
+            return (avg_log_dist, t_list)
+        if debug True:
+            if freq_cut True
+                return (avg_log_dist, t_list, index_distance_array, d_no_zero, time, amplitude, avg_period)
+            if freq_cut False
+                return (avg_log_dist, t_list, index_distance_array, d_no_zero)
+    """
+
+    if freq_cut:
+        time, amplitude = fourier_spectrum(time_series, period=True, dt=dt)
+        avg_period = np.sum(time * amplitude) / np.sum(amplitude)
+        if verb == 1:
+            print(f"avg period: {avg_period}")
+
+    tree = scipy.spatial.cKDTree(time_series)
+    nr_points = time_series.shape[0]
+    neighbour_array = np.zeros((nr_points,), dtype=float)
+    if debug:
+        index_distance_array = np.zeros((nr_points,), dtype=float)
+
+    if freq_cut:
+        period_cut = avg_period
+        for it in range(nr_points):
+            x = time_series[it, :]
+            query = tree.query(x, k=pnts_to_try)
+            potential_neighbours = query[1][1:]
+            index_distance = np.abs(potential_neighbours - it)
+            larger_than_period_cut = index_distance > avg_period
+            neighs_larger_than_period_cut = potential_neighbours[larger_than_period_cut]
+            if len(neighs_larger_than_period_cut) > 0:
+                if debug:
+                    index_distance_array[it] = index_distance[larger_than_period_cut][0]
+                neighbour = neighs_larger_than_period_cut[0]
+                neighbour_array[it] = neighbour
+            else:
+                if debug:
+                    index_distance_array[it] = np.NaN
+                neighbour_array[it] = np.NaN
+        if verb == 1:
+            nans = np.isnan(neighbour_array)
+            print(
+                f"For {nans.sum()}/{nans.size} points, all {pnts_to_try} closest neighbours were temporally closer than {period_cut} and thus not considered")
+    else:
+        for it in range(nr_points):
+            x = time_series[it, :]
+            neighbour = tree.query(x, k=2)[1][1]
+            neighbour_array[it] = neighbour
+            if debug:
+                index_distance_array[it] = np.abs(neighbour - it)
+
+    distance_array = np.empty((nr_points, steps))
+    distance_array[:, :] = np.NaN
+
+    if verb == 1:
+        nans_pre = nans.sum()
+
+    for i_base, i_neigh in enumerate(neighbour_array):
+        if np.isnan(i_neigh):
+            continue
+        else:
+            i_neigh = int(i_neigh)
+            if i_base + steps < nr_points and i_neigh + steps < nr_points:
+                diff = time_series[i_base:i_base + steps, :] - time_series[i_neigh:i_neigh + steps, :]
+                distance_array[i_base, :] = np.linalg.norm(diff, axis=-1)
+
+    if verb == 1:
+        nans_2 = np.isnan(distance_array).any(axis=1)
+        print(f"For {nans_2.sum() - nans_pre}/{nans_2.size - nans_pre} points, "
+              f"there were not {steps} steps left in the timeseries (either for the base and/or nn-point)")
+
+    # remove rows with nan
+    d = distance_array[~np.isnan(distance_array).any(axis=1)]
+    # remove 0 distance:
+    d_no_zero = d[(d != 0).any(axis=1)]
+
+    if verb == 1:
+        final_nr_of_pnts = d_no_zero.shape[0]
+        print(f"final number of points: {final_nr_of_pnts}")
+
+    log_d = np.log(d_no_zero)
+
+    avg_log_dist = np.mean(log_d, axis=0)
+    t_list = np.arange(steps)*dt
+
+    if debug:
+        if freq_cut:
+            to_return = (avg_log_dist, t_list, index_distance_array, d_no_zero, time, amplitude, avg_period)
+        else:
+            to_return = (avg_log_dist, t_list, index_distance_array, d_no_zero)
+    else:
+        to_return = (avg_log_dist, t_list)
+
+    return to_return
+
+
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,
 #                                 dt=1., starting_point=None):
