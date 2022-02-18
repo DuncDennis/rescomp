@@ -389,7 +389,9 @@ _sys_flag_synonyms.add_synonyms(13, "kuramoto_sivashinsky")
 _sys_flag_synonyms.add_synonyms(14, "kuramoto_sivashinsky_old")
 _sys_flag_synonyms.add_synonyms(15, "kuramoto_sivashinsky_custom")
 _sys_flag_synonyms.add_synonyms(16, "logistic")
-_sys_flag_synonyms.add_synonyms(17, "lorenz_4D")
+_sys_flag_synonyms.add_synonyms(17, "henon")
+_sys_flag_synonyms.add_synonyms(18, "lorenz_4D")
+
 
 
 def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
@@ -502,18 +504,21 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
     elif sys_flag_syn == 12:
         f = lambda x: _roessler_sprott(x, **kwargs)
     elif sys_flag_syn == 13:
-        return _kuramoto_sivashinsky(dt=dt, time_steps=time_steps - 1, starting_point=starting_point, **kwargs)
+        return _kuramoto_sivashinsky(dt=dt, time_steps=time_steps, starting_point=starting_point, **kwargs)
     elif sys_flag_syn == 14:
         if not starting_point is None:
             # TODO: should be a warning in the logger.
             print("WARNING starting point is ignored for this simulation fct!")
-        return _kuramoto_sivashinsky_old(dt=dt, time_steps=time_steps - 1, **kwargs)
+        return _kuramoto_sivashinsky_old(dt=dt, time_steps=time_steps, **kwargs)
     elif sys_flag_syn == 15:
-        return _kuramoto_sivashinsky_custom(dt=dt, time_steps=time_steps - 1, starting_point=starting_point, **kwargs)
+        return _kuramoto_sivashinsky_custom(dt=dt, time_steps=time_steps, starting_point=starting_point, **kwargs)
     elif sys_flag_syn == 16:
         f = lambda x: _logistic_map(x, **kwargs)
         discrete_map = True
     elif sys_flag_syn == 17:
+        f = lambda x: _henon_map(x, **kwargs)
+        discrete_map = True
+    elif sys_flag_syn == 18:
         f = lambda x: _lorenz_4D(x, **kwargs)
     else:
         raise Exception('sys_flag not recoginized')
@@ -977,6 +982,7 @@ def _kuramoto_sivashinsky_rkstiff(dimensions, system_size, dt, time_steps, start
     a, b = 0, system_size
     x, kx = construct_x_kx_rfft(N, a, b)
     L = kx**2*(1-kx**2)
+
     def NL(uf):
         u = np.fft.irfft(uf)
         ux = np.fft.irfft(1j*kx*uf)
@@ -1021,3 +1027,16 @@ def _logistic_map(x, r=4):
     """
     return r*x*(1-x)
 
+
+def _henon_map(x, a=1.4, b=0.3):
+    """
+    The Henon map
+    Args:
+        x: 2D input
+        a: parameter 1
+        b: parameter 2
+
+    Returns:
+        x_(n+1)
+    """
+    return np.array([1 - a*x[0]**2 + x[1], b*x[0]])
