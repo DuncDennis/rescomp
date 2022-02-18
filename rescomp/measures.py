@@ -802,6 +802,39 @@ def calculate_divergence(f, starting_points, T=1, tau=0, dt=1., eps=1e-6, N_dims
     return to_return
 
 
+def fourier_spectrum(time_series, period=False, dt=1):
+    """
+    Calculates the fourier spectrum of the n-dimensional time_series.
+    For every dimension, calculate the FFT and then take the L2 norm over the dimensions.
+    Return the results over the preiod (time-domain) or frequency (frequency-domain)
+    Args:
+        time_series (np.ndarray): time series to transform, shape (T, d)
+        period (bool): if True return time as xout
+        dt: if the timeincrement of the time_series is known
+
+    Returns:
+        xout (np.ndarray): the x axis
+        yout (np.ndarray): the fft of the signal (with norm over dims)
+    """
+    # fourier transform:
+    fourier = np.fft.fftn(time_series)
+    mean_fourier = np.linalg.norm(fourier, axis=-1)
+
+    freq = np.fft.fftfreq(time_series[:, 0].size)
+
+    N = mean_fourier.size
+    half_fourier = mean_fourier[1:int(N/2)]
+    half_freq = freq[1:int(N/2)]/dt
+
+    yout = half_fourier
+    if period:
+        half_period = 1/half_freq
+        xout = half_period
+    else:
+        xout = half_freq
+
+    return xout, yout
+
 
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,
