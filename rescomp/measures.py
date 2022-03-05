@@ -4,6 +4,8 @@
 import numpy as np
 import scipy
 import scipy.sparse
+from scipy.signal import argrelextrema
+
 # import matplotlib.pyplot as plt
 import warnings
 from . import utilities
@@ -279,7 +281,7 @@ def divergence_time(pred_time_series, meas_time_series, epsilon):
 
 
 def dimension(time_series, r_min=1.5, r_max=5., nr_steps=2,
-              plot=False):
+              plot=False, return_neighbours=False):
     """ Calculates correlation dimension using
     the algorithm by Grassberger and Procaccia.
      
@@ -326,7 +328,10 @@ def dimension(time_series, r_min=1.5, r_max=5., nr_steps=2,
                       "The 'plot' paramter will be removed in future releases as well."
         warnings.warn(warn_string, UserWarning)
 
-    return dimension
+    if return_neighbours:
+        return dimension, N_r
+    else:
+        return dimension
 
 
 def dimension_parameters(time_series, nr_steps=100, literature_value=None,
@@ -954,6 +959,18 @@ def lyapunov_rosenstein(time_series, dt=1.0, freq_cut=True, pnts_to_try=50, step
 
     return to_return
 
+
+def poincare_map(time_series, mode="minima", dimension=0):
+    x = time_series[:, dimension]
+    if mode == "minima":
+        ix = argrelextrema(x, np.less)[0]
+    elif mode == "maxima":
+        ix = argrelextrema(x, np.greater)[0]
+    else:
+        raise Exception(f"mode: {mode} not recognized")
+    extreme = x[ix]
+
+    return extreme[:-1], extreme[1:]
 
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,
