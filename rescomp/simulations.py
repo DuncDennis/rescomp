@@ -4,6 +4,10 @@
 import numpy as np
 from . import utilities
 
+# for _kuramoto_sivashinsky_rkstiff
+from rkstiff.grids import construct_x_kx_rfft
+from rkstiff.derivatives import dx_rfft
+from rkstiff.if34 import IF34
 
 def _roessler(x, a=0.5, b=2, c=4):
     """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
@@ -119,6 +123,31 @@ def _mod_lorenz_wrong(x, sigma=10, rho=28, beta=8 / 3):
                          x[0] * x[1] - beta * x[2]] + x[0])
     else:
         raise Exception('check shape of x, should have 3 components')
+
+def _lorenz_4D(x, sigma=10, rho=28, beta=8 / 3):
+    """ Calculates (dx/dt, dy/dt, dz/dt, dw/dt) with given (x,y,z,w) for RK4
+        Eq:
+        dx/dt = sigma*(y-x) + w
+        dy/dt = rho*x - x*z - y
+        dz/dt = x*y - beta*z
+        dw/dt = -y*x - w
+
+    Args:
+        x: (np.ndarray): (x,y,z,w) coordinates
+        sigma (float): 'sigma' parameter in the Lorenz 63 equations
+        rho (float): 'rho' parameter in the Lorenz 63 equations
+        beta (float): 'beta' parameter in the Lorenz 63 equations
+
+    Returns:
+        (np.ndarray): (dx/dt, dy/dt, dz/dt, dw/dt) corresponding to input x
+    """
+    if x.shape == (4,):
+        return np.array([sigma * (x[1] - x[0]) + x[3],
+                         x[0] * (rho - x[2]) - x[1],
+                         x[0] * x[1] - beta * x[2],
+                         -x[0]*x[1] - x[3]])
+    else:
+        raise Exception('check shape of x, should have 4 components')
 
 
 def _chua(x):
@@ -359,6 +388,10 @@ _sys_flag_synonyms.add_synonyms(12, "roessler_sprott")
 _sys_flag_synonyms.add_synonyms(13, "kuramoto_sivashinsky")
 _sys_flag_synonyms.add_synonyms(14, "kuramoto_sivashinsky_old")
 _sys_flag_synonyms.add_synonyms(15, "kuramoto_sivashinsky_custom")
+_sys_flag_synonyms.add_synonyms(16, "logistic")
+_sys_flag_synonyms.add_synonyms(17, "henon")
+_sys_flag_synonyms.add_synonyms(18, "lorenz_4D")
+
 
 
 def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
@@ -416,6 +449,8 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
                 - None
             - "thomas". Possible kwargs:
                 - None
+            - "logistic". Possible kwargs:
+                - parameter r
 
         dt (float): Size of time steps
         time_steps (int): Number of time steps to simulate
@@ -428,6 +463,7 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
         trajectory (np.ndarray) the full trajectory, ready to be used for RC
 
     """
+    discrete_map = False  # Assume a continuous map
 
     sys_flag_syn = _sys_flag_synonyms.get_flag(sys_flag)
 
@@ -447,9 +483,9 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
         f = lambda x: _roessler(x, **kwargs)
     elif sys_flag_syn == 4:
         # Starting point is ignored here atm
-        if starting_point is not None:
-            # TODO: should be a warning in the logger.
-            print("Starting point is ignored for the Lorenz96 equation")
+        # if starting_point is not None:
+        #     # TODO: should be a warning in the logger.
+        #     print("Starting point is ignored for the Lorenz96 equation")
         f = lambda x: _lorenz_96(x, **kwargs)
     elif sys_flag_syn == 5:
         f = lambda x: _ueda(x)
@@ -468,14 +504,22 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
     elif sys_flag_syn == 12:
         f = lambda x: _roessler_sprott(x, **kwargs)
     elif sys_flag_syn == 13:
-        return _kuramoto_sivashinsky(dt=dt, time_steps=time_steps - 1, starting_point=starting_point, **kwargs)
+        return _kuramoto_sivashinsky(dt=dt, time_steps=time_steps, starting_point=starting_point, **kwargs)
     elif sys_flag_syn == 14:
         if not starting_point is None:
             # TODO: should be a warning in the logger.
             print("WARNING starting point is ignored for this simulation fct!")
-        return _kuramoto_sivashinsky_old(dt=dt, time_steps=time_steps - 1, **kwargs)
+        return _kuramoto_sivashinsky_old(dt=dt, time_steps=time_steps, **kwargs)
     elif sys_flag_syn == 15:
-        return _kuramoto_sivashinsky_custom(dt=dt, time_steps=time_steps - 1, starting_point=starting_point, **kwargs)
+        return _kuramoto_sivashinsky_custom(dt=dt, time_steps=time_steps, starting_point=starting_point, **kwargs)
+    elif sys_flag_syn == 16:
+        f = lambda x: _logistic_map(x, **kwargs)
+        discrete_map = True
+    elif sys_flag_syn == 17:
+        f = lambda x: _henon_map(x, **kwargs)
+        discrete_map = True
+    elif sys_flag_syn == 18:
+        f = lambda x: _lorenz_4D(x, **kwargs)
     else:
         raise Exception('sys_flag not recoginized')
 
@@ -485,7 +529,10 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
 
     for t in range(traj_size[0]):
         traj[t] = y
-        y = _runge_kutta(f, dt, y=y)
+        if discrete_map:
+            y = f(y)
+        else:
+            y = _runge_kutta(f, dt, y=y)
     return traj
 
 
@@ -546,7 +593,7 @@ def _kuramoto_sivashinsky_old(dimensions, system_size, dt, time_steps):
     g = -0.5j * k
 
     # See paper for details
-    for n in range(1, nmax + 1):
+    for n in range(1, nmax):
         Nv = g * np.fft.fft(np.real(np.fft.ifft(v)) ** 2)
         a = E_2 * v + Q * Nv
         Na = g * np.fft.fft(np.real(np.fft.ifft(a)) ** 2)
@@ -565,7 +612,7 @@ def _kuramoto_sivashinsky_old(dimensions, system_size, dt, time_steps):
     return uu
 
 
-def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_point, eps=0, **kwargs):
+def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_point, eps=0, M=64, **kwargs):
     """ This function simulates the Kuramoto–Sivashinsky PDE
 
     Even though it doesn't use the RK4 algorithm, it is bundled with the other
@@ -613,7 +660,7 @@ def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_poin
     L = (1 + eps) * k ** 2 - k ** 4
     E = np.exp(h * L)
     E_2 = np.exp(h * L / 2)
-    M = 64  # changed because the previous optimizations were negligable and could result in errors for small size systems
+    # M = 64  # changed because the previous optimizations were negligable and could result in errors for small size systems
     r = np.exp(1j * np.pi * (np.arange(1, M + 1) - 0.5) / M)
     LR = h * np.transpose(np.repeat([L], M, axis=0)) + np.repeat([r], n, axis=0)
     Q = h * np.real(np.mean((np.exp(LR / 2) - 1) / LR, axis=1))
@@ -632,7 +679,7 @@ def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_poin
     g = -0.5j * k
 
     # See paper for details
-    for n in range(1, nmax + 1):
+    for n in range(1, nmax):
         Nv = g * np.fft.fft(np.real(np.fft.ifft(v)) ** 2)
         a = E_2 * v + Q * Nv
         Na = g * np.fft.fft(np.real(np.fft.ifft(a)) ** 2)
@@ -653,7 +700,7 @@ def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_poin
 
 
 def _kuramoto_sivashinsky_custom(dimensions, system_size, dt, time_steps, starting_point,
-                                 precision=None, fft_type=None, **kwargs):
+                                 precision=None, fft_type=None, M=64, **kwargs):
     """ This function simulates the Kuramoto–Sivashinsky PDE with custom precision and fft backend"""
 
     if precision is None:
@@ -738,7 +785,7 @@ def _kuramoto_sivashinsky_custom(dimensions, system_size, dt, time_steps, starti
     if change_precision: E = E.astype(f_dtype)
     E_2 = np.exp(h * L / 2)
     if change_precision: E_2 = E_2.astype(f_dtype)
-    M = 64
+    # M = 64
     r = np.exp(1j * np.pi * (np.arange(1, M + 1) - 0.5) / M)
     if change_precision: r = r.astype(c_dtype)
     LR = h * np.transpose(np.repeat([L], M, axis=0)) + np.repeat([r], n, axis=0)
@@ -764,7 +811,7 @@ def _kuramoto_sivashinsky_custom(dimensions, system_size, dt, time_steps, starti
     if change_precision: g = g.astype(c_dtype)
 
     # See paper for details
-    for n in range(1, nmax + 1):
+    for n in range(1, nmax):
         Nv = g * custom_fft(np.real(custom_ifft(v)) ** 2)
         if change_precision: Nv = Nv.astype(c_dtype)
         a = E_2 * v + Q * Nv
@@ -818,7 +865,7 @@ def _kuramoto_sivashinsky_Bhatt(dimensions, system_size, dt, time_steps, startin
 
     # Define the variable names as in the paper
     N = dimensions
-    M = time_steps - 1
+    M = time_steps
     h = system_size/(dimensions-1)
     k = dt
 
@@ -875,9 +922,9 @@ def _kuramoto_sivashinsky_Bhatt(dimensions, system_size, dt, time_steps, startin
     bracket = a * L2.dot(M2) + b * np.linalg.matrix_power(M2, 2)
     L = L_2_inv_sq.dot(bracket)
 
-    sim_data = np.zeros((time_steps, dimensions))
+    sim_data = np.zeros((M, dimensions))
     sim_data[0, :] = starting_point
-    for i in range(1, M + 1):
+    for i in range(1, M):
         u_prev = sim_data[i - 1, :]
 
         Fn = F(u_prev)
@@ -911,3 +958,85 @@ def _kuramoto_sivashinsky_Bhatt(dimensions, system_size, dt, time_steps, startin
         sim_data[i, :] = u_next
 
     return sim_data
+
+def _kuramoto_sivashinsky_rkstiff(dimensions, system_size, dt, time_steps, starting_point, IF_eps=1e-4):
+    '''
+    from https://github.com/whalenpt/rkstiff
+    paper: https://www.sciencedirect.com/science/article/pii/S0021999114006743
+    install via: "conda install rkstiff -c conda-forge"
+    TODO: explain
+    Args:
+        dimensions:
+        system_size:
+        dt:
+        time_steps:
+        starting_point:
+
+    Returns:
+
+    '''
+    N = dimensions
+    steps = time_steps
+    h = dt
+    # a, b = 0, system_size*(np.pi*2)
+    a, b = 0, system_size
+    x, kx = construct_x_kx_rfft(N, a, b)
+    L = kx**2*(1-kx**2)
+
+    def NL(uf):
+        u = np.fft.irfft(uf)
+        ux = np.fft.irfft(1j*kx*uf)
+        return -np.fft.rfft(u*ux)
+
+    if starting_point is None:
+        u0 = np.cos(x / system_size) * (1. + np.sin(x / system_size))
+    else:
+        u0 = starting_point
+
+    u0FFT = np.fft.rfft(u0)
+    if34 = IF34(linop=L,NLfunc=NL,epsilon=IF_eps)
+
+    # steps = 800
+    # h = 0.01
+
+    # uFFT = if34.evolve(u0FFT, t0=0, tf=50, store_data=True, store_freq=20)
+
+    results = np.zeros((steps, dimensions))
+    results[0, :] = u0
+    uFFT = u0FFT.copy()
+    t = 0
+    for i in range(1, steps):
+        uFFT, h, h_suggest = if34.step(uFFT, h)
+        t += h
+        # use suggested step (or not for a constant step size scheme)
+        # h = h_suggest
+        results[i, :] = np.fft.irfft(uFFT)
+
+    return results
+
+
+def _logistic_map(x, r=4):
+    """
+    The logistic map
+    Args:
+        x: input x_n
+        r: parameter
+
+    Returns:
+     x_(n+1)
+    """
+    return r*x*(1-x)
+
+
+def _henon_map(x, a=1.4, b=0.3):
+    """
+    The Henon map
+    Args:
+        x: 2D input
+        a: parameter 1
+        b: parameter 2
+
+    Returns:
+        x_(n+1)
+    """
+    return np.array([1 - a*x[0]**2 + x[1], b*x[0]])

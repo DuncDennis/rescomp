@@ -293,10 +293,11 @@ class ESN(_ESNCore):
         # If you add/change a flag here, please also change it in the
         # train docstring
         self._act_fct_flag_synonyms = utilities._SynonymDict()
-        self._act_fct_flag_synonyms.add_synonyms(0, ["tanh_simple", "simple"])
+        self._act_fct_flag_synonyms.add_synonyms(0, ["tanh", "tanh_simple", "simple"])
         self._act_fct_flag_synonyms.add_synonyms(1, "tanh_bias")
         self._act_fct_flag_synonyms.add_synonyms(2, "tanh_squared")
         self._act_fct_flag_synonyms.add_synonyms(3, ["mixed", "mix"])
+        self._act_fct_flag_synonyms.add_synonyms(4, ["sigmoid"])
 
         # Dictionary defining synonyms for the different ways to create the
         # network. Internally the corresponding integers are used
@@ -490,7 +491,7 @@ class ESN(_ESNCore):
     #     """
     #     raise Exception("Not yet implemented")
 
-    def _set_activation_function(self, act_fct_flag, bias_scale=0, mix_ratio=0.5):
+    def _set_activation_function(self, act_fct_flag, bias_scale=0, mix_ratio=0.5, leak_fct=0.0):
         """ Set the activation function corresponding to the act_fct_flag
 
         Args:
@@ -499,6 +500,7 @@ class ESN(_ESNCore):
                 list of possible flags
             bias_scale (float): Bias to be used in some activation functions
                 (currently only used in :func:`~esn.ESN._act_fct_tanh_bias`)
+            leak_fct (float) a leak factor between 0 and 1: Determines the memory of the reservoir dynamics
 
         """
         self.logger.debug("Set activation function to flag: %s" % act_fct_flag)
@@ -509,19 +511,29 @@ class ESN(_ESNCore):
         self._bias_scale = bias_scale
         self._bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0,
                                                           size=self._n_dim)
+        self._leak_fct = leak_fct
 
         if self._act_fct_flag == 0:
-            self._act_fct = self._act_fct_tanh_simple
+            # self._act_fct = self._act_fct_tanh_simple
+            _act_fct = self._act_fct_tanh_simple
         elif self._act_fct_flag == 1:
-            self._act_fct = self._act_fct_tanh_bias
+            # self._act_fct = self._act_fct_tanh_bias
+            _act_fct = self._act_fct_tanh_bias
         elif self._act_fct_flag == 2:
-            self._act_fct = self._act_fct_tanh_squared
+            # self._act_fct = self._act_fct_tanh_squared
+            _act_fct = self._act_fct_tanh_squared
         elif self._act_fct_flag == 3:
             self.setup_mix(mix_ratio)
-            self._act_fct = self._act_fct_mixed
+            # self._act_fct = self._act_fct_mixed
+            _act_fct = self._act_fct_mixed
+        elif self._act_fct_flag == 4:
+            # self._act_fct = self._act_fct_sigmoid
+            _act_fct = self._act_fct_sigmoid
         else:
             raise Exception('self._act_fct_flag %s does not have a activation '
                             'function implemented!' % str(self._act_fct_flag))
+
+        self._act_fct = lambda x, r: self._leak_fct*r + (1-self._leak_fct)*_act_fct(x, r)
 
     def _act_fct_tanh_simple(self, x, r):
         """ Standard activation function of the elementwise np.tanh()
@@ -586,6 +598,20 @@ class ESN(_ESNCore):
             self._squared_tanh_nodes]
 
         return new_r
+
+    def _act_fct_sigmoid(self, x, r):
+        """ Standard activation function of the elementwise np.tanh()
+
+        Args:
+            x (np.ndarray): d-dim input
+            r (np.ndarray): n-dim network states
+
+        Returns:
+            np.ndarray: n-dim
+
+        """
+        a = self._w_in @ x + self._network @ r
+        return 1 / (1 + np.exp(-a))  # equals sigmoid(a)
 
     def setup_mix(self, mix_ratio):
         self._normal_tanh_nodes = []
@@ -769,14 +795,20 @@ class ESN(_ESNCore):
 
         return self._y_pred, y_test
 
-    def get_network(self):
+    def get_network(self, as_array=True):
         """ Returns the network used as reservoir
-
+        Args:
+            as_array (bool): if True return network as dense numpy array, else return as scipy.sparse matrix
         Returns:
             csr_matrix: network saved as scipy.sparse matrix
+            or
+            np.ndarray: network saved as np.ndarray matrix
 
         """
-        return self._network
+        if as_array:
+            return self._network.toarray()
+        else:
+            return self._network
 
     def get_network_parameters(self):
         """ Returns all network parameters

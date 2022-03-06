@@ -4,9 +4,12 @@
 import numpy as np
 import scipy
 import scipy.sparse
+from scipy.signal import argrelextrema
+
 # import matplotlib.pyplot as plt
 import warnings
 from . import utilities
+from . import simulations
 
 
 # TODO: there should be a utilities._SynonymDict() here
@@ -278,7 +281,7 @@ def divergence_time(pred_time_series, meas_time_series, epsilon):
 
 
 def dimension(time_series, r_min=1.5, r_max=5., nr_steps=2,
-              plot=False):
+              plot=False, return_neighbours=False):
     """ Calculates correlation dimension using
     the algorithm by Grassberger and Procaccia.
      
@@ -325,7 +328,10 @@ def dimension(time_series, r_min=1.5, r_max=5., nr_steps=2,
                       "The 'plot' paramter will be removed in future releases as well."
         warnings.warn(warn_string, UserWarning)
 
-    return dimension
+    if return_neighbours:
+        return dimension, N_r
+    else:
+        return dimension
 
 
 def dimension_parameters(time_series, nr_steps=100, literature_value=None,
@@ -448,6 +454,523 @@ def dimension_parameters(time_series, nr_steps=100, literature_value=None,
 
     return best_r_min, best_r_max, dimension
 
+
+def iterator_based_lyapunov_spectrum(f, starting_points, T=1, tau=0, eps=1e-6, nr_of_lyapunovs=None,
+                                     nr_steps=3000, dt=1.,return_convergence=False, return_traj_divergence=False,
+                                     jacobian=None, agg=None):
+    '''
+    The Algorithm is based on: 1902.09651 "LYAPUNOV EXPONENTS of the KURAMOTO-SIVASHINSKY PDE"
+    For its explanation see: 0811.0882 "The lyapunov characteristic exponents and their computation"
+
+    Calculates the lyapunov spectrum of a discrete dynamical system
+    with x_(n+1) = f(x_n) using a standard QR-based algorithm, where the timeevolution of the deviation vectors is
+    calculated by actually simulating the trajectories and the deviation vectors
+
+    Based on the iterator function f. The Jacobian is calculated numerically or if explicitly given analytically
+
+    Measure for chaotic behaviour in the system.
+
+    Important characteristic to compare attractors.
+
+    Args:
+        f (function): mapping with x_n+1 = f(x_n)
+        starting_points (np.ndarray): inintial condition of iteration:
+            possbilities:
+            - np.ndarray with shape = (state_dim) -> use as initial condition for iterations
+            - np.ndarray with shape = (N_ens, state_dim) -> do the whole calculation for N_ens starting points
+            - None -> parse None to the iteration function f(None) -> f must have a default for None
+        T (float): time interval between successive QR decompositions
+        tau (float): time to simulate system before exponent computation
+        eps (float): perturbation magnitude in space, to approximate the jacobian
+        nr_of_lyapunovs (int): nr of greatest lyapunov components you which to calculate
+                               if None: all lyapunov exponents are calculated
+        nr_steps (int): The number of reorthonormalisation steps
+        dt (float): If the iterator corresponds to a contnuous system -> the time between
+                    two succesive steps
+        return_convergence (bool): If true, additionally to the lyapunov exponents, return
+                                   the convergence according to the N steps
+       return_traj_divergence (bool): If true, also return the divergence of the trajectories within every reorthostep
+                                    Only if jacobian is None
+        jacobian(None or function):
+            - If None: The jacobian is calculated numerically using the distance "eps"
+            - If Func: The jacobian is passed as a function that takes the point x as input
+                       and outputs the jacobian at this point
+        agg(bool, str or list): only has effect if a ensemble is calculated:
+            - None -> return all ensemble LEs
+            - mean -> return mean of ensemble LEs
+            - std -> return std of ensemble LEs
+            - combination of above in list -> return all in list
+    Returns: lyapunov spectrum if return_convergence is False,
+                                 tuple of final lyapunov spectrum and development
+                                 of lyapunov spectrum if return_convergence is
+                                 True
+    '''
+    if (return_traj_divergence) and (jacobian is not None):
+        raise Exception("traj divergence can not be computed (yet) when a jacobian is given") # TODO implement
+
+    def f_steps(x, steps, save_all=False):
+        if save_all:
+            out = np.zeros((steps+1, x.size))
+            out[0, :] = x
+
+        for i in range(steps):
+            x = f(x)
+            if save_all:
+                out[i+1, :] = x
+        if save_all:
+            return out
+        else:
+            return x
+
+    m = nr_of_lyapunovs
+    N = nr_steps
+
+    # handling the time steps
+    tau_timesteps = int(tau/dt)
+    T_timesteps = int(T/dt)
+    tau_new = tau_timesteps*dt
+    T_new = T_timesteps*dt
+    if tau != tau_new:
+        print(f"Updated tau to multiple of dt: tau = {tau}")
+        tau = tau_new
+    if T != T_new:
+        print(f"Updated T to multiple of dt: T = {T}")
+        T = T_new
+
+    # handling the starting point
+    if starting_points is not None:
+        if len(starting_points.shape) == 2:
+            N_ens = starting_points.shape[0]
+        else:
+            starting_points = starting_points[np.newaxis, :]
+            N_ens = 1
+        state_dim = starting_points[0, :].size
+    elif starting_points is None:
+        y = f(starting_points, 1)
+        if y is None:
+            raise Exception("iterator f does not support None as input")
+        state_dim = y.size
+        N_ens = 1
+    if m is None: # calculate whole spectrum of lyapunov exponents
+        m = state_dim
+    else:
+        if m > state_dim:
+            raise Exception(f"required number of lyapunov exponents, larger than state-dimension: {m} vs. {state_dim}")
+
+    lyapunov_exp_ens = np.zeros((N_ens, m))
+    if return_convergence:
+        lyapunov_exp_convergence_ens = np.zeros((N_ens, N, m))
+
+    if return_traj_divergence:
+        traj_divergence_ens = np.zeros((N_ens, N, m, T_timesteps+1))
+
+    for i_ens in range(N_ens):
+        if N_ens > 1:
+            print(f"N_ens: {i_ens + 1}/{N_ens}")
+        if starting_points is not None:
+            starting_point = starting_points[i_ens, :]
+
+        if tau_timesteps == 0:
+            x = starting_point
+        else:
+            x = f_steps(starting_point, tau_timesteps)  # discard transient states
+
+        # choose m initial orthonormal directions:
+        Q = np.eye(state_dim, m)
+
+        # initialize the matrix W, that holds the deviation vectors:
+        W = np.zeros(Q.shape)
+
+        # Initialize a Matrix to store the R_diags:
+        R_diags = np.zeros((N, m))
+
+        for j in range(1, N + 1):  # "for all time intervals"
+            if jacobian is not None:
+                x_new = x # every x is needed to evolve the deviation vectors
+                for i in range(T_timesteps):
+                    local_jac = jacobian(x_new)
+                    x_new = f(x_new)
+                    def Q_it(y):
+                        return local_jac.dot(y)
+                    Q = simulations._runge_kutta(Q_it, dt, Q) # alternatively: Q = Q + local_jac.dot(Q)*dt
+                W = Q
+            else:
+                # x_new = f_steps(x, T_timesteps)
+                # for i in range(m):  # for all m orthonormal directions
+                #     q_i = Q[:, i]
+                #     x_mod_i = x + eps*q_i
+                #     x_mod_i_new = f_steps(x_mod_i, T_timesteps)
+                #     W[:, i] = (x_mod_i_new - x_new)/eps
+
+                # alt:
+                if return_traj_divergence:
+                    x_new_traj = f_steps(x, T_timesteps, save_all=True)
+                    x_new = x_new_traj[-1, :]
+                else:
+                    x_new = f_steps(x, T_timesteps) # if T_timesteps = 1 -> it iterates the function one time
+                for i in range(m):  # for all m orthonormal directions
+                    q_i = Q[:, i]
+                    x_mod_i = x + eps*q_i
+                    if return_traj_divergence:
+                        x_mod_i_new_traj = f_steps(x_mod_i, T_timesteps, save_all=True)
+                        x_mod_i_new = x_mod_i_new_traj[-1, :]
+
+                        div_i = np.linalg.norm((x_mod_i_new_traj - x_new_traj), axis=-1) # calculate the distance
+                        traj_divergence_ens[i_ens, j-1, i, :] = div_i # /eps
+                    else:
+                        x_mod_i_new = f_steps(x_mod_i, T_timesteps)
+                    W[:, i] = (x_mod_i_new - x_new)/eps
+                # end alt
+
+            Q, R = np.linalg.qr(W)
+            for i in range(m):
+                R_diags[j-1, i] = R[i, i]
+            x = x_new
+
+        lyapunov_exp = np.sum(np.log(np.abs(R_diags))/(N*T), axis = 0)
+
+        lyapunov_exp_ens[i_ens, :] = lyapunov_exp
+
+        if return_convergence:
+            times = np.arange(1, N+1)*T
+            lyapunov_exp_convergence = np.cumsum(np.log(np.abs(R_diags)), axis = 0)/(np.tile(times, (m, 1)).T)
+            lyapunov_exp_convergence_ens[i_ens, :, :] = lyapunov_exp_convergence
+
+    if not type(agg) in (list, tuple):
+        agg = [agg, ]
+
+    to_return = []
+    if return_convergence:
+        to_return_conv = []
+    if return_traj_divergence:
+        to_return_traj_div = []
+    for a in agg:
+        if a is None:
+            to_return.append(lyapunov_exp_ens)
+            if return_convergence:
+                to_return_conv.append(lyapunov_exp_convergence_ens)
+            if return_traj_divergence:
+                to_return_traj_div.append(traj_divergence_ens)
+        elif a == "mean":
+            to_return.append(np.mean(lyapunov_exp_ens, axis=0))
+            if return_convergence:
+                to_return_conv.append(np.mean(lyapunov_exp_convergence_ens, axis=0))
+            if return_traj_divergence:
+                to_return_traj_div.append(np.mean(traj_divergence_ens, axis=0))
+        elif a == "std":
+            to_return.append(np.std(lyapunov_exp_ens, axis=0))
+            if return_convergence:
+                to_return_conv.append(np.std(lyapunov_exp_convergence_ens, axis=0))
+            if return_traj_divergence:
+                to_return_traj_div.append(np.std(traj_divergence_ens, axis=0))
+
+    master_return = []
+
+    if len(to_return) == 1:
+        to_return = to_return[0]
+        master_return.append(to_return)
+    if return_convergence:
+        if len(to_return_conv) == 1:
+            to_return_conv = to_return_conv[0]
+        master_return.append(to_return_conv)
+    if return_traj_divergence:
+        if len(to_return_traj_div) == 1:
+            to_return_traj_div = to_return_traj_div[0]
+        master_return.append(to_return_traj_div)
+
+    if len(master_return) == 1:
+        master_return = master_return[0]
+
+    return master_return
+
+def KY_dimension(lyapunov_exponents):
+    '''
+    Calculates the Kaplan-Yorke dimension from the lyapunov_exponents spectrum.
+    This requires that the sum of all lyapunov exponents is negative.
+    Following: "LYAPUNOV EXPONENTS of the KURAMOTO-SIVASHINSKY PDE" (1902.09651)
+    '''
+    # sort just to make sure:
+    lyapunov_sorted = np.sort(lyapunov_exponents)[::-1] # ascending order
+    cumsum = lyapunov_sorted.cumsum()
+    j = np.where((cumsum>=0))[0].max() + 1 # +1 since index starts from 0
+    if j == len(lyapunov_exponents):
+        raise Exception("Lyapunov Exponents are \"too positive\" to calculate the Kaplan-Yorke dimension")
+    D_KY = j + cumsum[j-1]/np.abs(lyapunov_sorted[j])
+    return D_KY
+
+
+## simple LE Algorithm:
+def calculate_divergence(f, starting_points, T=1, tau=0, dt=1., eps=1e-6, N_dims=1, agg=None, random_directions=False):
+    '''
+    TODO: Clear up, add reference etc.
+    Args:
+        f:
+        starting_points:
+        T:
+        tau:
+        dt:
+        eps:
+        N_dims:
+    Returns:
+    '''
+    def f_steps(x, steps):
+        for i in range(steps):
+            x = f(x)
+        return x
+
+    # handling the time steps
+    tau_timesteps = int(tau/dt)
+    T_timesteps = int(T/dt)
+    tau_new = tau_timesteps*dt
+    T_new = T_timesteps*dt
+    if tau != tau_new:
+        print(f"Updated tau to multiple of dt: tau = {tau}")
+        tau = tau_new
+    if T != T_new:
+        print(f"Updated T to multiple of dt: T = {T}")
+        T = T_new
+
+    # handling the starting point
+    if starting_points is not None:
+        if len(starting_points.shape) == 2:
+            N_ens = starting_points.shape[0]
+        else:
+            starting_points = starting_points[np.newaxis, :]
+            N_ens = 1
+        state_dim = starting_points[0, :].size
+    else:
+        state_dim = f(starting_points, 1).size
+        N_ens = 1
+
+    if not random_directions:
+        if N_dims is None:
+            N_dims = state_dim
+        else:
+            if N_dims > state_dim:
+                raise Exception(f"N_dims larger than state-dimension: {N_dims} vs. {state_dim}")
+
+    deviation_trajectory_ens = np.zeros((T_timesteps + 1, state_dim, N_dims, N_ens))
+    for i_ens in range(N_ens):
+        print(f"N_ens: {i_ens + 1}/{N_ens}")
+        if starting_points is not None:
+            starting_point = starting_points[i_ens, :]
+        if tau_timesteps == 0:
+            x = starting_point
+        else:
+            print("..calculating transient..")
+            x = f_steps(starting_point, tau_timesteps)  # discard transient states
+
+        if random_directions:
+            initial_deviations = np.random.randn(state_dim, N_dims) * eps
+        else:
+            initial_deviations = np.eye(state_dim, N_dims) * eps
+
+        basis_trajectory = np.zeros((T_timesteps + 1, state_dim))
+        basis_trajectory[0, :] = x
+
+        perturbed_trajectory = np.zeros((T_timesteps + 1, state_dim, N_dims))
+        for i in range(N_dims):
+            perturbed_trajectory[0, :, i] = x + initial_deviations[:, i]
+
+        for i_t in range(1, T_timesteps + 1):
+            if (i_t) % 10 == 0:
+                print(f"timestep {i_t}/{T_timesteps}", end="\r")
+            x = f(x)
+            basis_trajectory[i_t, :] = x
+
+            for i in range(N_dims):
+                perturbed_trajectory[i_t, :, i] = f(perturbed_trajectory[i_t - 1, :, i])
+        print("")
+        deviation_trajectory = perturbed_trajectory - np.repeat(basis_trajectory[:, :, np.newaxis], N_dims, axis=2)
+        deviation_trajectory_ens[:, :, :, i_ens] = deviation_trajectory
+
+    deviation_len_traj_ens = np.linalg.norm(deviation_trajectory_ens, axis=1)
+
+    # aggregation
+    if not type(agg) in (list, tuple):
+        agg = [agg, ]
+    to_return = []
+
+    for a in agg:
+        if a is None:
+            to_return.append(deviation_len_traj_ens)
+
+        elif a == "mean":
+            to_return.append(np.mean(deviation_len_traj_ens, axis=(-1, -2)))
+
+        elif a == "std":
+            to_return.append(np.std(deviation_len_traj_ens, axis=(-1, -2)))
+
+    if len(to_return) == 1:
+        to_return = to_return[0]
+
+    return to_return
+
+
+def fourier_spectrum(time_series, period=False, dt=1):
+    """
+    Calculates the fourier spectrum of the n-dimensional time_series.
+    For every dimension, calculate the FFT and then take the L2 norm over the dimensions.
+    Return the results over the preiod (time-domain) or frequency (frequency-domain)
+    Args:
+        time_series (np.ndarray): time series to transform, shape (T, d)
+        period (bool): if True return time as xout
+        dt: if the timeincrement of the time_series is known
+
+    Returns:
+        xout (np.ndarray): the x axis
+        yout (np.ndarray): the fft of the signal (with norm over dims)
+    """
+    # fourier transform:
+    fourier = np.fft.fftn(time_series)
+    mean_fourier = np.linalg.norm(fourier, axis=-1)
+
+    freq = np.fft.fftfreq(time_series[:, 0].size)
+
+    N = mean_fourier.size
+    half_fourier = mean_fourier[1:int(N/2)]
+    half_freq = freq[1:int(N/2)]/dt
+
+    yout = half_fourier
+    if period:
+        half_period = 1/half_freq
+        xout = half_period
+    else:
+        xout = half_freq
+
+    return xout, yout
+
+
+def lyapunov_rosenstein(time_series, dt=1.0, freq_cut=True, pnts_to_try=50, steps=100, verb=1,
+                        debug=False):
+    """
+    A variation of the rosenstein algorithm to extract the lyapunov exponent from a time_series. Embedding is not
+    implemented.
+    Original Paper: Rosenstein et. al. (1992)
+    https://doi.org/10.1016/0167-2789(93)90009-P
+
+    Returns the mean logarithmic distance between close trajectories and the corresponding x axis
+    -> by fitting the linear region of this curve, the largest lyapunov exponent can be obtained by the sloap.
+
+    Args:
+        time_series (np.ndarray): the time series, shape (T, d)
+        dt (float): the time step of the time series
+        freq_cut (bool): If true, only consider neighbouring points that are at least the mean period (temporaly) apart
+        pnts_to_try (int): If freq_cut is True -> Nr of nearest neighbours to try, to check if the they are at least +
+                           the mean period apart
+        steps (int): The nr of steps to follow the base and neighbour point
+        verb (int): If 1: Print out more info
+        debug(bool): If true-> return more quantities that might be useful for debugging
+
+    Returns:
+        By fitting the linear region in t_list vs. avg_log_dist, the sloap is the largest Lyapunov Exponent
+        if debug False:
+            return (avg_log_dist, t_list)
+        if debug True:
+            if freq_cut True
+                return (avg_log_dist, t_list, index_distance_array, d_no_zero, time, amplitude, avg_period)
+            if freq_cut False
+                return (avg_log_dist, t_list, index_distance_array, d_no_zero)
+    """
+
+    if freq_cut:
+        time, amplitude = fourier_spectrum(time_series, period=True, dt=dt)
+        avg_period = np.sum(time * amplitude) / np.sum(amplitude)
+        if verb == 1:
+            print(f"avg period: {avg_period}")
+
+    tree = scipy.spatial.cKDTree(time_series)
+    nr_points = time_series.shape[0]
+    neighbour_array = np.zeros((nr_points,), dtype=float)
+    if debug:
+        index_distance_array = np.zeros((nr_points,), dtype=float)
+
+    if freq_cut:
+        period_cut = avg_period
+        for it in range(nr_points):
+            x = time_series[it, :]
+            query = tree.query(x, k=pnts_to_try)
+            potential_neighbours = query[1][1:]
+            index_distance = np.abs(potential_neighbours - it)
+            larger_than_period_cut = index_distance > avg_period
+            neighs_larger_than_period_cut = potential_neighbours[larger_than_period_cut]
+            if len(neighs_larger_than_period_cut) > 0:
+                if debug:
+                    index_distance_array[it] = index_distance[larger_than_period_cut][0]
+                neighbour = neighs_larger_than_period_cut[0]
+                neighbour_array[it] = neighbour
+            else:
+                if debug:
+                    index_distance_array[it] = np.NaN
+                neighbour_array[it] = np.NaN
+        if verb == 1:
+            nans = np.isnan(neighbour_array)
+            print(
+                f"For {nans.sum()}/{nans.size} points, all {pnts_to_try} closest neighbours were temporally closer than {period_cut} and thus not considered")
+    else:
+        for it in range(nr_points):
+            x = time_series[it, :]
+            neighbour = tree.query(x, k=2)[1][1]
+            neighbour_array[it] = neighbour
+            if debug:
+                index_distance_array[it] = np.abs(neighbour - it)
+
+    distance_array = np.empty((nr_points, steps))
+    distance_array[:, :] = np.NaN
+
+    if verb == 1:
+        nans_pre = nans.sum()
+
+    for i_base, i_neigh in enumerate(neighbour_array):
+        if np.isnan(i_neigh):
+            continue
+        else:
+            i_neigh = int(i_neigh)
+            if i_base + steps < nr_points and i_neigh + steps < nr_points:
+                diff = time_series[i_base:i_base + steps, :] - time_series[i_neigh:i_neigh + steps, :]
+                distance_array[i_base, :] = np.linalg.norm(diff, axis=-1)
+
+    if verb == 1:
+        nans_2 = np.isnan(distance_array).any(axis=1)
+        print(f"For {nans_2.sum() - nans_pre}/{nans_2.size - nans_pre} points, "
+              f"there were not {steps} steps left in the timeseries (either for the base and/or nn-point)")
+
+    # remove rows with nan
+    d = distance_array[~np.isnan(distance_array).any(axis=1)]
+    # remove 0 distance:
+    d_no_zero = d[(d != 0).any(axis=1)]
+
+    if verb == 1:
+        final_nr_of_pnts = d_no_zero.shape[0]
+        print(f"final number of points: {final_nr_of_pnts}")
+
+    log_d = np.log(d_no_zero)
+
+    avg_log_dist = np.mean(log_d, axis=0)
+    t_list = np.arange(steps)*dt
+
+    if debug:
+        if freq_cut:
+            to_return = (avg_log_dist, t_list, index_distance_array, d_no_zero, time, amplitude, avg_period)
+        else:
+            to_return = (avg_log_dist, t_list, index_distance_array, d_no_zero)
+    else:
+        to_return = (avg_log_dist, t_list)
+
+    return to_return
+
+
+def poincare_map(time_series, mode="minima", dimension=0):
+    x = time_series[:, dimension]
+    if mode == "minima":
+        ix = argrelextrema(x, np.less)[0]
+    elif mode == "maxima":
+        ix = argrelextrema(x, np.greater)[0]
+    else:
+        raise Exception(f"mode: {mode} not recognized")
+    extreme = x[ix]
+
+    return extreme[:-1], extreme[1:]
 
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,

@@ -512,3 +512,26 @@ def _is_number(s):
             return True
         except ValueError:
             return False
+
+
+def _linear_fit(y, dt, t_min=0, t_max=5):
+    """
+    calculates the linear fit of a timeseries y
+    returns x_fit, y_fit and the coefficients
+    TODO: proper Docstring
+    Args:
+        y:
+        dt:
+        t_min:
+        t_max:
+
+    Returns:
+
+    """
+    i_min, i_max = int(t_min/dt), int(t_max/dt)
+    y = y[i_min: i_max+1]
+    x_fit = np.arange(i_min, i_max+1)*dt
+    coef = np.polyfit(x_fit,y,1)
+    poly1d_fn = np.poly1d(coef)
+    y_fit = poly1d_fn(x_fit)
+    return x_fit, y_fit, coef
