@@ -136,7 +136,7 @@ def rmse(pred_time_series, meas_time_series, normalization=None):
     return error
 
 
-def error_over_time(pred_time_series, meas_time_series, distance_measure = "L2", normalization = None, remove_nans=True):
+def error_over_time(pred_time_series, meas_time_series, distance_measure="L2", normalization=None, remove_nans=True):
     """ Calculates a general error between two time series
 
     The time series must be of equal length and dimension
@@ -185,17 +185,17 @@ def error_over_time(pred_time_series, meas_time_series, distance_measure = "L2",
             meas[is_nan] = np.inf
 
     if len(pred.shape) == 1:
-        pred = np.expand_dims(pred, axis = 1)
+        pred = np.expand_dims(pred, axis=1)
     if len(meas.shape) == 1:
-        meas = np.expand_dims(meas, axis = 1)
+        meas = np.expand_dims(meas, axis=1)
 
     delta = pred-meas
 
     if type(distance_measure) == str:
         if distance_measure == "L2":
-            distance = np.linalg.norm(delta, axis = 1)
+            distance = np.linalg.norm(delta, axis=1)
         elif distance_measure == "rmse":
-            distance = np.linalg.norm(delta, axis = 1) # / np.sqrt(meas.shape[1])
+            distance = np.linalg.norm(delta, axis=1)  # / np.sqrt(meas.shape[1])
         else:
             raise Exception("Type of distance_measure not implemented")
         # more norms can be added here
@@ -214,7 +214,7 @@ def error_over_time(pred_time_series, meas_time_series, distance_measure = "L2",
         norm = (np.max(meas) - np.min(meas))
     elif normalization == "historic":
         norm = np.linalg.norm(meas) * np.sqrt(meas.shape[0])
-    elif normalization == "root_of_avg_of_spacedist_squared": # as in: 2018 Pathak et.al."Hybrid forecasting..."
+    elif normalization == "root_of_avg_of_spacedist_squared":  # as in: 2018 Pathak et.al."Hybrid forecasting..."
         norm = np.sqrt(np.mean(np.linalg.norm(meas, axis=1)**2))
     elif utilities._is_number(normalization):
         norm = normalization
