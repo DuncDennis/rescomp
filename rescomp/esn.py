@@ -46,6 +46,7 @@ class _ESNCore(utilities._ESNLogging):
         self._w_out_fit_flag_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
 
         self._w_out_fit_flag = None
+        self._w_out_fit_flag_str = None
 
         self._last_r = None
         self._last_r_gen = None
@@ -53,6 +54,31 @@ class _ESNCore(utilities._ESNLogging):
         self._loc_nbhd = None
 
         self._reg_param = None
+
+    def set_w_out_fit_flag(self, w_out_fit_flag="simple"):
+        """
+        Simple func to set the w_out_fit_flag-> will be reseted if _train_synced is called
+        """
+        self._w_out_fit_flag = \
+            self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
+        self._w_out_fit_flag_str = w_out_fit_flag
+        self.logger.debug(f"_w_out_fit_flag set to {w_out_fit_flag}")
+
+    def reset_res_state(self, res_state=None):
+        """
+        (re)set the reservoir state
+        Args:
+            res_state (np.ndarray): The state of the reservoir nodes , shape (N_dim,)
+        """
+        if res_state is None:
+            self._last_r = np.zeros(self._network.shape[0])
+        else:
+            if len(res_state.shape) != 1:
+                raise Exception("res_state has to be 1-D")
+            elif res_state.size != self._network.shape[0]:
+                raise Exception("res_state size does not fit network size")
+            else:
+                self._last_r = res_state
 
     def synchronize(self, x, save_r=False):
         """ Synchronize the reservoir state with the input time series
@@ -72,7 +98,8 @@ class _ESNCore(utilities._ESNLogging):
         self.logger.debug('Start syncing the reservoir state')
 
         if self._last_r is None:
-            self._last_r = np.zeros(self._network.shape[0])
+            # self._last_r = np.zeros(self._network.shape[0])
+            self.reset_res_state()
 
         if save_r:
             r = np.zeros((x.shape[0], self._network.shape[0]))
@@ -186,8 +213,10 @@ class _ESNCore(utilities._ESNLogging):
 
         """
 
-        self._w_out_fit_flag = \
-            self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
+        # self._w_out_fit_flag = \
+        #     self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
+        if self._w_out_fit_flag is None:
+            self.set_w_out_fit_flag(w_out_fit_flag)
 
         self.logger.debug('Start training')
 
@@ -252,6 +281,7 @@ class ESN(_ESNCore):
         self._n_avg_deg = None  # network_average_degree
         self._n_edge_prob = None
         self._n_type_flag = None  # network_type
+        self._n_type_flag_str = None
         self._network = self._network
 
         # _create_w_in() which is called from train() assigns values to:
@@ -264,9 +294,11 @@ class ESN(_ESNCore):
         self._bias_scale = None
         self._bias = None
         self._act_fct_flag = None
+        self._act_fct_flag_str = None
         self._act_fct = self._act_fct
         self._normal_tanh_nodes = None
         self._squared_tanh_nodes = None
+        self._leak_fct = None
 
         # train() assigns values to:
         self._x_dim = None  # Typically called d
@@ -355,6 +387,24 @@ class ESN(_ESNCore):
                                            high=self._w_in_scale,
                                            size=(self._n_dim, self._x_dim))
 
+    def set_w_out(self, w_out=None):
+        """
+        Func to set a w_out to be able to run the loop (loop the reservoir dynamics without training data)
+        """
+        self.logger.debug("Setting self._w_out with the set_w_out function")
+
+        r_aux = np.zeros(self._n_dim)
+        res_gen_size = self._r_to_generalized_r(r_aux).size
+
+        if w_out is None:
+            self._w_out = np.ones((self._x_dim, res_gen_size))  # set every entry of _w_out to one (just so that the program runs)
+            self.logger.debug("Setting all self._w_out entries to 1")
+        else:
+            if w_out.shape != (self._x_dim, res_gen_size):
+                raise Exception("Shape of parsed w_out does not fit the requirements")
+            else:
+                self._w_out = w_out
+
     def create_network(self, n_dim=500, n_rad=0.1, n_avg_deg=6.0,
                        n_type_flag="erdos_renyi", network_creation_attempts=10):
         """ Creates the internal network used as reservoir in RC
@@ -384,6 +434,7 @@ class ESN(_ESNCore):
         self._n_avg_deg = n_avg_deg
         self._n_edge_prob = self._n_avg_deg / (self._n_dim - 1)
         self._n_type_flag = self._n_type_flag_synonyms.get_flag(n_type_flag)
+        self._n_type_flag_str = n_type_flag
 
         for i in range(network_creation_attempts):
             try:
@@ -491,7 +542,7 @@ class ESN(_ESNCore):
     #     """
     #     raise Exception("Not yet implemented")
 
-    def _set_activation_function(self, act_fct_flag, bias_scale=0, mix_ratio=0.5, leak_fct=0.0):
+    def set_activation_function(self, act_fct_flag, bias_scale=0, mix_ratio=0.5, leak_fct=0.0):
         """ Set the activation function corresponding to the act_fct_flag
 
         Args:
@@ -507,6 +558,7 @@ class ESN(_ESNCore):
 
         # self._act_fct_flag = act_fct_flag
         self._act_fct_flag = self._act_fct_flag_synonyms.get_flag(act_fct_flag)
+        self._act_fct_flag_str = act_fct_flag
 
         self._bias_scale = bias_scale
         self._bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0,
@@ -695,8 +747,9 @@ class ESN(_ESNCore):
         else:
             self.create_input_matrix(x_dim, w_in_scale=w_in_scale, w_in_sparse=w_in_sparse, w_in_ordered=w_in_ordered)
 
-        self._set_activation_function(act_fct_flag=act_fct_flag,
-                                      bias_scale=bias_scale)
+        if self._act_fct_flag is None:
+            self.set_activation_function(act_fct_flag=act_fct_flag,
+                                         bias_scale=bias_scale)
 
         if sync_steps != 0:
             x_sync = x_train[:sync_steps]
@@ -714,6 +767,25 @@ class ESN(_ESNCore):
                                                                   w_out_fit_flag=w_out_fit_flag)
         else:
             self._train_synced(x_train, w_out_fit_flag=w_out_fit_flag)
+
+    def run_loop(self, steps, save_r=False):
+        """
+        Run the autonomous reservoir dynamics in a loop
+        """
+        y_pred = np.zeros((steps, self._x_dim))
+
+        if save_r:
+            self._r_pred = np.zeros((steps, self._network.shape[0]))
+            self._r_pred_gen = self._r_to_generalized_r(self._r_pred)
+
+            for i in range(steps):
+                y_pred[i, :] = self._predict_step()
+                self._r_pred[i] = self._last_r
+                self._r_pred_gen[i] = self._last_r_gen
+        else:
+            for i in range(steps):
+                y_pred[i, :] = self._predict_step()
+        return y_pred
 
     def predict(self, x_pred=None, sync_steps=0, pred_steps=None,
                 save_r=False, save_input=False):
@@ -824,6 +896,47 @@ class ESN(_ESNCore):
                       "n_type_flag": self._n_type_flag}
 
         return param_dict
+
+    def summary(self):
+        out_msg = ""
+        layer_wall = "=====================\n"
+        description_wall = "- - - - - - - - - - -\n"
+
+        out_msg += "INPUT: \n"
+        out_msg += f"x_dim: {self._x_dim}\n"
+
+        out_msg += layer_wall
+        out_msg += "INPUT-RESERVOIR COUPLING W_in: \n"
+        try:
+            out_msg += f"W_in: {self._w_in.shape}\n"
+        except Exception as e:
+            out_msg += f"W_in: {self._w_in}\n"
+        out_msg += description_wall
+        out_msg += f"w_in_scale: {self._w_in_scale}, w_in_sparse:" \
+                   f" {self._w_in_sparse}, w_in_ordered: {self._w_in_ordered}\n"
+
+        out_msg += layer_wall
+        out_msg += "RESERVOIR: \n"
+        out_msg += description_wall
+        out_msg += "Network: \n"
+        out_msg += f"n_dim: {self._n_dim}\n"
+        out_msg += f"n_rad: {self._n_rad}, n_avg_deg: {self._n_avg_deg}, n_type_flag: {self._n_type_flag_str}, \n"
+        out_msg += description_wall
+        out_msg += "Dynamics: \n"
+        out_msg += f"act_fct_flag: {self._act_fct_flag_str}, " \
+                   f"bias_scale: {self._bias_scale}, leak_factor: {self._leak_fct}\n"
+        out_msg += "Update equation: r(i+1) = leak_fct * r(i) + (1-leak_fct) * act_fct(W_in * x(i) + W * r(i))\n"
+        out_msg += layer_wall
+        out_msg += "NON-LINEAR TRANSFORM OF RESERVOIR STATE: \n"
+        out_msg += f"w_out_fit_flag: {self._w_out_fit_flag_str}\n"
+        out_msg += layer_wall
+        out_msg += "RESERVOIR-OUTPUT COUPLING W_out: \n"
+        try:
+            out_msg += f"W_out: {self._w_out.shape}\n"
+        except Exception as e:
+            out_msg += f"W_out: {self._w_out}\n"
+
+        print(out_msg)
 
     def get_w_in(self, ):
         """ Returns the input matrix w_in
@@ -946,6 +1059,28 @@ class ESNWrapper(ESN):
                                       pred_steps=pred_steps, **predict_kwargs)
 
         return y_pred, y_test
+
+    def create_architecture(self, n_dim, x_dim, n_rad=0.1, n_avg_deg=6.0, w_in_scale=1.0,
+                            n_type_flag="erdos_renyi", network_creation_attempts=10,
+                            w_in_sparse=True, w_in_ordered=False, w_out_fit_flag="simple",
+                            seed=42, activation_function="tanh_simple", leak_fct=0.0, res_state=None,
+                            w_out=None):
+        np.random.seed(seed)
+        self.create_network(n_dim=n_dim, n_rad=n_rad, n_avg_deg=n_avg_deg,
+                            n_type_flag=n_type_flag, network_creation_attempts=network_creation_attempts)
+        self.create_input_matrix(x_dim, w_in_scale=w_in_scale, w_in_sparse=w_in_sparse, w_in_ordered=w_in_ordered)
+        self.set_activation_function(activation_function, leak_fct=leak_fct)
+        self.reset_res_state(res_state=res_state)
+        self.set_w_out_fit_flag(w_out_fit_flag)
+        self.set_w_out(w_out)
+
+        # run test loop:
+        try:
+            self._predict_step()
+            self.reset_res_state(res_state=res_state)
+            self.logger.debug("ESN can run in loop")
+        except Exception as e:
+            self.logger.debug("Some ESN parameters missing, can not run loop")
 
 
 class ESNGenLoc(utilities._ESNLogging):
@@ -1529,7 +1664,7 @@ class ESNHybrid(ESNWrapper):
         '''
         if self.add_model_to_output:
             # modify _w_out:
-            print("Rewire all connections to model: Change W_out")
+            self.logger.debug("Rewire all connections to model: Change W_out")
             n_dim_mod = self._n_dim + self._x_dim
             x_dim = self._x_dim
             matrix = np.zeros((x_dim, n_dim_mod))
@@ -1539,4 +1674,4 @@ class ESNHybrid(ESNWrapper):
                 matrix[:, n_dim_mod - x_dim + i] = to_add
             self._w_out = matrix
         else:
-            print("Error: This function only has an effect if add_model_to_output is True")
+            self.logger.debug("Error: This function only has an effect if add_model_to_output is True")
