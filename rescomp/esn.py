@@ -542,7 +542,7 @@ class ESN(_ESNCore):
     #     """
     #     raise Exception("Not yet implemented")
 
-    def set_activation_function(self, act_fct_flag, bias_scale=0, mix_ratio=0.5, leak_fct=0.0):
+    def set_activation_function(self, act_fct_flag, bias_scale=0, mix_ratio=0.5, leak_fct=0.0, custom_act_fct=None):
         """ Set the activation function corresponding to the act_fct_flag
 
         Args:
@@ -581,11 +581,14 @@ class ESN(_ESNCore):
         elif self._act_fct_flag == 4:
             # self._act_fct = self._act_fct_sigmoid
             _act_fct = self._act_fct_sigmoid
+
         else:
             raise Exception('self._act_fct_flag %s does not have a activation '
                             'function implemented!' % str(self._act_fct_flag))
-
-        self._act_fct = lambda x, r: self._leak_fct*r + (1-self._leak_fct)*_act_fct(x, r)
+        if custom_act_fct is None:
+            self._act_fct = lambda x, r: self._leak_fct*r + (1-self._leak_fct)*_act_fct(x, r)
+        else:
+            self._act_fct = lambda x, r:  custom_act_fct(self, x, r)
 
     def _act_fct_tanh_simple(self, x, r):
         """ Standard activation function of the elementwise np.tanh()
@@ -925,7 +928,7 @@ class ESN(_ESNCore):
         out_msg += "Dynamics: \n"
         out_msg += f"act_fct_flag: {self._act_fct_flag_str}, " \
                    f"bias_scale: {self._bias_scale}, leak_factor: {self._leak_fct}\n"
-        out_msg += "Update equation: r(i+1) = leak_fct * r(i) + (1-leak_fct) * act_fct(W_in * x(i) + W * r(i))\n"
+        # out_msg += "Update equation: r(i+1) = leak_fct * r(i) + (1-leak_fct) * act_fct(W_in * x(i) + W * r(i))\n"
         out_msg += layer_wall
         out_msg += "NON-LINEAR TRANSFORM OF RESERVOIR STATE: \n"
         out_msg += f"w_out_fit_flag: {self._w_out_fit_flag_str}\n"
@@ -1064,12 +1067,13 @@ class ESNWrapper(ESN):
                             n_type_flag="erdos_renyi", network_creation_attempts=10,
                             w_in_sparse=True, w_in_ordered=False, w_out_fit_flag="simple",
                             seed=42, activation_function="tanh_simple", leak_fct=0.0, res_state=None,
-                            w_out=None):
-        np.random.seed(seed)
+                            w_out=None, custom_act_fct=None):
+        if seed is not None:
+            np.random.seed(seed)
         self.create_network(n_dim=n_dim, n_rad=n_rad, n_avg_deg=n_avg_deg,
                             n_type_flag=n_type_flag, network_creation_attempts=network_creation_attempts)
         self.create_input_matrix(x_dim, w_in_scale=w_in_scale, w_in_sparse=w_in_sparse, w_in_ordered=w_in_ordered)
-        self.set_activation_function(activation_function, leak_fct=leak_fct)
+        self.set_activation_function(activation_function, leak_fct=leak_fct, custom_act_fct=custom_act_fct)
         self.reset_res_state(res_state=res_state)
         self.set_w_out_fit_flag(w_out_fit_flag)
         self.set_w_out(w_out)
@@ -1080,6 +1084,7 @@ class ESNWrapper(ESN):
             self.reset_res_state(res_state=res_state)
             self.logger.debug("ESN can run in loop")
         except Exception as e:
+            print(e)
             self.logger.debug("Some ESN parameters missing, can not run loop")
 
 
@@ -1675,3 +1680,109 @@ class ESNHybrid(ESNWrapper):
             self._w_out = matrix
         else:
             self.logger.debug("Error: This function only has an effect if add_model_to_output is True")
+
+
+class ESNDifference(ESNWrapper):
+    """
+    Added by Dennis Duncan: A RC model that trains on the difference:  [u_(i+1)-u_(i)]/dt
+
+    Notes:
+        - Either change _fit_w_out or change code where _fit_w_out is called
+        - same for _train_synced
+        - change _predict_step
+        - _train_synced is called in Train
+    """
+
+    def __init__(self, sampling_time=1):
+        super().__init__()
+        self.logger.debug("Create ESNWrapper instance")
+
+        self.sampling_time = sampling_time  # the time between two points of the input timeseries
+
+        self._last_input = None
+
+    def _fit_w_out(self, x_train, r):
+        """ Fit the output matrix self._w_out after training
+        Trains on the difference
+        Uses linear regression and Tikhonov regularization.
+
+        Args:
+            x_train (np.ndarray): get y_train via x_train[1:], y_train = Desired prediction from the reservoir states
+            r (np.ndarray): reservoir states
+        Returns:
+            np.ndarray: r_gen, generalized nonlinear transformed r
+
+        """
+
+        y_train = (x_train[1:] - x_train[:-1])/self.sampling_time
+        # y_train = x_train[1:]
+
+        self.logger.debug('Fit _w_out according to method %s' %
+                          str(self._w_out_fit_flag))
+
+        r_gen = self._r_to_generalized_r(r)
+
+        # If we are using local states we only want to use the core dimensions
+        # for the fit of W_out, i.e. the dimensions where the corresponding
+        # locality matrix == 2
+        if self._loc_nbhd is None:
+            self._w_out = np.linalg.solve(
+                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
+                r_gen.T @ y_train).T
+        else:
+            self._w_out = np.linalg.solve(
+                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
+                r_gen.T @ y_train[:, self._loc_nbhd == 2]).T
+
+        return r_gen
+
+    def _predict_step(self, x=None):
+        """ Predict a single time step
+
+        Assumes a synchronized reservoir.
+        Changes self._last_r and self._last_r_gen to stay synchronized to the
+        new system state y
+
+        Args:
+            x (np.ndarray): input for the d-dim. system, shape (d,). If x is
+            None the internal reservoir states will be used to generate x
+            using w_out
+
+        Returns:
+            np.ndarray: y, the next time step as predicted from last_x, _w_out
+            and _last_r, shape (d,)
+        """
+
+        if x is None:
+            x = self._w_out @ self._r_to_generalized_r(self._last_r) * self.sampling_time + self._last_input  # add smth
+
+        self._last_input = x
+        self._last_r = self._act_fct(x, self._last_r)
+        self._last_r_gen = self._r_to_generalized_r(self._last_r)
+
+        y = self._w_out @ self._last_r_gen * self.sampling_time + self._last_input
+
+        self._last_input = y
+
+        # ignore this for this class:
+        if self._loc_nbhd is not None:
+            temp = np.empty(self._loc_nbhd.shape)
+            temp[:] = np.nan
+            temp[self._loc_nbhd == 2] = y
+            y = temp
+        return y
+
+    # def _act_fct(self, x, r):
+    #     self._last_input = x
+    #     super()._act_fct(x, r)
+
+    def synchronize(self, *args, **kwargs):
+        self._last_input = args[0][-1]
+        return super().synchronize(*args, **kwargs)
+
+
+
+    def create_architecture(self, *args, **kwargs):
+        x_dim = args[1]
+        self._last_input = np.zeros(x_dim)
+        super().create_architecture(*args, **kwargs)
