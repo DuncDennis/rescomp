@@ -1,17 +1,24 @@
 import numpy as np
 import time
-from pathlib import Path
 from . import utilities
 from . import measures
 import os
+import pathlib
+import itertools
+import matplotlib.pyplot as plt
+import h5py
+import pandas as pd
+
 
 class StatisticalModelTester():
     '''
     A Class to statistically test one prediction model (rc or not),
     i.e. do an ensemble experiment
     '''
+
     def __init__(self):
-        self.error_function = None
+        self.error_function = lambda y_pred, y_test: measures.error_over_time(y_pred, y_test, distance_measure="L2",
+                                                                              normalization="root_of_avg_of_spacedist_squared")
         self.error_threshhold = None
 
         self.model_creation_function = lambda: None
@@ -22,6 +29,8 @@ class StatisticalModelTester():
         self._output_flag_synonyms.add_synonyms(2, ["valid_times_median_quartile"])
         self._output_flag_synonyms.add_synonyms(3, ["error"])
         self._output_flag = None
+
+        self.results = None
 
     def set_error_function(self, error_function):
         self.error_function = error_function
@@ -40,7 +49,8 @@ class StatisticalModelTester():
         '''
         self.model_prediction_function = model_prediction_function
 
-    def do_ens_experiment(self, nr_model_realizations, x_pred_list, output_flag = "full", save_example_trajectory = False, time_it = False, **kwargs):
+    def do_ens_experiment(self, nr_model_realizations, x_pred_list, output_flag="full", save_example_trajectory=False,
+                          time_it=False, **kwargs):
         print("      Starting ensemble experiment...")
         print("      output_flag: ", output_flag)
 
@@ -55,7 +65,7 @@ class StatisticalModelTester():
             valid_times = np.zeros((nr_model_realizations, nr_of_time_intervals))
 
         for i in range(nr_model_realizations):
-            print(f"Realization: {i+1}/{nr_model_realizations} ..." )
+            print(f"Realization: {i + 1}/{nr_model_realizations} ...")
             model = self.model_creation_function()
             for j, x_pred in enumerate(x_pred_list):
                 y_pred, y_test = self.model_prediction_function(x_pred, model)
@@ -63,17 +73,17 @@ class StatisticalModelTester():
                     if i == 0 and j == 0:
                         predict_steps, dim = y_pred.shape
                         results = np.zeros((nr_model_realizations, nr_of_time_intervals, 2, predict_steps, dim))
-                    results[i, j, 0,  :, :] = y_pred
-                    results[i, j, 1,  :, :] = y_test
-                elif self._output_flag in (1,2):
-                    valid_times[i, j] = measures.valid_time_index(self.error_function(y_pred, y_test), self.error_threshhold)
+                    results[i, j, 0, :, :] = y_pred
+                    results[i, j, 1, :, :] = y_test
+                elif self._output_flag in (1, 2):
+                    valid_times[i, j] = measures.valid_time_index(self.error_function(y_pred, y_test),
+                                                                  self.error_threshhold)
                 elif self._output_flag == 3:
                     if i == 0 and j == 0:
                         errors = np.zeros((nr_model_realizations, nr_of_time_intervals, predict_steps))
-                    errors[i,j, :] = self.error_function(y_pred, y_test)
+                    errors[i, j, :] = self.error_function(y_pred, y_test)
 
         to_return = []
-
 
         if self._output_flag == 0:
             to_return.append(results)
@@ -95,16 +105,226 @@ class StatisticalModelTester():
             to_return.append(example_trajectory)
         return to_return
 
+    def do_ens_experiment_internal(self, nr_model_realizations, x_pred_list, **kwargs):
+        nr_of_time_intervals = len(x_pred_list)
+
+        for i in range(nr_model_realizations):
+            print(f"Realization: {i + 1}/{nr_model_realizations} ...")
+            model = self.model_creation_function(**kwargs)
+            for j, x_pred in enumerate(x_pred_list):
+                y_pred, y_test = self.model_prediction_function(x_pred, model)
+                if i == 0 and j == 0:
+                    predict_steps, dim = y_pred.shape
+                    results = np.zeros((nr_model_realizations, nr_of_time_intervals, 2, predict_steps, dim))
+                results[i, j, 0, :, :] = y_pred
+                results[i, j, 1, :, :] = y_test
+
+        self.results = results
+
+    def get_error(self, results=None, mean=False):
+        if results is None:
+            results = self.results
+
+        n_ens = results.shape[0]
+        n_interval = results.shape[1]
+        n_pred_steps = results.shape[3]
+
+        error = np.zeros((n_ens, n_interval, n_pred_steps))
+        for i_ens in range(n_ens):
+            for i_interval in range(n_interval):
+                y_pred = results[i_ens, i_interval, 0, :, :]
+                y_test = results[i_ens, i_interval, 1, :, :]
+
+                error[i_ens, i_interval, :] = self.error_function(y_pred, y_test)
+        if mean:
+            error_mean = np.mean(error, axis=(0, 1))
+            return error_mean
+        return error
+
+    def get_valid_times(self, error=None, results=None, mean=False, error_threshhold=None):
+        if error is None:
+            if results is None:
+                results = self.results
+            error = self.get_error(results)
+
+        if error_threshhold is None:
+            error_threshhold = self.error_threshhold
+
+        n_ens = error.shape[0]
+        n_interval = error.shape[1]
+
+        valid_times = np.zeros((n_ens, n_interval))
+        for i_ens in range(n_ens):
+            for i_interval in range(n_interval):
+                valid_times[i_ens, i_interval] = measures.valid_time_index(error[i_ens, i_interval, :],
+                                                                           error_threshhold)
+
+        if mean:
+            valid_times_mean = np.mean(valid_times)
+            return valid_times_mean
+        return valid_times
+
+
+class StatisticalModelTesterSweep(StatisticalModelTester):
+    """
+
+    """
+    def __init__(self):
+        super().__init__()
+
+        self.input_parameters = None
+        self.results_sweep = []
+        self.error_sweep = []
+        self.valid_times_sweep = []
+
+        self.nr_model_realizations = None
+        self.nr_of_time_intervals = None
+
+    def _dict_of_vals_to_dict_of_list(self, inp):
+        return {key: ((val,) if not type(val) in (list, tuple) else tuple(val)) for key, val in inp.items()}
+
+    def _unpack_parameters(self, **parameters):
+        list_of_params = []
+        parameters_w_list = self._dict_of_vals_to_dict_of_list(parameters)
+
+        keys = parameters_w_list.keys()
+        values = parameters_w_list.values()
+
+        for x in list(itertools.product(*values)):
+            d = dict(zip(keys, x))
+            list_of_params.append(d)
+
+        return list_of_params
+
+    def do_ens_experiment_sweep(self, nr_model_realizations, x_pred_list, **parameters):
+        self.input_parameters = parameters
+        self.nr_model_realizations = nr_model_realizations
+        self.nr_of_time_intervals = x_pred_list.shape[0]
+        list_of_params = self._unpack_parameters(**parameters)
+        for i, params in enumerate(list_of_params):
+            print(f"Sweep: {i + 1}/{len(list_of_params)}")
+            print(params)
+            self.do_ens_experiment_internal(nr_model_realizations, x_pred_list, **params)
+
+            self.results_sweep.append((params, self.results.copy()))
+
+    def get_results_sweep(self):
+        return self.results_sweep
+
+    def get_error_sweep(self):
+        error_sweep = []
+        for params, results in self.results_sweep:
+            error_sweep.append((params, self.get_error(results)))
+
+        self.error_sweep = error_sweep
+        return error_sweep
+
+    def get_valid_times_sweep(self, error_threshhold=None):
+        if error_threshhold is None:
+            error_threshhold = self.error_threshhold
+
+        else:
+            self.error_threshhold = error_threshhold
+
+        valid_times_sweep = []
+        for params, results in self.results_sweep:
+            vt = self.get_valid_times(results=results, error_threshhold=error_threshhold)
+            valid_times_sweep.append((params, vt))
+
+        self.valid_times_sweep = valid_times_sweep
+        return valid_times_sweep
+
+    def save_sweep_results(self, name="default_name", path=None, type="trajectory"):
+        if path is None:
+            repo_path = pathlib.Path(__file__).parent.resolve().parents[0]
+            path = pathlib.Path.joinpath(repo_path, "results")
+            print(path)
+
+        if type == "trajectory":
+            if len(self.results_sweep) == 0:
+                raise Exception("no trajectory results yet")
+            else:
+                data = self.results_sweep
+        elif type == "error":
+            if len(self.error_sweep) == 0:
+                raise Exception("no error results yet")
+            else:
+                data = self.error_sweep
+
+        # check if there is a file with that name already:
+        if f"{name}.hdf5" in os.listdir(path):
+            i = 1
+            while f"{name}.hdf5" in os.listdir(path):
+                name = f"{name}{i}"
+                i += 1
+
+        file_path = pathlib.Path.joinpath(path, f"{name}.hdf5")
+        print(file_path)
+        with h5py.File(file_path, "w") as f:
+            runs_group = f.create_group("runs")
+            i = 1
+            for params, results in data:
+                dset = runs_group.create_dataset(f"trajectory_{i}", data=results)
+                for key, val in params.items():
+                    dset.attrs[key] = val
+                i += 1
+
+            # sweep_info_group = f.create_group("sweep_info")
+            # for key, val in self._dict_of_vals_to_dict_of_list(self.input_parameters).items():
+            #     sweep_info_group.create_dataset(key, data=val)
+
+
+    def get_valid_times_df(self, **kwargs):
+        if len(self.valid_times_sweep) == 0 or "error_threshhold" in kwargs.keys():
+            self.get_valid_times_sweep(**kwargs)
+
+        df_vt = None
+
+        for params, valid_times in self.valid_times_sweep:
+            vt_mean = np.mean(valid_times)
+            vt_std = np.std(valid_times)
+            vt_median = np.median(valid_times)
+            input = {key: (val, ) for key, val in params.items()}
+            input["valid_times_mean"] = (vt_mean, )
+            input["valid_times_median"] = (vt_median, )
+            input["valid_times_std"] = (vt_std, )
+            input["error_threshhold"] = (self.error_threshhold, )
+            input["nr_model_realizations"] = (self.nr_model_realizations, )
+            input["nr_of_time_intervals"] = (self.nr_of_time_intervals, )
+
+            if df_vt is None:
+                df_vt = pd.DataFrame.from_dict(input)
+
+            else:
+                df_vt = pd.concat([df_vt, pd.DataFrame.from_dict(input)])
+
+        return df_vt
+
+    def plot_error(self, ax=None, figsize=(15, 8)):
+        if ax is None:
+            plt.figure(figsize=figsize)
+            ax = plt.gca()
+
+        if len(self.error_sweep) == 0:
+            self.get_error_sweep()
+
+        for params, error in self.error_sweep:
+            error_mean = np.mean(error, axis=(0, 1))
+            ax.plot(error_mean, label=f"{params}")
+        ax.legend()
+
 
 class ST_sweeper():
     '''
     '''
-    def __init__(self, sweeped_variable_dict, ST_creator_function, model_name = "default_model_name", saving_pre_path = None, artificial_sweep = False):
+
+    def __init__(self, sweeped_variable_dict, ST_creator_function, model_name="default_model_name",
+                 saving_pre_path=None, artificial_sweep=False):
         self.sweeped_variable_name, self.sweeped_variable_list = list(sweeped_variable_dict.items())[0]
         self.ST_creator_function = ST_creator_function
         self.model_name = model_name
         self.output_flag = None
-        self.pre_path = saving_pre_path # for saving
+        self.pre_path = saving_pre_path  # for saving
         self.path = None
         if self.pre_path == None:
             self.saving = False
@@ -114,7 +334,7 @@ class ST_sweeper():
         self.artificial_sweep = artificial_sweep
 
     def check_path(self):
-        Path(self.pre_path).mkdir(parents=True, exist_ok=True)
+        pathlib.Path(self.pre_path).mkdir(parents=True, exist_ok=True)
 
     def sweep(self, **kwargs):
         print(f"STARTING SWEEP FOR MODEL: {self.model_name}")
@@ -135,7 +355,7 @@ class ST_sweeper():
             print(f"{self.sweeped_variable_name}: {sweep_variable}")
             ST = self.ST_creator_function(sweep_variable)
 
-            results_all = ST.do_ens_experiment(**kwargs) # results can have multiple shapes
+            results_all = ST.do_ens_experiment(**kwargs)  # results can have multiple shapes
 
             if time_it:
                 time = results_all[1]
@@ -166,8 +386,9 @@ class ST_sweeper():
             to_return.append(example_trajectory_sweeped)
 
         if self.saving:
-            np.save(f"{self.pre_path}{self.model_name}__res__{self.output_flag}.npy" , results_sweeped)
-            np.save(f"{self.pre_path}{self.model_name}__sweep__{self.sweeped_variable_name}.npy", self.sweeped_variable_list)
+            np.save(f"{self.pre_path}{self.model_name}__res__{self.output_flag}.npy", results_sweeped)
+            np.save(f"{self.pre_path}{self.model_name}__sweep__{self.sweeped_variable_name}.npy",
+                    self.sweeped_variable_list)
             if time_it:
                 np.save(f"{self.pre_path}{self.model_name}__times.npy", time_sweeped)
             if save_example_trajectory:
@@ -193,7 +414,7 @@ def load_results(path):
     for f in list_of_files:
         name_of_model = f.split("__")[0]
         if not name_of_model in files_dict.keys():
-            files_dict[name_of_model] = [f,]
+            files_dict[name_of_model] = [f, ]
         else:
             files_dict[name_of_model].append(f)
     results_bool = False
@@ -201,8 +422,8 @@ def load_results(path):
     save_example_trajectory = False
     sweep_bool = False
 
-    for key, val in files_dict.items(): # For each model
-        for item in val: # for each file of a model
+    for key, val in files_dict.items():  # For each model
+        for item in val:  # for each file of a model
             kind = item.split("__")[1]
             kind = kind.split(".")[0]
             if kind == "res":
@@ -219,7 +440,7 @@ def load_results(path):
                     sweep_bool = True
                 sweep_array_models[key] = {}
                 sweep_variable = item.split("__")[-1].split(".")[0]
-                sweep_array_models[key][sweep_variable] = np.load(path +item)
+                sweep_array_models[key][sweep_variable] = np.load(path + item)
             elif kind == "times":
                 if not time_it:
                     times_models = {}
@@ -243,7 +464,12 @@ def load_results(path):
         to_return_dict["sweep_array_models"] = sweep_array_models
     return to_return_dict
 
-def data_simulation(simulation_function, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred, dt, nr_of_time_intervals, v = 1, sim_data_return = False):
+
+def data_simulation(simulation_function_or_sim_data, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync,
+                    t_pred, dt=1, nr_of_time_intervals=1, v=1, sim_data_return=False):
+    """
+
+    """
     train_disc_steps = int(t_train_disc / dt)
     train_sync_steps = int(t_train_sync / dt)
     train_steps = int(t_train / dt)
@@ -251,16 +477,23 @@ def data_simulation(simulation_function, t_train_disc, t_train_sync, t_train, t_
     pred_sync_steps = int(t_pred_sync / dt)
     pred_steps = int(t_pred / dt)
     total_time_steps = train_disc_steps + train_sync_steps + train_steps + (
-                pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
+            pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
 
-    sim_data = simulation_function(total_time_steps)
-    x_train = sim_data[train_disc_steps : train_disc_steps + train_sync_steps + train_steps]
+    if hasattr(simulation_function_or_sim_data, '__call__'):  # check if its a function:
+        sim_data = simulation_function_or_sim_data(total_time_steps)
+    else:
+        sim_data = simulation_function_or_sim_data
+        if sim_data.shape[0] < total_time_steps:
+            raise Exception(f"total required time steps {total_time_steps} larger than input data!")
+
+    x_train = sim_data[train_disc_steps: train_disc_steps + train_sync_steps + train_steps]
 
     x_pred_list = []
     start = train_disc_steps + train_sync_steps + train_steps - 1
     n_period = pred_disc_steps + pred_sync_steps + pred_steps
     for i in range(nr_of_time_intervals):
-        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period + 1]
+        # x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period + 1]
+        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period]
         x_pred_list.append(x_pred)
     x_pred_list = np.array(x_pred_list)
 
