@@ -42,6 +42,7 @@ def plot_difference(trajs, params_to_show, f):
     plt.legend()
     return fig
 
+
 def plot_error(trajs, params_to_show, f, max_x):
     fig = plt.figure()
 
@@ -58,27 +59,33 @@ def plot_attractor_2(trajs, params_to_show, f, i_ens, i_time_period, base_fig_si
     fig, axs = plt.subplots(len(trajs), 1, figsize=(base_fig_size[0], base_fig_size[1]*len(trajs)))
 
     for i_traj, traj in enumerate(trajs):
-        ax = axs[i_traj]
+        try:
+            ax = axs[i_traj]
+        except:
+            ax = axs
         data = f["runs"][traj][:][i_ens, i_time_period, :, :, :]
         y_pred = data[0, :, :]
         y_test = data[1, :, :]
-        ax.plot(y_test[:, 0], y_test[:, 2], linewidth=1, label="test")
-        ax.plot(y_pred[:, 0], y_pred[:, 2], linewidth=1, label="true")
+        ax.plot(y_test[:, 0], y_test[:, 2], linewidth=1, label="true")
+        ax.plot(y_pred[:, 0], y_pred[:, 2], linewidth=1, label="pred")
         ax.set_title(f"{params_to_show[i_traj]}")
         ax.legend()
     return fig
 
 
-def plot_trajectories(trajs, params_to_show, f, i_ens, i_time_period, base_fig_size=(5, 10)):
+def plot_trajectories(trajs, params_to_show, f, i_ens, i_time_period, i_dim, base_fig_size=(5, 10)):
     fig, axs = plt.subplots(len(trajs), 1, figsize=(base_fig_size[0], base_fig_size[1]*len(trajs)))
 
     for i_traj, traj in enumerate(trajs):
-        ax = axs[i_traj]
+        try:
+            ax = axs[i_traj]
+        except:
+            ax = axs
         data = f["runs"][traj][:][i_ens, i_time_period, :, :, :]
         y_pred = data[0, :, :]
         y_test = data[1, :, :]
-        ax.plot(y_test[:, 0], label="test")
-        ax.plot(y_pred[:, 0], label="true")
+        ax.plot(y_test[:, i_dim], label="true")
+        ax.plot(y_pred[:, i_dim], label="pred")
         ax.set_title(f"{params_to_show[i_traj]}")
         ax.legend()
     return fig
@@ -133,4 +140,60 @@ def plot_valid_times_heatmap(trajs, params_to_show, f, error_threshhold, base_fi
         ax.set_title(f"{params_to_show[i_traj]}")
 
     # fig.colorbar(im)
+    return fig
+
+
+def plot_correlation_dimension(trajs, params_to_show, f, i_ens, i_time_period, figsize=(5, 10), nr_steps=10):
+    fig = plt.figure(figsize=figsize)
+
+    corr_dim_true = None
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:][i_ens, i_time_period, :, :, :]
+        y_pred = data[0, :, :]
+        corr_dim_pred = measures.dimension(y_pred, return_neighbours=True, nr_steps=nr_steps)
+
+        if corr_dim_true is None:
+            y_test = data[1, :, :]
+            corr_dim_true = measures.dimension(y_test, return_neighbours=True, nr_steps=nr_steps)
+
+        plt.loglog(corr_dim_pred[1][0], corr_dim_pred[1][1],
+                   label=f"pred: {np.round(corr_dim_pred[0], 3)}, {params_to_show[i_traj]}")
+
+    plt.loglog(corr_dim_true[1][0], corr_dim_true[1][1],
+               label=f"true: {np.round(corr_dim_true[0], 3)}", linestyle="--", c="r")
+    plt.legend()
+    return fig
+
+
+def plot_correlation_dimension_hist(trajs, params_to_show, f, base_figsize=(5, 10), nr_steps=10, bins=10):
+    fig, axs = plt.subplots(len(trajs), 1, figsize=(base_figsize[0], base_figsize[1]*len(trajs)))
+
+    # true:
+    data = f["runs"][trajs[0]][:]
+    N_ens = data.shape[0]
+    N_time_periods = data.shape[1]
+    y_test = data[0, 0, 1, :, :]
+    cor_dim_array_true = measures.dimension(y_test, return_neighbours=False, nr_steps=nr_steps)
+
+    for i_traj, traj in enumerate(trajs):
+        try:
+            ax = axs[i_traj]
+        except:
+            ax = axs
+        data = f["runs"][traj][:]
+
+        # N_ens = data.shape[0]
+        # N_time_periods = data.shape[1]
+        cor_dim_array = np.zeros((N_ens, N_time_periods))
+
+        for i_ens in range(N_ens):
+            for i_t in range(N_time_periods):
+                y_pred = data[i_ens, i_t, 0, :, :]
+                cor_dim_array[i_ens, i_t] = measures.dimension(y_pred, return_neighbours=False, nr_steps=nr_steps)
+
+        ax.hist(cor_dim_array.flatten(), bins=bins)
+        ax.set_title(f"{params_to_show[i_traj]}")
+        ax.axvline(cor_dim_array_true, linestyle="--", c="r")
+
     return fig

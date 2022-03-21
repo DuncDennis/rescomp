@@ -86,29 +86,53 @@ if option is not None:
     with st.container():
         plot_error = st.checkbox("plot error")
         if plot_error:
-            max_x = st.slider("max_x", min_value=5, max_value=1000, step=1, value=500)
+            st.header("Plot Error over Time:")
+            max_value = f["runs"][trajs[0]][:].shape[-2]
+            max_x = st.slider("max_x", min_value=5, max_value=max_value, step=1, value=500)
             fig = plot.plot_error(trajs, params_to_show, f, max_x)
+
             st.pyplot(fig)
 
-    with st.container():
-        plot_difference = st.checkbox("plot difference")
-        if plot_difference:
-            fig = plot.plot_difference(trajs, params_to_show, f)
-            st.pyplot(fig)
+    # with st.container():
+    #     plot_difference = st.checkbox("plot difference")
+    #     if plot_difference:
+    #         fig = plot.plot_difference(trajs, params_to_show, f)
+    #         st.pyplot(fig)
 
     plot_attractor = st.checkbox("plot attractor")
     plot_trajectory = st.checkbox("plot trajectory")
-    if plot_attractor or plot_trajectory:
+    plot_corrdim = st.checkbox("plot correlation dimension")
+    if plot_attractor or plot_trajectory or plot_corrdim:
         N_ens = f["runs"][trajs[0]][:].shape[0]
         i_ens = st.number_input("i_ens", min_value=0, max_value=N_ens-1)
         N_time_periods = f["runs"][trajs[0]][:].shape[1]
         i_time_period = st.number_input("i_time_period", min_value=0, max_value=N_time_periods-1)
 
         if plot_attractor:
+            st.header("Plot Attractor: ")
             fig = plot.plot_attractor_2(trajs, params_to_show, f, i_ens, i_time_period, base_fig_size=(15, 4))
             st.pyplot(fig)
 
         if plot_trajectory:
-            fig = plot.plot_trajectories(trajs, params_to_show, f, i_ens, i_time_period, base_fig_size=(15, 4))
+            N_dims = f["runs"][trajs[0]][:].shape[-1]
+            st.header("Plot Trajectory: ")
+            i_dim = st.number_input("dimension", min_value=0, max_value=N_dims-1)
+            fig = plot.plot_trajectories(trajs, params_to_show, f, i_ens, i_time_period, i_dim, base_fig_size=(15, 4))
             st.pyplot(fig)
 
+        if plot_corrdim:
+            st.header("Plot Correlation Dimension")
+            nr_steps = st.slider("Nr steps for correlation dim", min_value=1, max_value=600, step=1, value=10)
+            fig = plot.plot_correlation_dimension(trajs, params_to_show, f, i_ens, i_time_period, figsize=(8, 4),
+                                                  nr_steps=nr_steps)
+            st.pyplot(fig)
+
+    with st.container():
+        plot_corrdim_hist = st.checkbox("plot correlation dimension HISTOGRAM")
+        if plot_corrdim_hist:
+            st.header("Plot Correlation Dimension Histogram:")
+            nr_steps = st.slider("Nr steps for correlation dim (hist)", min_value=1, max_value=600, step=1, value=10)
+            bins = st.slider("histogram bins", min_value=1, max_value=100, step=1, value=10)
+            fig = plot.plot_correlation_dimension_hist(trajs, params_to_show, f, nr_steps=nr_steps,
+                                                       base_figsize=(15, 4), bins=bins)
+            st.pyplot(fig)
