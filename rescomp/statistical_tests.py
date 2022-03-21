@@ -253,11 +253,14 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
 
         # check if there is a file with that name already:
         if f"{name}.hdf5" in os.listdir(path):
-            i = 1
-            while f"{name}.hdf5" in os.listdir(path):
-                name = f"{name}{i}"
+            i = 0
+            name_temp = name
+            while f"{name_temp}.hdf5" in os.listdir(path):
                 i += 1
+                name_temp = f"{name}{i}"
 
+            name = f"{name}{i}"
+        print(name)
         file_path = pathlib.Path.joinpath(path, f"{name}.hdf5")
         print(file_path)
         with h5py.File(file_path, "w") as f:
