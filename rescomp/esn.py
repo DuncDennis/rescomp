@@ -55,6 +55,8 @@ class _ESNCore(utilities._ESNLogging):
 
         self._reg_param = None
 
+        self.x_train_pred = None
+
     def set_w_out_fit_flag(self, w_out_fit_flag="simple"):
         """
         Simple func to set the w_out_fit_flag-> will be reseted if _train_synced is called
@@ -152,7 +154,7 @@ class _ESNCore(utilities._ESNLogging):
         else:
             raise Exception("self._w_out_fit_flag incorrectly specified")
 
-    def _fit_w_out(self, x_train, r):
+    def _fit_w_out(self, x_train, r, save_x_train_pred=False):
         """ Fit the output matrix self._w_out after training
 
         Uses linear regression and Tikhonov regularization.
@@ -194,9 +196,14 @@ class _ESNCore(utilities._ESNLogging):
                 r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
                 r_gen.T @ y_train[:, self._loc_nbhd == 2]).T
 
+        if save_x_train_pred:
+            print(r_gen.shape)
+            print(self._w_out.shape)
+            self.x_train_pred = (self._w_out @ r_gen.T).T
+
         return r_gen
 
-    def _train_synced(self, x_train, w_out_fit_flag="simple"):
+    def _train_synced(self, x_train, w_out_fit_flag="simple", save_x_train_pred=False):
         """ Train a synchronized reservoir
 
         Args:
@@ -223,7 +230,7 @@ class _ESNCore(utilities._ESNLogging):
         # The last value of r can't be used for the training, see comment below
         r = self.synchronize(x_train[:-1], save_r=True)
 
-        r_gen = self._fit_w_out(x_train, r)
+        r_gen = self._fit_w_out(x_train, r, save_x_train_pred=save_x_train_pred)
 
         return r, r_gen
 
@@ -701,7 +708,7 @@ class ESN(_ESNCore):
               w_in_sparse=True, w_in_ordered=False, w_in_no_update=False,
               act_fct_flag='tanh_simple', bias_scale=0, mix_ratio=0.5,
               save_r=False, save_input=False, w_out_fit_flag="simple",
-              loc_nbhd=None):
+              loc_nbhd=None, save_x_train_pred=False):
         """ Synchronize, then train the reservoir
 
         Args:
@@ -767,9 +774,10 @@ class ESN(_ESNCore):
 
         if save_r:
             self._r_train, self._r_train_gen = self._train_synced(x_train,
-                                                                  w_out_fit_flag=w_out_fit_flag)
+                                                                  w_out_fit_flag=w_out_fit_flag,
+                                                                  save_x_train_pred=save_x_train_pred)
         else:
-            self._train_synced(x_train, w_out_fit_flag=w_out_fit_flag)
+            self._train_synced(x_train, w_out_fit_flag=w_out_fit_flag, save_x_train_pred=save_x_train_pred)
 
     def run_loop(self, steps, save_r=False):
         """
@@ -1701,7 +1709,7 @@ class ESNDifference(ESNWrapper):
 
         self._last_input = None
 
-    def _fit_w_out(self, x_train, r):
+    def _fit_w_out(self, x_train, r, save_x_train_pred=False):
         """ Fit the output matrix self._w_out after training
         Trains on the difference
         Uses linear regression and Tikhonov regularization.
@@ -1733,6 +1741,11 @@ class ESNDifference(ESNWrapper):
             self._w_out = np.linalg.solve(
                 r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
                 r_gen.T @ y_train[:, self._loc_nbhd == 2]).T
+
+        if save_x_train_pred:
+            print(r_gen.shape)
+            print(self._w_out.shape)
+            self.x_train_pred = (self._w_out @ r_gen.T).T
 
         return r_gen
 
