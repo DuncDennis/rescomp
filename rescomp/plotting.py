@@ -1,4 +1,7 @@
 import matplotlib.pyplot as plt
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import numpy as np
 import rescomp.measures as measures
 
@@ -245,4 +248,39 @@ def plot_architecture(esn, figsize=(10, 5)):
     axs[1].axvline(w_in_non_zero_mean, c="r", linestyle="--")
     axs[1].set_title(f"W_in value histogram, non-zero mean: {np.round(w_in_non_zero_mean, 4)}")
 
+    return fig
+
+
+## plotly:
+
+def plot_3d_time_series(time_series):
+    x = time_series[:, 0]
+    y = time_series[:, 1]
+    z = time_series[:, 2]
+    fig = px.line_3d(x=x, y=y, z=z)
+    return fig
+
+
+def plot_1d_time_series(time_series, i_dim, boundaries):
+    names = ["train disc", "train sync", "train", "pred disc", "pred sync", "pred"]
+    to_plot = time_series[:, i_dim]
+    x_list = np.arange(time_series.shape[0])
+    if boundaries is not None:
+        right = 0
+        fig = make_subplots()
+        for i in range(6):
+            left = right
+            right = boundaries[i+1] + right
+
+            fig.add_trace(go.Scatter(
+                x=x_list[left: right],
+                y=to_plot[left: right],
+                line_shape='hv', name=names[i]
+            )
+            )
+    return fig
+
+
+def show_reservoir_states(res_states):
+    fig = px.imshow(res_states.T, aspect="auto")
     return fig
