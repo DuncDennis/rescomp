@@ -535,3 +535,17 @@ def _linear_fit(y, dt, t_min=0, t_max=5):
     poly1d_fn = np.poly1d(coef)
     y_fit = poly1d_fn(x_fit)
     return x_fit, y_fit, coef
+
+
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+
+def normalize_timeseries(time_series):
+    """
+    Shift re-scale the time_series so that it has zero-mean and unit-standard deviation
+    """
+
+    mean = time_series.mean(axis=0)
+    std = time_series.std(axis=0)
+    return (time_series - mean)/std
