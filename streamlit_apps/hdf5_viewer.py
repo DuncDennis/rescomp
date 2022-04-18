@@ -2,12 +2,12 @@ import streamlit as st
 import pathlib
 import h5py
 import os
+
+import rescomp.plotting as plot
+
 import matplotlib.pyplot as plt
 plt.style.use('dark_background')
-import numpy as np
-import pandas as df
-import rescomp.plotting as plot
-import rescomp.statistical_tests as stattest
+# import rescomp.statistical_tests as stattest
 
 
 # @st.cache
@@ -59,22 +59,39 @@ repo_path = pathlib.Path(__file__).parent.resolve().parents[0]
 path = pathlib.Path.joinpath(repo_path, "results")
 print(path)
 
-hdf5_files = [x for x in os.listdir(path) if x.endswith(".hdf5")]
+# hdf5_files = [x for x in os.listdir(path) if x.endswith(".hdf5")]
+hdf5_files = sorted(pathlib.Path(path).iterdir(), key=os.path.getmtime)[::-1]
+hdf5_files = [x.name.split(".")[0] for x in hdf5_files if x.name.endswith(".hdf5")]
 
-option = st.sidebar.selectbox(
-    'Select experiment', hdf5_files)
+with st.sidebar:
+    option = st.sidebar.selectbox(
+        'Select experiment', hdf5_files)
+    st.markdown("""---""")
+
+# option_best = st.sidebar.button("Get best Parameters")
+# TODO: Add this functionality
 
 if option is not None:
-    f = load_hdf5_file(pathlib.Path.joinpath(path, option))
+    f = load_hdf5_file(pathlib.Path.joinpath(path, option+".hdf5"))
+    data_shape = f["runs"]["trajectory_1"][:].shape
+    N_ens = data_shape[0]
+    N_time_periods = data_shape[1]
+    with st.sidebar:
+
+        st.write(f"N_ens: {N_ens}")
+        st.sidebar.write(f"N_time_periods: {N_time_periods}")
 
     params_dict = check_parameter_sweep(f)
 
     multiselect_dict = {}
-    for key, val in params_dict.items():
-        multiselect_dict[key] = st.sidebar.multiselect(key, val)
+    with st.sidebar:
+        for key, val in params_dict.items():
+            disabled = True if len(val) == 1 else False
+            multiselect_dict[key] = st.multiselect(key, val, default=val[0], disabled=disabled)
 
-    # st.write(multiselect_dict)
     trajs, params_to_show = get_trajectories(multiselect_dict, f)
+
+    data_shape = f["runs"][trajs[0]][:].shape
 
     with st.container():
         plot_vt = st.checkbox("plot valid times heatmap")
@@ -82,31 +99,41 @@ if option is not None:
             error_threshhold = st.slider("error threshhold", min_value=0.00001, max_value=3., step=0.001, value=0.5)
             fig = plot.plot_valid_times_heatmap(trajs, params_to_show, f, error_threshhold=error_threshhold)
             st.pyplot(fig)
+        st.markdown("""---""")
 
     with st.container():
         plot_error = st.checkbox("plot error")
+
         if plot_error:
             st.header("Plot Error over Time:")
+
+            left, right = st.columns(2)
+            with left:
+                error_bar = st.checkbox("show error bars")
+            with right:
+                ylog = st.checkbox('y log plot')
+
             max_value = f["runs"][trajs[0]][:].shape[-2]
             max_x = st.slider("max_x", min_value=5, max_value=max_value, step=1, value=500)
-            fig = plot.plot_error(trajs, params_to_show, f, max_x)
-
+            fig = plot.plot_error(trajs, params_to_show, f, max_x, error_bar=error_bar, ylog=ylog)
             st.pyplot(fig)
+        st.markdown("""---""")
 
-    # with st.container():
-    #     plot_difference = st.checkbox("plot difference")
-    #     if plot_difference:
-    #         fig = plot.plot_difference(trajs, params_to_show, f)
-    #         st.pyplot(fig)
-
-    plot_attractor = st.checkbox("plot attractor")
-    plot_trajectory = st.checkbox("plot trajectory")
-    plot_corrdim = st.checkbox("plot correlation dimension")
+    left, mid, right = st.columns(3)
+    with left:
+        plot_attractor = st.checkbox("plot attractor")
+    with mid:
+        plot_trajectory = st.checkbox("plot trajectory")
+    with right:
+        plot_corrdim = st.checkbox("plot correlation dimension")
     if plot_attractor or plot_trajectory or plot_corrdim:
-        N_ens = f["runs"][trajs[0]][:].shape[0]
-        i_ens = st.number_input("i_ens", min_value=0, max_value=N_ens-1)
-        N_time_periods = f["runs"][trajs[0]][:].shape[1]
-        i_time_period = st.number_input("i_time_period", min_value=0, max_value=N_time_periods-1)
+
+
+        left, right = st.columns(2)
+        with left:
+            i_ens = st.number_input("i_ens", min_value=0, max_value=N_ens-1)
+        with right:
+            i_time_period = st.number_input("i_time_period", min_value=0, max_value=N_time_periods-1)
 
         if plot_attractor:
             st.header("Plot Attractor: ")
@@ -126,6 +153,7 @@ if option is not None:
             fig = plot.plot_correlation_dimension(trajs, params_to_show, f, i_ens, i_time_period, figsize=(8, 4),
                                                   nr_steps=nr_steps)
             st.pyplot(fig)
+    st.markdown("""---""")
 
     with st.container():
         plot_corrdim_hist = st.checkbox("plot correlation dimension HISTOGRAM")
@@ -136,3 +164,4 @@ if option is not None:
             fig = plot.plot_correlation_dimension_hist(trajs, params_to_show, f, nr_steps=nr_steps,
                                                        base_figsize=(15, 4), bins=bins)
             st.pyplot(fig)
+

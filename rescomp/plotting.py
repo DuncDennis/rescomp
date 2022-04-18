@@ -43,14 +43,24 @@ def plot_difference(trajs, params_to_show, f):
     return fig
 
 
-def plot_error(trajs, params_to_show, f, max_x):
+def plot_error(trajs, params_to_show, f, max_x, error_bar=False, ylog=False):
     fig = plt.figure()
+    ax = plt.gca()
 
     for i_traj, traj in enumerate(trajs):
         data = f["runs"][traj][:]
         error = get_error(data)
         mean_error = np.mean(error, axis=(0, 1))
-        plt.plot(mean_error[:max_x], label=f"{params_to_show[i_traj]}")
+
+        ax.plot(mean_error[:max_x], label=f"{params_to_show[i_traj]}")
+        if error_bar:
+            color = ax.get_lines()[-1].get_color()
+            std_error = np.std(error, axis=(0, 1))
+            ax.errorbar(np.arange(max_x), mean_error[:max_x], yerr=std_error[:max_x], color=color, #, label=f"{params_to_show[i_traj]}"
+                        alpha=0.4)
+        if ylog:
+            # ax.set_xscale("log")
+            ax.set_yscale("log")
     plt.legend()
     return fig
 
@@ -195,5 +205,44 @@ def plot_correlation_dimension_hist(trajs, params_to_show, f, base_figsize=(5, 1
         ax.hist(cor_dim_array.flatten(), bins=bins)
         ax.set_title(f"{params_to_show[i_traj]}")
         ax.axvline(cor_dim_array_true, linestyle="--", c="r")
+
+    return fig
+
+
+# For "look under hood":
+def plot_architecture(esn, figsize=(10, 5)):
+    """
+    Plot w_in distribution and plot
+    """
+    fig, axs = plt.subplots(1, 2, figsize=figsize)
+
+    w_in = esn._w_in
+    w_in_flat = w_in.flatten()
+    n_dim, x_dim = w_in.shape
+
+    max_val, min_val = np.max(w_in_flat), np.min(w_in_flat)
+    max_abs_val = np.max([np.abs(max_val), np.abs(min_val)])
+    for i_x in range(x_dim):
+        y_left = i_x
+        for i_n in range(n_dim):
+            y_right = i_n/(n_dim/x_dim)
+
+            val = w_in[i_n, i_x]
+
+            # c = "r" if val > 0 else "b"
+            # axs[0].plot([0, 1], [y_left, y_right], c=f"{c}", linewidth=np.abs(val))  # , marker="."
+
+            val_norm = (val - min_val)/(max_val - min_val)
+            c = (val_norm, 1-val_norm, 0, np.abs(val)/(max_abs_val))
+            axs[0].plot([0, 1], [y_left, y_right], c=c, linewidth=np.abs(val)/(max_abs_val))  # , marker="."
+
+    axs[0].axis('off')
+    axs[0].set_title("W_in connection")
+
+    w_in_non_zero = w_in_flat[w_in_flat != 0]
+    w_in_non_zero_mean = w_in_non_zero.mean()
+    axs[1].hist(w_in_non_zero, bins="auto")
+    axs[1].axvline(w_in_non_zero_mean, c="r", linestyle="--")
+    axs[1].set_title(f"W_in value histogram, non-zero mean: {np.round(w_in_non_zero_mean, 4)}")
 
     return fig

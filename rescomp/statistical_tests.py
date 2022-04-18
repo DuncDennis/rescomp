@@ -269,7 +269,11 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
             for params, results in data:
                 dset = runs_group.create_dataset(f"trajectory_{i}", data=results)
                 for key, val in params.items():
-                    dset.attrs[key] = val
+                    try:
+                        dset.attrs[key] = val
+                    except Exception as e:
+                        print(e)
+                        dset.attrs[key] = str(val)
                 i += 1
 
             # sweep_info_group = f.create_group("sweep_info")
