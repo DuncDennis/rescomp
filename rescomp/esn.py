@@ -394,6 +394,52 @@ class ESN(_ESNCore):
                                            high=self._w_in_scale,
                                            size=(self._n_dim, self._x_dim))
 
+    def _create_w_in_alternative(self, x_dim, type="rect", normalize=True, w_in_scale=1.0):
+        self._x_dim = x_dim
+        self._w_in = np.zeros((self._n_dim, self._x_dim))
+
+        ratio = self._n_dim/self._x_dim
+
+        if type == "rect":
+            for i_x in range(x_dim):
+                i_n_min = int(i_x * ratio)
+                i_n_max = int((i_x + 1) * ratio)
+                self._w_in[i_n_min : i_n_max, i_x] = 1
+
+        elif type == "gauss":
+            def gaussian(x, x0, sigma):
+                return np.exp(-np.power((x - x0) / sigma, 2.) / 2.)
+
+            for i_x in range(x_dim):
+                i_n_min = i_x * ratio
+                i_n_max = (i_x + 1) * ratio
+                i_n_mid = int((i_n_max + i_n_min)/2)
+                for i_n in range(self._n_dim):
+                    self._w_in[i_n, i_x] = gaussian(i_n, i_n_mid, sigma=ratio/2)
+
+        elif type == "alternating":
+            i_x = 0
+            for i_n in range(self._n_dim):
+                self._w_in[i_n, i_x] = 1
+                i_x = (i_x+1) % self._x_dim
+
+        elif type == "sinus":
+            for i_x in range(x_dim):
+                period = (2*np.pi)/self._n_dim
+                start = self._n_dim/(x_dim*2) * i_x
+                for i_n in range(self._n_dim):
+                    self._w_in[i_n, i_x] = np.sin(period*(i_n - start))
+
+        # normalize
+        if normalize:
+            norm = np.linalg.norm(self._w_in, ord=2)  # largest singular value
+            self._w_in = self._w_in/norm
+
+        if self._w_in_scale is None:
+            self._w_in_scale = w_in_scale
+
+        self._w_in *= self._w_in_scale
+
     def set_w_out(self, w_out=None):
         """
         Func to set a w_out to be able to run the loop (loop the reservoir dynamics without training data)
