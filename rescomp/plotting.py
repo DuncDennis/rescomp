@@ -275,9 +275,14 @@ def plot_1d_time_series(time_series, i_dim, boundaries):
             fig.add_trace(go.Scatter(
                 x=x_list[left: right],
                 y=to_plot[left: right],
-                line_shape='hv', name=names[i]
+                name=names[i] #line_shape='hv'
             )
             )
+    return fig
+
+
+def plot_multiple_1d_time_series(time_series_data, title=""):
+    fig = px.line(time_series_data, title=title)
     return fig
 
 

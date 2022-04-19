@@ -8,6 +8,12 @@ plt.style.use('dark_background')
 
 
 @st.experimental_memo
+def get_random_int():
+    print("Get new seed")
+    return np.random.randint(1, 1000000)
+
+
+@st.experimental_memo
 def simulate_data(system_option, dt, all_time_steps, normalize):
     print("simulate data")
     if system_option == "Lorenz":
@@ -24,8 +30,7 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
 
 # Functions:
 @st.experimental_singleton
-def build_rc(ndim, xdim, w_in_scale, w_in_type, activation_function, w_out_fit_flag, leak_fct,
-             custom_args):
+def build_rc(ndim, xdim, w_in_scale, w_in_type, activation_function, w_out_fit_flag, leak_fct, custom_args, seed):
 
     # st.write(str(custom_args))
     print("build rc")
@@ -42,44 +47,51 @@ def build_rc(ndim, xdim, w_in_scale, w_in_type, activation_function, w_out_fit_f
     elif w_in_type == "random_dense":
         w_in_ordered = False
         w_in_sparse = True
-    print(custom_args)
-    if custom_args[0] == "None":
+
+    # custom update args:
+    kwargs = {}
+    if custom_args[0] == "Normal":
         custom_act_fct = None
-    else:
+        kwargs["n_rad"] = custom_args[1]
+        kwargs["n_avg_deg"] = custom_args[2]
+
+    elif custom_args[0] == "L96":
         if activation_function == "tanh":
             func = np.tanh
         elif activation_function == "sigmoid":
             func = lambda x: 1 / (1 + np.exp(-x))
+        dt_custom = custom_args[1]
+        L96_Force = custom_args[2]
+        # Lorenz96 iterator:
+        def _lorenz_96(x):
+            return rescomp.simulations._lorenz_96(x, force=L96_Force)
+        iterator = rescomp.simulations._runge_kutta
+        def f_L96(x):
+            return iterator(_lorenz_96, dt_custom, x)
+        def custom_act_fct(self, x, r):
+            r = leak_fct * r + (1 - leak_fct) * func(self._w_in.dot(x) + (f_L96(r) - r))
+            return r
 
-        if custom_args[0] == "L96":
-            dt_custom = custom_args[1]
-            L96_Force = custom_args[2]
-            # Lorenz96 iterator:
-            def _lorenz_96(x):
-                return rescomp.simulations._lorenz_96(x, force=L96_Force)
-            iterator = rescomp.simulations._runge_kutta
-            def f_L96(x):
-                return iterator(_lorenz_96, dt_custom, x)
-            def custom_act_fct(self, x, r):
-                r = leak_fct * r + (1 - leak_fct) * func(self._w_in.dot(x) + (f_L96(r) - r))
-                return r
+    elif custom_args[0] == "KS":
+        if activation_function == "tanh":
+            func = np.tanh
+        elif activation_function == "sigmoid":
+            func = lambda x: 1 / (1 + np.exp(-x))
+        # Kuramoto Sivachinsky iterator:
+        dt_custom = custom_args[1]
+        L_KS = custom_args[2]
+        def f_KS(x):
+            return rescomp.simulations._kuramoto_sivashinsky(ndim, system_size=L_KS, dt=dt_custom, time_steps=2,
+                                                             starting_point=x)[-1]
+        def custom_act_fct(self, x, r):
+            r = leak_fct * r + (1 - leak_fct) * func(self._w_in.dot(x) + (f_KS(r) - r))
+            return r
 
-        elif custom_args[0] == "KS":
-            # Kuramoto Sivachinsky iterator:
-            dt_custom = custom_args[1]
-            L_KS = custom_args[2]
-            def f_KS(x):
-                return rescomp.simulations._kuramoto_sivashinsky(ndim, system_size=L_KS, dt=dt_custom, time_steps=2,
-                                                                 starting_point=x)[-1]
-            def custom_act_fct(self, x, r):
-                r = leak_fct * r + (1 - leak_fct) * func(self._w_in.dot(x) + (f_KS(r) - r))
-                return r
-    print(custom_act_fct)
-    esn.create_architecture(ndim, xdim, w_out=None, seed=None, w_out_fit_flag=w_out_fit_flag,
+    esn.create_architecture(ndim, xdim, w_out=None, seed=seed, w_out_fit_flag=w_out_fit_flag,
                             w_in_scale=w_in_scale,
                             w_in_ordered=w_in_ordered, w_in_sparse=w_in_sparse,
                             activation_function=activation_function, leak_fct=leak_fct,
-                            custom_act_fct=custom_act_fct)
+                            custom_act_fct=custom_act_fct, **kwargs)
 
     if w_in_type in ["rect", "gauss", "alternating", "sinus"]:
         esn._create_w_in_alternative(x_dim, type=w_in_type, w_in_scale=w_in_scale)
@@ -115,8 +127,6 @@ activation_functions = ["tanh", "sigmoid"]
 w_out_fit_flags = ["simple", "linear_and_square_r", "bias", "bias_and_square_r",
                    "linear_and_square_r_alt"]
 
-custom_activation_function_strs = ["None", "L96", "KS"]
-
 with st.sidebar:
     # System to predict:
     st.header("System: ")
@@ -148,18 +158,25 @@ with st.sidebar:
     log_reg_param = st.number_input('Log regulation parameter', value=-5, step=1)
     reg_param = 10**(log_reg_param)
 
-    custom_activation_function_str = st.selectbox('custom_activation_function', custom_activation_function_strs)
-    if not custom_activation_function_str == "None":
-        with st.expander("Custom Activation Function Settings: "):
-            dt_custom = st.number_input('dt_custom', value=0.5, step=0.01)
-            if custom_activation_function_str == "KS":
-                L_KS = st.number_input('KS systemsize', value=40, step=2)
-                custom_args = (custom_activation_function_str, dt_custom, L_KS)
-            elif custom_activation_function_str == "L96":
-                L96_Force = st.number_input('L95 Force', value=5, step=1)
-                custom_args = (custom_activation_function_str, dt_custom, L96_Force)
-    else:
-        custom_args = (custom_activation_function_str, None, None)
+    # custom update:
+    custom_update_settings = ["Normal", "L96", "KS"]
+    custom_update_setting_str = st.selectbox('custom_update_settings', custom_update_settings)
+    if custom_update_setting_str == "Normal":
+        with st.expander("Adjecency Matrix settings: "):
+            n_rad = st.number_input('n_rad', value=0.1, step=0.1)
+            n_avg_deg = st.number_input('n_avg_deg', value=6.0, step=0.1)
+            custom_args = (custom_update_setting_str, n_rad, n_avg_deg)
+    elif custom_update_setting_str == "KS":
+        with st.expander("KS System Settings: "):
+            dt_custom = st.number_input('dt_KS', value=0.5, step=0.01)
+            L_KS = st.number_input('KS systemsize', value=40, step=2)
+            custom_args = (custom_update_setting_str, dt_custom, L_KS)
+    elif custom_update_setting_str == "L96":
+        with st.expander("L96 System Settings: "):
+            dt_custom = st.number_input('dt_L96', value=0.5, step=0.01)
+            L96_Force = st.number_input('L95 Force', value=5, step=1)
+            custom_args = (custom_update_setting_str, dt_custom, L96_Force)
+
     st.markdown("""---""")
 
 # Timeseries
@@ -181,7 +198,6 @@ with st.container():
             i_dim = st.number_input("i_dim", min_value=0, max_value=x_dim-1)
 
         if plot_trajectory_time_series:
-
             fig = plot.plot_1d_time_series(time_series, i_dim, boundaries=time_boundaries)
             st.plotly_chart(fig, use_container_width=True)
 
@@ -193,26 +209,28 @@ with st.container():
     st.header("RC architecture")
     build_rc_bool = st.checkbox("Build RC architecture", disabled=disabled)
     if build_rc_bool:
-        build_args = (ndim, x_dim, w_in_scale, w_in_type, activation_function,
-                      w_out_fit_flag, leak_fct, custom_args)
-        esn = build_rc(*build_args)
 
-        if st.button("rebuild"):
-            build_rc.clear()
-            esn = build_rc(*build_args)
+        if st.button("rebuild with new seed"):
+            get_random_int.clear()
+
+        seed = get_random_int()
+        build_args = (ndim, x_dim, w_in_scale, w_in_type, activation_function,
+                      w_out_fit_flag, leak_fct, custom_args, seed)
+        esn = build_rc(*build_args)
 
         w_in_properties_bool = st.checkbox("Show W_in properties:")
         if w_in_properties_bool:
             fig = plot.plot_architecture(esn, figsize=(10, 4))
             st.pyplot(fig)
 
-        # w_properties_bool = st.checkbox("Show W properties:")
-        # if w_properties_bool:
-        #     st.write("TBD")
+        if custom_update_setting_str == "Normal":
+            w_properties_bool = st.checkbox("Show W properties:")
+            if w_properties_bool:
+                st.write("TODO: Show Network, Histograms of values, some measures?")
         st.markdown("""---""")
 
-disabled = False if build_rc_bool else True
 # Train RC:
+disabled = False if build_rc_bool else True
 with st.container():
     st.header("Train RC: ")
     train_bool = st.checkbox("Train RC", disabled=disabled)
@@ -224,8 +242,11 @@ with st.container():
 
         show_x_train_pred = st.checkbox("Show fitted and real trajectory:")
         if show_x_train_pred:
-            for i in range(3):
-                st.line_chart(data={"train fit": x_train_pred[:, i], "train true": x_train_true[:, i]})
+            for i in range(x_dim):
+                title = f"Axis {i}:"
+                data = {"train fit": x_train_pred[:, i], "train true": x_train_true[:, i]}
+                fig = plot.plot_multiple_1d_time_series(data, title=title)
+                st.plotly_chart(fig)
         show_reservoir = st.checkbox("Show Reservoir states: ")
         if show_reservoir:
             fig = plot.show_reservoir_states(r_train)
@@ -243,8 +264,11 @@ with st.container():
         y_pred, y_true, r_pred = predict_rc(esn, x_pred, t_pred_sync)
         show_x_pred = st.checkbox("Show predicted and real trajectory:")
         if show_x_pred:
-            for i in range(3):
-                st.line_chart(data={"True": y_true[:, i], "Predicted": y_pred[:, i]})
+            for i in range(x_dim):
+                title = f"Axis {i}:"
+                data = {"True": y_true[:, i], "Predicted": y_pred[:, i]}
+                fig = plot.plot_multiple_1d_time_series(data, title=title)
+                st.plotly_chart(fig)
         show_r_pred = st.checkbox("Show reservoir states for Prediction:")
         if show_r_pred:
             fig = plot.show_reservoir_states(r_pred)
