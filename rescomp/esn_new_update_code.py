@@ -15,9 +15,6 @@ from . import utilities
 from ._version import __version__
 
 
-# dictionary defining synonyms for the different methods to generalize the
-# reservoir state r(t) to a nonlinear fit for _w_out
-
 class _ESNCore(utilities._ESNLogging):
     """ The non-reducible core of ESN RC training and prediction
 
@@ -30,244 +27,114 @@ class _ESNCore(utilities._ESNLogging):
 
         super().__init__()
 
-        self._w_in = None
+        # self._w_in = None  # TODO also remove?
 
-        self._network = None
+        # self._network = None  # TODO not nec. needed
+
+        self._r_dim = None
+        self._r_gen_dim = None
+        self._x_dim = None
 
         self._w_out = None
 
-        self._act_fct = None
 
-        self._w_out_fit_flag_synonyms = utilities._SynonymDict()
-        self._w_out_fit_flag_synonyms.add_synonyms(0, ["linear_r", "simple"])
-        self._w_out_fit_flag_synonyms.add_synonyms(1, "linear_and_square_r")
-        self._w_out_fit_flag_synonyms.add_synonyms(2, ["output_bias", "bias"])
-        self._w_out_fit_flag_synonyms.add_synonyms(3, ["bias_and_square_r"])
-        self._w_out_fit_flag_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._act_fct = None  # TODO add _update_function and _input_fct, _res_update, and change meaning of _act_fct
+        self._res_internal_update_fct = None
+        self._input_coupling_fct = None
+        # self._res_update_fct = None
 
-        self._w_out_fit_flag = None
-        self._w_out_fit_flag_str = None
+        self._leak_factor = None
 
+        # self._w_out_fit_flag_synonyms = utilities._SynonymDict()  # TODO: should not part of ESNCore
+        # self._w_out_fit_flag_synonyms.add_synonyms(0, ["linear_r", "simple"])
+        # self._w_out_fit_flag_synonyms.add_synonyms(1, "linear_and_square_r")
+        # self._w_out_fit_flag_synonyms.add_synonyms(2, ["output_bias", "bias"])
+        # self._w_out_fit_flag_synonyms.add_synonyms(3, ["bias_and_square_r"])
+        # self._w_out_fit_flag_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+
+        # self._w_out_fit_flag = None  # TODO: remove?
+        # self._w_out_fit_flag_str = None # TODO: remove?
+
+        self._last_inp = None
+        self._last_r_interal = None
         self._last_r = None
         self._last_r_gen = None
+        self._r_to_r_gen_fct = None
 
-        self._loc_nbhd = None
+        self._saved_out = None
+        self._saved_r = None
+        self._saved_r_gen = None
+
+        # self._loc_nbhd = None  # TODO Remove:
 
         self._reg_param = None
 
-        self.x_train_pred = None
+    def _res_update(self, x):
+        self._last_inp = self._input_coupling_fct(x)
+        self._last_r_interal = self._res_internal_update_fct(self._last_r)
 
-    def set_w_out_fit_flag(self, w_out_fit_flag="simple"):
-        """
-        Simple func to set the w_out_fit_flag-> will be reseted if _train_synced is called
-        """
-        self._w_out_fit_flag = \
-            self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
-        self._w_out_fit_flag_str = w_out_fit_flag
-        self.logger.debug(f"_w_out_fit_flag set to {w_out_fit_flag}")
+        self._last_r = self._leak_factor * self._last_r + (1 - self._leak_factor) * self._act_fct(self._last_inp +
+                                                                     self._last_r_interal)
 
-    def reset_res_state(self, res_state=None):
-        """
-        (re)set the reservoir state
-        Args:
-            res_state (np.ndarray): The state of the reservoir nodes , shape (N_dim,)
-        """
-        if res_state is None:
-            self._last_r = np.zeros(self._network.shape[0])
-        else:
-            if len(res_state.shape) != 1:
-                raise Exception("res_state has to be 1-D")
-            elif res_state.size != self._network.shape[0]:
-                raise Exception("res_state size does not fit network size")
-            else:
-                self._last_r = res_state
+    def _r_to_r_gen(self):
+        self._last_r_gen = self._r_to_r_gen_fct(self._last_r)
 
-    def synchronize(self, x, save_r=False):
-        """ Synchronize the reservoir state with the input time series
+    def _res_gen_to_output(self):
+        return self._w_out @ self._last_r_gen
 
-        This is usually done automatically in the training and prediction
-        functions.
-
-        Args:
-            x (np.ndarray): Input data to be used for the synchronization,
-                shape (T, d)
-            save_r (bool): If true, saves and returns r
-
-        Returns:
-            np.ndarray_or_None: All r states if save_r is True, None if False
-
-        """
-        self.logger.debug('Start syncing the reservoir state')
-
-        if self._last_r is None:
-            # self._last_r = np.zeros(self._network.shape[0])
-            self.reset_res_state()
-
+    def _loop_res(self, steps, save_out=False, save_r=False, save_r_gen=False):
         if save_r:
-            r = np.zeros((x.shape[0], self._network.shape[0]))
-            r[0] = self._act_fct(x[0], self._last_r)
-            for t in np.arange(x.shape[0] - 1):
-                r[t + 1] = self._act_fct(x[t + 1], r[t])
-            self._last_r = deepcopy(r[-1])
-            return r
-        else:
-            for t in np.arange(x.shape[0]):
-                self._last_r = self._act_fct(x[t], self._last_r)
-            return None
+            self._saved_r = np.zeros((steps, self._r_dim))
+        if save_r_gen:
+            self._saved_r_gen = np.zeros((steps, self._r_gen_dim))
+        if save_out:
+            self._saved_out = np.zeros((steps, self._x_dim))
 
-    def _r_to_generalized_r(self, r):
-        """ Convert the internal reservoir state r into the generalized r_gen
+        x = self._res_gen_to_output()  # get initial x
+        for i in range(steps):
+            self._res_update(x)
+            x = self._res_gen_to_output()
 
-        r_gen is the (nonlinear) transformation applied to r before the output
-        is calculated.
-        The type of transformation is set via the self._w_out_fit_flag parameter
+    def _drive_res(self, input, save_out=False, save_r=False, save_r_gen=False):
+        steps = input.shape[0]
+        if save_r:
+            self._saved_r = np.zeros((steps, self._r_dim))
+        if save_r_gen:
+            self._saved_r_gen = np.zeros((steps, self._r_gen_dim))
+        if save_out:
+            self._saved_out = np.zeros((steps, self._x_dim))
 
-        Args:
-            r (np.ndarray): the r to convert to r_gen. Both the 2dim r of shape
-                (T, d) as well as the 1dim _last_r of shape (d,) should be
-                supported
+        for i_x, x in enumerate(input):
+            self._res_update(x)
 
-        Returns:
-            np.ndarray: r_gen, the transformed r
+            if save_r:
+                self._saved_r[i_x, :] = self._last_r
+            if save_r_gen:
+                self._r_to_r_gen()
+                self._saved_r_gen[i_x, :] = self._last_r_gen
+            if save_out:
+                self._saved_out[i_x, :] = self._res_gen_to_output()
 
-        """
-        # This needs to work for
-        if self._w_out_fit_flag == 0:
-            return r
-        elif self._w_out_fit_flag == 1:
-            return np.hstack((r, r ** 2))
-        elif self._w_out_fit_flag == 2:
-            if len(r.shape) == 1:
-                return np.hstack((r, 1))
-            elif len(r.shape) == 2:
-                return np.hstack((r, np.ones(r.shape[0])[:, None]))
-        elif self._w_out_fit_flag == 3:
-            if len(r.shape) == 1:
-                return np.hstack((np.hstack((r, r ** 2)), 1))
-            elif len(r.shape) == 2:
-                return np.hstack((np.hstack((r, r ** 2)),
-                                  np.ones(r.shape[0])[:, None]))
-        elif self._w_out_fit_flag == 4:
-            r_gen = np.copy(r).T
-            r_gen[::2] = r.T[::2] ** 2
-            return r_gen.T
-        else:
-            raise Exception("self._w_out_fit_flag incorrectly specified")
+    def temp_init_ESN(self):
+        self._r_dim = 20
+        self._r_gen_dim = 20
+        self._x_dim = 3
 
-    def _fit_w_out(self, x_train, r, save_x_train_pred=False):
-        """ Fit the output matrix self._w_out after training
+        self._w_out = np.random.randn(self._x_dim, self._r_gen_dim)
 
-        Uses linear regression and Tikhonov regularization.
+        self._act_fct = np.tanh
 
-        Args:
-            x_train (np.ndarray): get y_train via x_train[1:], y_train = Desired prediction from the reservoir states
-            r (np.ndarray): reservoir states
-        Returns:
-            np.ndarray: r_gen, generalized nonlinear transformed r
+        self._network = np.random.randn(self._r_dim, self._r_dim)
+        self._w_in = np.random.randn(self._r_dim, self._x_dim)
 
-        """
-        # Note: in an older version y_train was obtained from x_train in _train_synced, and then
-        # parsed directly to _fit_w_out.
-        # This is changed in order to allow for an easy override of _fit_w_out in variations of
-        # the ESN class (e.g. ESNHybrid), that include other non-rc predictions (e.g. x_new = model(x_old))
-        # into an "extended r_gen" = concat(r_gen, model(x)), that is finally fitted to y_train.
+        self._res_internal_update_fct = lambda r: self._network @ r
+        self._input_coupling_fct = lambda x: self._w_in @ x
 
-        # Note: This is slightly different than the old ESN as y_train was as
-        # long as x_train, but shifted by one time step. Hence to get the same
-        # results as for the old ESN one has to specify an x_train one time step
-        # longer than before. Nonetheless, it's still true that r[t] is
-        # calculated from x[t] and used to calculate y[t] (all the same t)
+        self._leak_factor = 0
 
-        y_train = x_train[1:]
-        self.logger.debug('Fit _w_out according to method %s' %
-                          str(self._w_out_fit_flag))
+        self._last_r = np.zeros(self._r_dim)
 
-        r_gen = self._r_to_generalized_r(r)
-
-        # If we are using local states we only want to use the core dimensions
-        # for the fit of W_out, i.e. the dimensions where the corresponding
-        # locality matrix == 2
-        if self._loc_nbhd is None:
-            self._w_out = np.linalg.solve(
-                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
-                r_gen.T @ y_train).T
-        else:
-            self._w_out = np.linalg.solve(
-                r_gen.T @ r_gen + self._reg_param * np.eye(r_gen.shape[1]),
-                r_gen.T @ y_train[:, self._loc_nbhd == 2]).T
-
-        if save_x_train_pred:
-            print(r_gen.shape)
-            print(self._w_out.shape)
-            self.x_train_pred = (self._w_out @ r_gen.T).T
-
-        return r_gen
-
-    def _train_synced(self, x_train, w_out_fit_flag="simple", save_x_train_pred=False):
-        """ Train a synchronized reservoir
-
-        Args:
-            x_train (np.ndarray): input to be used for the training, shape (T,d)
-            w_out_fit_flag (str): Type of nonlinear transformation applied to
-                the reservoir states r to be used during the fit (and future
-                prediction
-
-        Returns:
-            tuple: 2-element tuple containing:
-
-            - **r** (*np.ndarray*) reservoir states
-            - **r_gen** (*np.ndarray*): generalized reservoir states
-
-        """
-
-        # self._w_out_fit_flag = \
-        #     self._w_out_fit_flag_synonyms.get_flag(w_out_fit_flag)
-        if self._w_out_fit_flag is None:
-            self.set_w_out_fit_flag(w_out_fit_flag)
-
-        self.logger.debug('Start training')
-
-        # The last value of r can't be used for the training, see comment below
-        r = self.synchronize(x_train[:-1], save_r=True)
-
-        r_gen = self._fit_w_out(x_train, r, save_x_train_pred=save_x_train_pred)
-
-        return r, r_gen
-
-    def _predict_step(self, x=None):
-        """ Predict a single time step
-
-        Assumes a synchronized reservoir.
-        Changes self._last_r and self._last_r_gen to stay synchronized to the
-        new system state y
-
-        Args:
-            x (np.ndarray): input for the d-dim. system, shape (d,). If x is
-            None the internal reservoir states will be used to generate x
-            using w_out
-
-        Returns:
-            np.ndarray: y, the next time step as predicted from last_x, _w_out
-            and _last_r, shape (d,)
-        
-        """
-
-        if x is None:
-            x = self._w_out @ self._r_to_generalized_r(self._last_r)
-
-        self._last_r = self._act_fct(x, self._last_r)
-        self._last_r_gen = self._r_to_generalized_r(self._last_r)
-
-        y = self._w_out @ self._last_r_gen
-
-        if self._loc_nbhd is not None:
-            temp = np.empty(self._loc_nbhd.shape)
-            temp[:] = np.nan
-            temp[self._loc_nbhd == 2] = y
-            y = temp
-
-        return y
-
+        self._r_to_r_gen_fct = lambda x: x
 
 class ESN(_ESNCore):
     """ Implements basic RC functionality
@@ -398,13 +265,13 @@ class ESN(_ESNCore):
         self._x_dim = x_dim
         self._w_in = np.zeros((self._n_dim, self._x_dim))
 
-        ratio = self._n_dim/self._x_dim
+        ratio = self._n_dim / self._x_dim
 
         if type == "rect":
             for i_x in range(x_dim):
                 i_n_min = int(i_x * ratio)
                 i_n_max = int((i_x + 1) * ratio)
-                self._w_in[i_n_min : i_n_max, i_x] = 1
+                self._w_in[i_n_min: i_n_max, i_x] = 1
 
         elif type == "gauss":
             def gaussian(x, x0, sigma):
@@ -413,27 +280,27 @@ class ESN(_ESNCore):
             for i_x in range(x_dim):
                 i_n_min = i_x * ratio
                 i_n_max = (i_x + 1) * ratio
-                i_n_mid = int((i_n_max + i_n_min)/2)
+                i_n_mid = int((i_n_max + i_n_min) / 2)
                 for i_n in range(self._n_dim):
-                    self._w_in[i_n, i_x] = gaussian(i_n, i_n_mid, sigma=ratio/2)
+                    self._w_in[i_n, i_x] = gaussian(i_n, i_n_mid, sigma=ratio / 2)
 
         elif type == "alternating":
             i_x = 0
             for i_n in range(self._n_dim):
                 self._w_in[i_n, i_x] = 1
-                i_x = (i_x+1) % self._x_dim
+                i_x = (i_x + 1) % self._x_dim
 
         elif type == "sinus":
             for i_x in range(x_dim):
-                period = (2*np.pi)/self._n_dim
-                start = self._n_dim/(x_dim*2) * i_x
+                period = (2 * np.pi) / self._n_dim
+                start = self._n_dim / (x_dim * 2) * i_x
                 for i_n in range(self._n_dim):
-                    self._w_in[i_n, i_x] = np.sin(period*(i_n - start))
+                    self._w_in[i_n, i_x] = np.sin(period * (i_n - start))
 
         # normalize
         if normalize:
             norm = np.linalg.norm(self._w_in, ord=2)  # largest singular value
-            self._w_in = self._w_in/norm
+            self._w_in = self._w_in / norm
 
         if self._w_in_scale is None:
             self._w_in_scale = w_in_scale
@@ -450,7 +317,8 @@ class ESN(_ESNCore):
         res_gen_size = self._r_to_generalized_r(r_aux).size
 
         if w_out is None:
-            self._w_out = np.ones((self._x_dim, res_gen_size))  # set every entry of _w_out to one (just so that the program runs)
+            self._w_out = np.ones(
+                (self._x_dim, res_gen_size))  # set every entry of _w_out to one (just so that the program runs)
             self.logger.debug("Setting all self._w_out entries to 1")
         else:
             if w_out.shape != (self._x_dim, res_gen_size):
@@ -520,7 +388,7 @@ class ESN(_ESNCore):
                                               seed=np.random)
         elif self._n_type_flag == 3:
             network = nx.fast_gnp_random_graph(self._n_dim, self._n_edge_prob,
-                                               seed=np.random, directed = True)
+                                               seed=np.random, directed=True)
         else:
             raise Exception("the network type %s is not implemented" %
                             str(self._n_type_flag))
@@ -639,9 +507,9 @@ class ESN(_ESNCore):
             raise Exception('self._act_fct_flag %s does not have a activation '
                             'function implemented!' % str(self._act_fct_flag))
         if custom_act_fct is None:
-            self._act_fct = lambda x, r: self._leak_fct*r + (1-self._leak_fct)*_act_fct(x, r)
+            self._act_fct = lambda x, r: self._leak_fct * r + (1 - self._leak_fct) * _act_fct(x, r)
         else:
-            self._act_fct = lambda x, r:  custom_act_fct(self, x, r)
+            self._act_fct = lambda x, r: custom_act_fct(self, x, r)
 
     def _act_fct_tanh_simple(self, x, r):
         """ Standard activation function of the elementwise np.tanh()
@@ -1489,11 +1357,11 @@ class ESNHybrid(ESNWrapper):
         self.logger.debug("Create ESNWrapper instance")
         self.model = None
 
-        self.add_model_to_output = None #If True, the model-prediction is included into the output layer. See (1)
-        self.add_model_to_input = None #If True the input to the reservoir is both the model(x) and x. See (1)
-        self.gamma = None # Fraction of the reservoir nodes connected exclusivly to the raw input, Only has influence if add_model_to_input = True
+        self.add_model_to_output = None  # If True, the model-prediction is included into the output layer. See (1)
+        self.add_model_to_input = None  # If True the input to the reservoir is both the model(x) and x. See (1)
+        self.gamma = None  # Fraction of the reservoir nodes connected exclusivly to the raw input, Only has influence if add_model_to_input = True
 
-    def set_model(self, model, add_model_to_output = False,  add_model_to_input = False, gamma = 0.5):
+    def set_model(self, model, add_model_to_output=False, add_model_to_input=False, gamma=0.5):
         '''
         :param model:
         :return:
@@ -1537,7 +1405,7 @@ class ESNHybrid(ESNWrapper):
         # --DD: Stack the model-based prediction on top of r_gen--
         if self.add_model_to_output:
             u_train = self.model_array(x_train[:-1])
-            r_gen = np.concatenate((r_gen, u_train), axis = 1)
+            r_gen = np.concatenate((r_gen, u_train), axis=1)
 
         # If we are using local states we only want to use the core dimensions
         # for the fit of W_out, i.e. the dimensions where the corresponding
@@ -1577,7 +1445,7 @@ class ESNHybrid(ESNWrapper):
 
         if self.add_model_to_input:
             model_x = self.model(x)
-            x_in = np.concatenate((x, model_x), axis = 0)
+            x_in = np.concatenate((x, model_x), axis=0)
         else:
             x_in = x
 
@@ -1587,7 +1455,7 @@ class ESNHybrid(ESNWrapper):
         last_r_gen = self._last_r_gen
 
         if self.add_model_to_output:
-            if not self.add_model_to_input: # dont calculate it twice to save time
+            if not self.add_model_to_input:  # dont calculate it twice to save time
                 model_x = self.model(x)
             last_r_gen = np.concatenate((last_r_gen, model_x))
 
@@ -1621,7 +1489,8 @@ class ESNHybrid(ESNWrapper):
         if self._w_in_sparse and not self._w_in_ordered:
             self._w_in = np.zeros((self._n_dim, x_dim))
 
-            nodes_connected_to_raw = np.random.choice(np.arange(self._n_dim), size=nr_res_nodes_connected_to_raw_in, replace=False)
+            nodes_connected_to_raw = np.random.choice(np.arange(self._n_dim), size=nr_res_nodes_connected_to_raw_in,
+                                                      replace=False)
             nodes_connected_to_raw = np.sort(nodes_connected_to_raw)
 
             for index in nodes_connected_to_raw:
@@ -1655,14 +1524,15 @@ class ESNHybrid(ESNWrapper):
                 nr_of_connections_to_dim = dim_wise[d]
                 for con in range(nr_of_connections_to_dim):
                     reservoir_node = res_node_ind_connected_to_raw[c]
-                    c+=1
+                    c += 1
                     self._w_in[reservoir_node, d] = np.random.uniform(
                         low=-self._w_in_scale,
                         high=self._w_in_scale)  # maps input values to reservoir
 
             if self.add_model_to_input:
-                model_input_node_indices = np.arange(self._x_dim, 2*self._x_dim)
-                res_node_ind_connected_to_model = np.arange(nr_res_nodes_connected_to_raw_in, nr_res_nodes_connected_to_model_in + nr_res_nodes_connected_to_raw_in)
+                model_input_node_indices = np.arange(self._x_dim, 2 * self._x_dim)
+                res_node_ind_connected_to_model = np.arange(nr_res_nodes_connected_to_raw_in,
+                                                            nr_res_nodes_connected_to_model_in + nr_res_nodes_connected_to_raw_in)
 
                 dim_wise = np.array([int(nr_res_nodes_connected_to_model_in / self._x_dim)] * self._x_dim)
                 dim_wise[:nr_res_nodes_connected_to_model_in % self._x_dim] += 1
@@ -1699,7 +1569,7 @@ class ESNHybrid(ESNWrapper):
         self.logger.debug('Start syncing the reservoir state')
 
         if self.add_model_to_input:
-            x = np.concatenate((x, self.model_array(x)), axis = 1)
+            x = np.concatenate((x, self.model_array(x)), axis=1)
         if self._last_r is None:
             self._last_r = np.zeros(self._network.shape[0])
 
@@ -1707,7 +1577,7 @@ class ESNHybrid(ESNWrapper):
             r = np.zeros((x.shape[0], self._network.shape[0]))
             r[0] = self._act_fct(x[0], self._last_r)
             for t in np.arange(x.shape[0] - 1):
-                r[t+1] = self._act_fct(x[t + 1], r[t])
+                r[t + 1] = self._act_fct(x[t + 1], r[t])
             self._last_r = deepcopy(r[-1])
             return r
         else:
@@ -1768,7 +1638,7 @@ class ESNDifference(ESNWrapper):
 
         """
 
-        y_train = (x_train[1:] - x_train[:-1])/self.sampling_time
+        y_train = (x_train[1:] - x_train[:-1]) / self.sampling_time
         # y_train = x_train[1:]
 
         self.logger.debug('Fit _w_out according to method %s' %
@@ -1838,8 +1708,6 @@ class ESNDifference(ESNWrapper):
     def synchronize(self, *args, **kwargs):
         self._last_input = args[0][-1]
         return super().synchronize(*args, **kwargs)
-
-
 
     def create_architecture(self, *args, **kwargs):
         x_dim = args[1]
