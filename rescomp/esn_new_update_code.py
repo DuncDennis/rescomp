@@ -12,6 +12,7 @@ from copy import deepcopy
 import gc
 import pandas.io.pickle
 from . import utilities
+from . import simulations
 from ._version import __version__
 
 
@@ -235,12 +236,17 @@ class _ResCompCore(utilities._ESNLogging):
         self._default_r = np.zeros(self._r_dim)
 
 
-class ESN(_ResCompCore):
+class _ResCompBase(_ResCompCore):
+    """
+    Sets a lot of default behaviour in _ResCompCore. The only thing that is missing is the _res_internal_update_fct
+    If one uses a network, i.e. lambda r: self._network @ r, it's a normal ESN
+    """
+
     def __init__(self,):
         super().__init__()
 
-        self._network = None
-        self._res_internal_update_fct = lambda r: self._network @ r
+        # self._network = None
+        # self._res_internal_update_fct = lambda r: self._network @ r
         self._inp_coupling_fct = lambda x: self._w_in @ x
         self._y_to_x_fct = lambda x: x
 
@@ -251,16 +257,6 @@ class ESN(_ResCompCore):
         self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
         self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
         self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
-
-        self._n_type_opt = None
-        self._n_rad = None
-        self._n_avg_deg = None
-        self._n_edge_prob = None
-        self._n_type_flag_synonyms = utilities._SynonymDict()
-        self._n_type_flag_synonyms.add_synonyms(0, ["random", "erdos_renyi"])
-        self._n_type_flag_synonyms.add_synonyms(1, ["scale_free", "barabasi_albert"])
-        self._n_type_flag_synonyms.add_synonyms(2, ["small_world", "watts_strogatz"])
-        self._n_type_flag_synonyms.add_synonyms(3, ["random_directed", "erdos_renyi_directed"])
 
         self._act_fct_opt = None
         self._bias_scale = None
@@ -301,11 +297,103 @@ class ESN(_ResCompCore):
 
         self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), None).shape[0]
 
-    def create_network(self, r_dim=500, n_rad=0.1, n_avg_deg=6.0,
+    def set_activation_function(self, act_fct_opt="tanh", bias_scale=None):
+        if type(act_fct_opt) == str:
+            self._act_fct_opt = act_fct_opt
+            act_fct_flag = self._act_fct_flag_synonyms.get_flag(act_fct_opt)
+            if act_fct_flag == 0:
+                act_fct_no_bias = np.tanh
+            elif act_fct_flag == 1:
+                act_fct_no_bias = utilities.sigmoid
+
+            if bias_scale is not None:
+                self._bias_scale = bias_scale
+                self._input_bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0, size=self._r_dim)
+                self._act_fct = lambda x: act_fct_no_bias(x + self._input_bias)
+            else:
+                self._act_fct = act_fct_no_bias
+        else:
+            self._act_fct_opt = "CUSTOM"
+            self._act_fct = act_fct_opt
+
+    def set_leak_factor(self, leak_factor=0.0):
+        self._leak_factor = leak_factor
+
+    def create_w_in(self, w_in_opt, w_in_scale=1.0):
+        self.logger.debug("Create w_in")
+
+        if type(w_in_opt) == str:
+            self._w_in_scale = w_in_scale
+            self._w_in_opt = w_in_opt
+            w_in_flag = self._w_in_flag_synonyms.get_flag(w_in_opt)
+
+            if w_in_flag == 0:
+                self._w_in = np.zeros((self._r_dim, self._x_dim))
+                for i in range(self._r_dim):
+                    random_x_coord = np.random.choice(np.arange(self._x_dim))
+                    self._w_in[i, random_x_coord] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)
+
+            elif w_in_flag == 1:
+                self._w_in = np.zeros((self._r_dim, self._x_dim))
+                dim_wise = np.array([int(self._r_dim / self._x_dim)] * self._x_dim)
+                dim_wise[:self._r_dim % self._x_dim] += 1
+                s = 0
+                dim_wise_2 = dim_wise[:]
+                for i in range(len(dim_wise_2)):
+                    s += dim_wise_2[i]
+                    dim_wise[i] = s
+                dim_wise = np.append(dim_wise, 0)
+                for d in range(self._x_dim):
+                    for i in range(dim_wise[d - 1], dim_wise[d]):
+                        self._w_in[i, d] = np.random.uniform(
+                            low=-self._w_in_scale,
+                            high=self._w_in_scale)
+
+            elif w_in_flag == 2:
+                self._w_in = np.random.uniform(low=-self._w_in_scale,
+                                           high=self._w_in_scale,
+                                           size=(self._r_dim, self._x_dim))
+
+            elif w_in_flag == 3:
+                self._w_in = self._w_in_scale*np.random.randn(self._r_dim, self._x_dim)
+
+        else:
+            self._w_in_opt = "CUSTOM"
+            self._w_in = w_in_opt
+
+    def set_default_res_state(self, default_res_state=None):
+        if default_res_state is None:
+            self._default_r = np.zeros(self._r_dim)
+        else:
+            self._default_r = default_res_state
+
+    def set_reg_param(self, reg_param=1e-8):
+        self._reg_param = reg_param
+
+
+class ESN_normal(_ResCompBase):
+    def __init__(self,):
+        super().__init__()
+
+        self._network = None
+        self._res_internal_update_fct = lambda r: self._network @ r
+
+        self._n_type_opt = None
+        self._n_rad = None
+        self._n_avg_deg = None
+        self._n_edge_prob = None
+        self._n_type_flag_synonyms = utilities._SynonymDict()
+        self._n_type_flag_synonyms.add_synonyms(0, ["random", "erdos_renyi"])
+        self._n_type_flag_synonyms.add_synonyms(1, ["scale_free", "barabasi_albert"])
+        self._n_type_flag_synonyms.add_synonyms(2, ["small_world", "watts_strogatz"])
+        self._n_type_flag_synonyms.add_synonyms(3, ["random_directed", "erdos_renyi_directed"])
+
+    def create_network(self, n_rad=0.1, n_avg_deg=6.0,
                        n_type_opt="erdos_renyi", network_creation_attempts=10):
         if type(n_type_opt) == str:
             self._n_type_opt = n_type_opt
-            self._r_dim = r_dim
             self._n_rad = n_rad
             self._n_avg_deg = n_avg_deg
             self._n_edge_prob = self._n_avg_deg / (self._r_dim - 1)
@@ -405,92 +493,117 @@ class ESN(_ResCompCore):
         maximum = np.absolute(eigenvals).max()
         self._network = ((self._n_rad / maximum) * self._network)
 
-    def set_activation_function(self, act_fct_opt="tanh", bias_scale=None):
-        if type(act_fct_opt) == str:
-            self._act_fct_opt = act_fct_opt
-            act_fct_flag = self._act_fct_flag_synonyms.get_flag(act_fct_opt)
-            if act_fct_flag == 0:
-                self._act_fct = np.tanh
-            elif act_fct_flag == 1:
-                self._act_fct = utilities.sigmoid
-
-            if bias_scale is not None:
-                self._bias_scale = bias_scale
-                self._input_bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0, size=self._r_dim)
-                self._act_fct = lambda x: self._act_fct(x + self._input_bias)
-        else:
-            self._act_fct_opt = "CUSTOM"
-            self._act_fct = act_fct_opt
-
-    def set_leak_factor(self, leak_factor=0.0):
-        self._leak_factor = leak_factor
-
-    def create_w_in(self, w_in_opt, w_in_scale=1.0):
-        self.logger.debug("Create w_in")
-
-        if type(w_in_opt) == str:
-            self._w_in_scale = w_in_scale
-            self._w_in_opt = w_in_opt
-            w_in_flag = self._w_in_flag_synonyms.get_flag(w_in_opt)
-
-            if w_in_flag == 0:
-                self._w_in = np.zeros((self._r_dim, self._x_dim))
-                for i in range(self._r_dim):
-                    random_x_coord = np.random.choice(np.arange(self._x_dim))
-                    self._w_in[i, random_x_coord] = np.random.uniform(
-                        low=-self._w_in_scale,
-                        high=self._w_in_scale)
-
-            elif w_in_flag == 1:
-                self._w_in = np.zeros((self._r_dim, self._x_dim))
-                dim_wise = np.array([int(self._r_dim / self._x_dim)] * self._x_dim)
-                dim_wise[:self._r_dim % self._x_dim] += 1
-                s = 0
-                dim_wise_2 = dim_wise[:]
-                for i in range(len(dim_wise_2)):
-                    s += dim_wise_2[i]
-                    dim_wise[i] = s
-                dim_wise = np.append(dim_wise, 0)
-                for d in range(self._x_dim):
-                    for i in range(dim_wise[d - 1], dim_wise[d]):
-                        self._w_in[i, d] = np.random.uniform(
-                            low=-self._w_in_scale,
-                            high=self._w_in_scale)
-
-            elif w_in_flag == 2:
-                self._w_in = np.random.uniform(low=-self._w_in_scale,
-                                           high=self._w_in_scale,
-                                           size=(self._r_dim, self._x_dim))
-
-            elif w_in_flag == 3:
-                self._w_in = self._w_in_scale*np.random.randn(self._r_dim, self._x_dim)
-
-        else:
-            self._w_in_opt = "CUSTOM"
-            self._w_in = w_in_opt
-
-    def set_default_res_state(self, default_res_state=None):
-        if default_res_state is None:
-            self._default_r = np.zeros(self._r_dim)
-        else:
-            self._default_r = default_res_state
-
-    def set_reg_param(self, reg_param=1e-8):
-        self._reg_param = reg_param
-
-    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, r_to_r_gen_opt="linear",
-              n_type_opt="erdos_renyi", network_creation_attempts=10, act_fct_opt="tanh",
-              bias_scale=None, leak_factor=0.0, w_in_opt="random_sparse", w_in_scale=1.0,
-              default_res_state=None, reg_param=1e-8):
+    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", bias_scale=None, leak_factor=0.0, w_in_opt="random_sparse",
+              w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None, bias_seed=None,
+              w_in_seed=None):
 
         self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
-        self.create_network(r_dim=r_dim, n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
-                            network_creation_attempts=network_creation_attempts)
+        self._r_dim = r_dim
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
-        self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+        else:
+            self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
         self.set_leak_factor(leak_factor=leak_factor)
-        self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_dynsys(_ResCompBase):
+    """
+    Use a Dynamical System as res_internal_update_fct
+    """
+    def __init__(self,):
+        super().__init__()
+
+        # self._res_internal_update_fct = lambda r: self._network @ r
+
+        self._dyn_sys_opt = None
+        self._dyn_sys_dt = None
+        self._dyn_sys_scale_factor = None
+        self._dyn_sys_other_params = None
+        self._dyn_sys_flag_synonyms = utilities._SynonymDict()
+        self._dyn_sys_flag_synonyms.add_synonyms(0, ["L96"])
+        self._dyn_sys_flag_synonyms.add_synonyms(1, ["KS"])
+
+    def create_dyn_sys_upd_fct(self, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1.0, dyn_sys_other_params=(5., )):
+        if type(dyn_sys_opt) == str:
+            self._dyn_sys_opt = dyn_sys_opt
+            self._dyn_sys_dt = dyn_sys_dt
+            self._dyn_sys_scale_factor = scale_factor
+            self._dyn_sys_other_params = dyn_sys_other_params
+            dyn_sys_flag = self._dyn_sys_flag_synonyms.get_flag(dyn_sys_opt)
+            if dyn_sys_flag == 0:
+                L96_force = dyn_sys_other_params[0]
+
+                def _lorenz_96(x):
+                    return simulations._lorenz_96(x, force=L96_force)
+
+                def f_L96(x):
+                    return simulations._runge_kutta(_lorenz_96, dyn_sys_dt, x)
+
+                self._res_internal_update_fct = lambda r: (f_L96(r)-r) * self._dyn_sys_scale_factor
+
+            elif dyn_sys_flag == 1:
+                KS_system_size = dyn_sys_other_params[0]
+
+                def f_KS(x):
+                    return simulations._kuramoto_sivashinsky(self._r_dim, system_size=KS_system_size, dt=dyn_sys_dt,
+                                                             time_steps=2, starting_point=x)[-1]
+
+                self._res_internal_update_fct = lambda r: (f_KS(r) - r) * self._dyn_sys_scale_factor
+
+            # self._res_internal_update_fct = lambda r: self._dyn_sys_scale_factor * self._res_internal_update_fct(r)
+        else:
+            self._dyn_sys_opt = "CUSTOM"
+            self._res_internal_update_fct = dyn_sys_opt
+
+    def build(self, x_dim, r_dim=500, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1., dyn_sys_other_params=(5.,),
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", bias_scale=None, leak_factor=0.0, w_in_opt="random_sparse",
+              w_in_scale=1.0, default_res_state=None, reg_param=1e-8, bias_seed=None, w_in_seed=None):
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self._x_dim = x_dim
+        self._r_dim = r_dim
+
+        self.create_dyn_sys_upd_fct(dyn_sys_opt=dyn_sys_opt, dyn_sys_dt=dyn_sys_dt, scale_factor=scale_factor,
+                                    dyn_sys_other_params=dyn_sys_other_params)
+
+        self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+        else:
+            self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
         self.set_default_res_state(default_res_state=default_res_state)
         self.set_reg_param(reg_param=reg_param)

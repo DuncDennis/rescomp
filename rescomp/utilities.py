@@ -8,6 +8,9 @@ import pandas
 import inspect
 import fractions
 import pkg_resources
+
+import contextlib # for temp_seed
+
 from ._version import __version__
 
 _rescomp_loggers = {}
@@ -549,3 +552,21 @@ def normalize_timeseries(time_series):
     mean = time_series.mean(axis=0)
     std = time_series.std(axis=0)
     return (time_series - mean)/std
+
+
+@contextlib.contextmanager
+def temp_seed(seed):
+    """
+    from https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    Use like:
+    with temp_seed(5):
+        <do_smth_that_uses_np.random>
+
+    """
+
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
