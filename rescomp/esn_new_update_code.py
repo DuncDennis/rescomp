@@ -41,6 +41,7 @@ class _ResCompCore(utilities._ESNLogging):
         self._r_gen_to_out_fct = lambda r_gen: self._w_out @ r_gen
 
         self._leak_factor = None
+        self._node_bias = None
 
         self._last_x = None
         self._last_res_inp = None
@@ -65,7 +66,7 @@ class _ResCompCore(utilities._ESNLogging):
         self._last_r_interal = self._res_internal_update_fct(self._last_r)
 
         self._last_r = self._leak_factor * self._last_r + (1 - self._leak_factor) * self._act_fct(self._last_res_inp +
-                                                                     self._last_r_interal)
+                                                                     self._last_r_interal + self._node_bias)
 
     def _r_to_r_gen(self):
         self._last_r_gen = self._r_to_r_gen_fct(self._last_r, self._last_x)
@@ -76,8 +77,7 @@ class _ResCompCore(utilities._ESNLogging):
     def _out_to_inp(self):
         return self._y_to_x_fct(self._last_y)
 
-    def drive(self, input, save_res_inp=False, save_r_internal=False, save_r=False, save_r_gen=False,
-              save_out=False):
+    def drive(self, input, save_res_inp=False, save_r_internal=False, save_r=False, save_r_gen=False, save_out=False):
         steps = input.shape[0]
 
         if save_res_inp:
@@ -197,6 +197,9 @@ class _ResCompCore(utilities._ESNLogging):
     def reset_r(self):
         self.set_r(self._default_r)
 
+    def get_act_fct_inp(self):
+        return self._saved_res_inp + self._saved_r_internal + self._node_bias
+
     def get_res_inp(self):
         return self._saved_res_inp
 
@@ -259,11 +262,15 @@ class _ResCompBase(_ResCompCore):
         self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
 
         self._act_fct_opt = None
-        self._bias_scale = None
-        self._input_bias = None
         self._act_fct_flag_synonyms = utilities._SynonymDict()
         self._act_fct_flag_synonyms.add_synonyms(0, ["tanh", "tanh_simple", "simple"])
         self._act_fct_flag_synonyms.add_synonyms(1, ["sigmoid"])
+
+        self._node_bias_opt = None
+        self._node_bias_flag_synonyms = utilities._SynonymDict()
+        self._node_bias_flag_synonyms.add_synonyms(0, ["no_bias"])
+        self._node_bias_flag_synonyms.add_synonyms(1, ["random_bias"])
+        self._bias_scale = None
 
         self._w_in_opt = None
         self._w_in_scale = None
@@ -297,24 +304,30 @@ class _ResCompBase(_ResCompCore):
 
         self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), None).shape[0]
 
-    def set_activation_function(self, act_fct_opt="tanh", bias_scale=None):
+    def set_activation_function(self, act_fct_opt="tanh"):
         if type(act_fct_opt) == str:
             self._act_fct_opt = act_fct_opt
             act_fct_flag = self._act_fct_flag_synonyms.get_flag(act_fct_opt)
             if act_fct_flag == 0:
-                act_fct_no_bias = np.tanh
+                self._act_fct = np.tanh
             elif act_fct_flag == 1:
-                act_fct_no_bias = utilities.sigmoid
-
-            if bias_scale is not None:
-                self._bias_scale = bias_scale
-                self._input_bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0, size=self._r_dim)
-                self._act_fct = lambda x: act_fct_no_bias(x + self._input_bias)
-            else:
-                self._act_fct = act_fct_no_bias
+                self._act_fct = utilities.sigmoid
         else:
             self._act_fct_opt = "CUSTOM"
             self._act_fct = act_fct_opt
+
+    def set_node_bias(self, node_bias_opt="no_bias", bias_scale=1.0):
+        if type(node_bias_opt) == str:
+            self._node_bias_opt = node_bias_opt
+            node_bias_flag = self._node_bias_flag_synonyms.get_flag(node_bias_opt)
+            if node_bias_flag == 0:
+                self._node_bias = 0
+            elif node_bias_flag == 1:
+                self._bias_scale = bias_scale
+                self._node_bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0, size=self._r_dim)
+        else:
+            self._node_bias_opt = "CUSTOM"
+            self._node_bias = node_bias_opt
 
     def set_leak_factor(self, leak_factor=0.0):
         self._leak_factor = leak_factor
@@ -494,9 +507,9 @@ class ESN_normal(_ResCompBase):
         self._network = ((self._n_rad / maximum) * self._network)
 
     def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
-              r_to_r_gen_opt="linear", act_fct_opt="tanh", bias_scale=None, leak_factor=0.0, w_in_opt="random_sparse",
-              w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None, bias_seed=None,
-              w_in_seed=None):
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
+              bias_seed=None, w_in_seed=None):
 
         self.logger.debug("Building ESN Archtecture")
 
@@ -511,12 +524,14 @@ class ESN_normal(_ResCompBase):
             self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
                                 network_creation_attempts=network_creation_attempts)
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
 
         if bias_seed is not None:
             with utilities.temp_seed(bias_seed):
-                self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
         else:
-            self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
         self.set_leak_factor(leak_factor=leak_factor)
 
         if w_in_seed is not None:
@@ -579,7 +594,7 @@ class ESN_dynsys(_ResCompBase):
             self._res_internal_update_fct = dyn_sys_opt
 
     def build(self, x_dim, r_dim=500, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1., dyn_sys_other_params=(5.,),
-              r_to_r_gen_opt="linear", act_fct_opt="tanh", bias_scale=None, leak_factor=0.0, w_in_opt="random_sparse",
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0, w_in_opt="random_sparse",
               w_in_scale=1.0, default_res_state=None, reg_param=1e-8, bias_seed=None, w_in_seed=None):
 
         self.logger.debug("Building ESN Archtecture")
@@ -591,12 +606,13 @@ class ESN_dynsys(_ResCompBase):
                                     dyn_sys_other_params=dyn_sys_other_params)
 
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
-
+        self.set_activation_function(act_fct_opt=act_fct_opt)
         if bias_seed is not None:
             with utilities.temp_seed(bias_seed):
-                self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
         else:
-            self.set_activation_function(act_fct_opt=act_fct_opt, bias_scale=bias_scale)
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
         self.set_leak_factor(leak_factor=leak_factor)
 
         if w_in_seed is not None:
