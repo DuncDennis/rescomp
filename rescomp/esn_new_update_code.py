@@ -226,32 +226,6 @@ class _ResCompCore(utilities._ESNLogging):
     def get_out(self):
         return self._saved_out
 
-    def temp_init_ESN(self):
-        self._r_dim = 100
-        self._r_gen_dim = 100
-        self._x_dim = 3
-        self._y_dim = 3
-
-        self._w_out = np.random.randn(self._x_dim, self._r_gen_dim)
-
-        self._act_fct = np.tanh
-
-        self._network = np.random.randn(self._r_dim, self._r_dim)/10
-        self._w_in = np.random.randn(self._r_dim, self._x_dim)/50
-
-        self._res_internal_update_fct = lambda r: self._network @ r
-        self._inp_coupling_fct = lambda x: self._w_in @ x
-        self._y_to_x_fct = lambda x, y: y
-
-        self._leak_factor = 0
-        self._reg_param = 1e-7
-
-        # self._last_r = np.zeros(self._r_dim)
-
-        self._r_to_r_gen_fct = lambda r, x: r
-
-        self._default_r = np.zeros(self._r_dim)
-
 
 class _add_basic_defaults():
     """
@@ -266,7 +240,6 @@ class _add_basic_defaults():
     """
 
     def __init__(self):
-        # super(_ResComp_basicDefaults, self).__init__()
 
         self._act_fct_opt = None
         self._act_fct_flag_synonyms = utilities._SynonymDict()
@@ -325,7 +298,6 @@ class _add_network_update_fct():
         - self._res_internal_update_fct r -> r
     """
     def __init__(self):
-        # super(_ResComp_withNetwork, self).__init__()
         self._network = None
         self._res_internal_update_fct = lambda r: self._network @ r
 
@@ -855,7 +827,7 @@ class ESN_difference(_ResCompCore, _add_basic_defaults, _add_network_update_fct,
 class ESN_output_hybrid(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_model_r_to_rgen,
                  _add_w_in, _add_standard_input_coupling, _add_standard_y_to_x):
     """
-    Pretty standard ESN class
+    ESN with output hybrid model
     """
     def __init__(self):
         _ResCompCore.__init__(self)
