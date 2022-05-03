@@ -695,6 +695,7 @@ def plot_leqr_file(ax, file_name, prepath="", exp_name="", mean_axs="all", le_in
     ax.set_ylabel(r"LEs")
     ax.set_xlabel("Nqr")
 
+
 def file_name_to_params(file_name):
     if "." in file_name:
         file_name = file_name.split(".")[0]
@@ -716,6 +717,7 @@ def file_name_to_params(file_name):
 
     return params
 
+
 def linear_fit(y, dt, t_min=0, t_max=5):
     i_min, i_max = int(t_min/dt), int(t_max/dt)
     y = y[i_min: i_max+1]
@@ -724,6 +726,7 @@ def linear_fit(y, dt, t_min=0, t_max=5):
     poly1d_fn = np.poly1d(coef)
     y_fit = poly1d_fn(x_fit)
     return x_fit, y_fit, coef
+
 
 def connection_fit(y, dt, t_min=0, t_max=5):
     i_min, i_max = int(t_min / dt), int(t_max / dt)

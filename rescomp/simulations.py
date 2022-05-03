@@ -613,6 +613,7 @@ def _kuramoto_sivashinsky_old(dimensions, system_size, dt, time_steps):
 
 
 def _kuramoto_sivashinsky(dimensions, system_size, dt, time_steps, starting_point, eps=0, M=64, **kwargs):
+    # TODO: Does not work for dimension 15 (-> check whats excactly the reason!)
     """ This function simulates the Kuramoto–Sivashinsky PDE
 
     Even though it doesn't use the RK4 algorithm, it is bundled with the other
