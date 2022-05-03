@@ -456,7 +456,7 @@ def dimension_parameters(time_series, nr_steps=100, literature_value=None,
 
 
 def iterator_based_lyapunov_spectrum(f, starting_points, T=1, tau=0, eps=1e-6, nr_of_lyapunovs=None,
-                                     nr_steps=3000, dt=1.,return_convergence=False, return_traj_divergence=False,
+                                     nr_steps=3000, dt=1. ,return_convergence=False, return_traj_divergence=False,
                                      jacobian=None, agg=None):
     '''
     The Algorithm is based on: 1902.09651 "LYAPUNOV EXPONENTS of the KURAMOTO-SIVASHINSKY PDE"
@@ -495,7 +495,7 @@ def iterator_based_lyapunov_spectrum(f, starting_points, T=1, tau=0, eps=1e-6, n
             - If None: The jacobian is calculated numerically using the distance "eps"
             - If Func: The jacobian is passed as a function that takes the point x as input
                        and outputs the jacobian at this point
-        agg(bool, str or list): only has effect if a ensemble is calculated:
+        agg(bool, str or list): only has effect if an ensemble is calculated:
             - None -> return all ensemble LEs
             - mean -> return mean of ensemble LEs
             - std -> return std of ensemble LEs
@@ -698,6 +698,162 @@ def KY_dimension(lyapunov_exponents):
     D_KY = j + cumsum[j-1]/np.abs(lyapunov_sorted[j])
     return D_KY
 
+
+def simple_largest_lyapunov(f, starting_point, n_parts=5, t_part=1.0, dt=1.0, n_disc=10, seed=None, eps=1e-10):
+    def f_steps(x, steps):
+        for i in range(steps):
+            x = f(x)
+        return x
+
+    state_dim = starting_point.size
+
+    t_part_timesteps = int(t_part / dt)
+
+    x = starting_point
+    if seed is not None:
+        with utilities.temp_seed(seed):
+            perturbation = np.random.randn(state_dim)
+    else:
+        perturbation = np.random.randn(state_dim)
+
+    le_avg_list = np.zeros(n_parts)
+    perturbation *= eps/np.linalg.norm(perturbation)
+
+    for i_n in range(n_disc):
+        if (i_n+1) % 10 == 0:
+            print(f"discard: {i_n+1}/{n_disc}", end="\r")
+        x_perturbed_initial = x + perturbation
+        x = f_steps(x, t_part_timesteps)
+        x_perturbed_evolved = f_steps(x_perturbed_initial, t_part_timesteps)
+        perturbation_evolved = x_perturbed_evolved - x
+        perturbed_length = np.linalg.norm(perturbation_evolved)
+        perturbation = eps / perturbed_length * perturbation_evolved
+
+    print("\n")
+    for i_n in range(n_parts):
+        if (i_n+1) % 10 == 0:
+            print(f"{i_n + 1}/{n_parts}", end="\r")
+        x_perturbed_initial = x + perturbation
+        x = f_steps(x, t_part_timesteps)
+        x_perturbed_evolved = f_steps(x_perturbed_initial, t_part_timesteps)
+        perturbation_evolved = x_perturbed_evolved - x
+
+        perturbed_length = np.linalg.norm(perturbation_evolved)
+        local_le = np.log(perturbed_length/eps)/(dt*t_part_timesteps)
+        if i_n == 0:
+            le_avg = local_le
+        else:
+            le_avg = (le_avg*(i_n) + local_le)/(i_n+1)
+        le_avg_list[i_n] = le_avg
+        perturbation = eps / perturbed_length * perturbation_evolved
+
+    return le_avg_list
+
+
+def simple_largest_lyapunov_traj_div(f, starting_point, n_parts=5, t_part=1.0, dt=1.0, n_disc=10, seed=None, eps=1e-10):
+    def f_steps(x, steps):
+        for i in range(steps):
+            x = f(x)
+        return x
+
+    state_dim = starting_point.size
+
+    t_part_timesteps = int(t_part / dt)
+
+    x = starting_point
+    if seed is not None:
+        with utilities.temp_seed(seed):
+            perturbation = np.random.randn(state_dim)
+    else:
+        perturbation = np.random.randn(state_dim)
+
+    perturbation *= eps/np.linalg.norm(perturbation)
+
+    for i_n in range(n_disc):
+        if (i_n+1) % 10 == 0:
+            print(f"discard: {i_n+1}/{n_disc}", end="\r")
+        x_perturbed = x + perturbation
+        x = f_steps(x, t_part_timesteps)
+        x_perturbed = f_steps(x_perturbed, t_part_timesteps)
+        perturbation = (x_perturbed - x)*(eps/np.linalg.norm((x_perturbed - x)))
+
+    distances = np.zeros((t_part_timesteps, n_parts))
+    print("\n")
+    for i_n in range(n_parts):
+        if (i_n+1) % 10 == 0:
+            print(f"{i_n + 1}/{n_parts}", end="\r")
+        x_perturbed = x + perturbation
+        for i_t in range(t_part_timesteps):
+            x = f(x)
+            x_perturbed = f(x_perturbed)
+            distance = np.linalg.norm(x_perturbed - x)
+            distances[i_t, i_n] = distance
+        perturbation = (x_perturbed - x)*(eps/distance)
+
+    return distances
+
+
+def trajectory_divergence(f, starting_points, T=1, t_disc=0, t_disc_div=0, dt=1., eps=1e-5, n_directions=1, seed=None):
+    def f_steps(x, steps):
+        for i in range(steps):
+            x = f(x)
+        return x
+
+    # handling the time steps
+    t_disc_timesteps = int(t_disc/dt)
+    t_disc_div_timesteps = int(t_disc_div/dt)
+    T_timesteps = int(T/dt)
+
+    if len(starting_points.shape) == 1:
+        starting_points = starting_points[np.newaxis, :]
+
+    n_ens, state_dim = starting_points.shape
+
+    if seed is not None:
+        with utilities.temp_seed(seed):
+            initial_deviations = np.random.randn(state_dim, n_directions, n_ens)
+    else:
+        initial_deviations = np.random.randn(state_dim, n_directions, n_ens)
+
+    for i_direction in range(n_directions):
+        for i_ens in range(n_ens):
+            length = np.linalg.norm(initial_deviations[:, i_direction, i_ens])
+            initial_deviations[:, i_direction, i_ens] = initial_deviations[:, i_direction, i_ens]/length
+
+    initial_deviations *= eps
+    perturbed_trajectory_ens = np.zeros((T_timesteps + 1, state_dim, n_directions, n_ens))
+
+    basic_trajectories = np.zeros((T_timesteps + 1, state_dim, n_ens))
+
+    for i_ens in range(n_ens):
+        print(f"n_ens: {i_ens + 1}/{n_ens}")
+
+        starting_point = starting_points[i_ens, :]
+        starting_point = f_steps(starting_point, t_disc_timesteps)
+
+        starting_point_div = f_steps(starting_point, t_disc_div_timesteps)
+
+        # real perturbed starting points:
+        for i_direction in range(n_directions):
+            x = starting_point + initial_deviations[:, i_direction, i_ens]
+            x = f_steps(x, t_disc_div_timesteps)
+            perturbed_trajectory_ens[0, :, i_direction, i_ens] = x.copy()
+
+        # basis_trajectory = np.zeros((T_timesteps + 1, state_dim))
+        basic_trajectories[0, :, i_ens] = starting_point_div
+
+        for i_t in range(1, T_timesteps + 1):
+            basic_trajectories[i_t, :, i_ens] = f(basic_trajectories[i_t - 1, :, i_ens])
+            for i_direction in range(n_directions):
+                perturbed_trajectory_ens[i_t, :, i_direction, i_ens] = \
+                    f(perturbed_trajectory_ens[i_t - 1, :, i_direction, i_ens])
+
+    to_subtract = np.repeat(basic_trajectories[:, :, np.newaxis, :], n_directions, axis=2)
+    diff_trajectory_ens = perturbed_trajectory_ens - to_subtract
+
+    # return to_subtract, diff_trajectory_ens
+
+    return diff_trajectory_ens
 
 ## simple LE Algorithm:
 def calculate_divergence(f, starting_points, T=1, tau=0, dt=1., eps=1e-6, N_dims=1, agg=None, random_directions=False):
