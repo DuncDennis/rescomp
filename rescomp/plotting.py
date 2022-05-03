@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 import rescomp.measures as measures
+import rescomp.utilities as utilities
 
 
 #### Some functions to plot a trajectory results numpy array:
@@ -287,5 +288,35 @@ def plot_multiple_1d_time_series(time_series_data, title=""):
 
 
 def show_reservoir_states(res_states):
+    # TODO rename show_image
     fig = px.imshow(res_states.T, aspect="auto")
     return fig
+
+
+def plot_log_divergence(log_div_list, dt=1.0, fit=True, t_min=None, t_max=None, figsize=(9, 4), ax=None):
+    time_steps = log_div_list.size
+    t_list = np.arange(time_steps) * dt
+
+    if ax is None:
+        fig = plt.figure(figsize=figsize)
+        ax = plt.gca()
+
+    round_digs = 5
+
+    if fit:
+        if t_min is None:
+            t_min = 0
+        if t_max is None:
+            t_max = t_list[-1]
+
+        x_fit, y_fit, coefs = utilities._linear_fit(log_div_list, dt=dt, t_min=t_min, t_max=t_max)
+
+        ax.plot(x_fit, y_fit,
+                label=f"Sloap = {np.round(coefs[0], round_digs)}, Intersect = {np.round(coefs[1], round_digs)}",
+                linestyle="--", c="k")
+
+    ax.plot(t_list, log_div_list)
+    ax.grid()
+    ax.legend()
+    ax.set_xlabel("time")
+    ax.set_ylabel(r"avg. log distance")
