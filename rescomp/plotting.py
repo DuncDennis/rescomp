@@ -3,6 +3,8 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+# import pandas as pd
+import math
 import rescomp.measures as measures
 import rescomp.utilities as utilities
 
@@ -214,13 +216,13 @@ def plot_correlation_dimension_hist(trajs, params_to_show, f, base_figsize=(5, 1
 
 
 # For "look under hood":
-def plot_architecture(esn, figsize=(10, 5)):
+def plot_architecture(w_in, figsize=(10, 5)):
     """
     Plot w_in distribution and plot
     """
     fig, axs = plt.subplots(1, 2, figsize=figsize)
 
-    w_in = esn._w_in
+    # w_in = esn._w_in
     w_in_flat = w_in.flatten()
     n_dim, x_dim = w_in.shape
 
@@ -253,12 +255,23 @@ def plot_architecture(esn, figsize=(10, 5)):
 
 
 ## plotly:
-
 def plot_3d_time_series(time_series):
     x = time_series[:, 0]
     y = time_series[:, 1]
     z = time_series[:, 2]
     fig = px.line_3d(x=x, y=y, z=z)
+    return fig
+
+
+def plot_3d_time_series_multiple(time_series_dict):
+    to_plot_dict = {"x": [], "y": [], "z": [], "label": []}
+    for label, time_series in time_series_dict.items():
+        to_plot_dict["x"].extend(time_series[:, 0])
+        to_plot_dict["y"].extend(time_series[:, 1])
+        to_plot_dict["z"].extend(time_series[:, 2])
+        to_plot_dict["label"].extend([label, ] * time_series.shape[0])
+
+    fig = px.line_3d(to_plot_dict, x="x", y="y", z="z", color="label")
     return fig
 
 
@@ -320,3 +333,67 @@ def plot_log_divergence(log_div_list, dt=1.0, fit=True, t_min=None, t_max=None, 
     ax.legend()
     ax.set_xlabel("time")
     ax.set_ylabel(r"avg. log distance")
+
+
+def plot_node_value_histogram(states, ax=None, title="", figsize=(8, 3)):
+    if ax is None:
+        return_fig = True
+        fig = plt.figure(figsize=figsize)
+        ax = plt.gca()
+    else:
+        return_fig = False
+
+    data = states.flatten()
+    ax.hist(data, bins="auto")
+    ax.set_title(title)
+    if return_fig:
+        return fig
+
+
+def plot_node_value_histogram_multiple(states_data_dict, figsize=(15, 7)):
+    nr_of_hists = len(states_data_dict.keys())
+
+    ncols = 2
+    nrows = math.ceil(nr_of_hists/ncols)
+
+    fig, axs = plt.subplots(nrows, ncols, figsize=figsize)
+
+    for i, (title, states) in enumerate(states_data_dict.items()):
+        i_col = i % ncols
+        i_row = int(i/ncols)
+        ax = axs[i_row, i_col]
+        plot_node_value_histogram(states, ax=ax, title=title)
+
+    return fig
+
+
+def plot_error_single(y_pred, y_true, title=""):
+    error_over_time = measures.error_over_time(y_pred, y_true, distance_measure="L2",
+                                               normalization="root_of_avg_of_spacedist_squared")
+    fig = px.line(error_over_time, title=title)
+    return fig
+
+
+def plot_image_and_timeseries(inp_res, upd_res, res, time_series, figsize=(13, 5)):
+    fig, axs = plt.subplots(nrows=3+3, ncols=1, figsize=figsize)
+
+    for i in range(3):
+        ax = axs[i]
+        ax.plot(time_series[:, i])
+        ax.grid(True)
+    ax = axs[3]
+    ax.imshow(inp_res.T, aspect="auto")
+    ax.set_title("inp_res")
+    ax.grid(True)
+
+    ax = axs[4]
+    ax.imshow(upd_res.T, aspect="auto")
+    ax.set_title("upd_res")
+    ax.grid(True)
+
+    ax = axs[5]
+    ax.imshow(res.T, aspect="auto")
+    ax.set_title("res")
+    ax.grid(True)
+
+    return fig
