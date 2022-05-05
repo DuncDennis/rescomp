@@ -54,6 +54,7 @@ class _ResCompCore(utilities._ESNLogging):
         self._saved_r = None
         self._saved_r_gen = None
         self._saved_out = None
+        self._saved_y_train = None
 
         self._reg_param = None
 
@@ -112,11 +113,25 @@ class _ResCompCore(utilities._ESNLogging):
             r_gen_train.T @ r_gen_train + self._reg_param * np.eye(r_gen_train.shape[1]),
             r_gen_train.T @ y_train).T
 
-    def train_synced(self, x_train, y_train, **kwargs):
+    def train_synced(self, x_train, y_train, save_y_train=False, **kwargs):
         kwargs["save_r_gen"] = True
+
+        save_out = False
+        if "save_out" in kwargs.keys():
+            if kwargs["save_out"]:  # can not save out during training before w_out is calculated
+                save_out = True
+                kwargs["save_out"] = False
+
+
         self.drive(x_train, **kwargs)
         r_gen_train = self._saved_r_gen
         self._fit_w_out(y_train, r_gen_train)
+
+        if save_y_train:
+            self._saved_y_train = y_train
+
+        if save_out:
+            self._saved_out = (self._w_out @ self._saved_r_gen.T).T
 
     def loop(self, steps, save_res_inp=False, save_r_internal=False, save_r=False, save_r_gen=False, save_out=False):
         if save_res_inp:
@@ -171,23 +186,6 @@ class _ResCompCore(utilities._ESNLogging):
         self.drive(x_sync)
         self.train_synced(x_train, y_train, **kwargs)
 
-    # def train(self, use_for_train, sync_steps=0, reset_res_state=True, **kwargs):
-    #     # TODO: doesnt make sense to already hardcode x_train and y_train here
-    #     if reset_res_state:
-    #         self.reset_r()
-    #
-    #     if sync_steps > 0:
-    #         sync = use_for_train[:sync_steps]
-    #         train = use_for_train[sync_steps:]
-    #         self.drive(sync)
-    #     else:
-    #         train = use_for_train
-    #
-    #     x_train = train[:-1]
-    #     y_train = train[1:]
-    #
-    #     self.train_synced(x_train, y_train, **kwargs)
-
     def predict(self, use_for_pred, sync_steps=0, reset_res_state=True, **kwargs):
         if reset_res_state:
             self.reset_r()
@@ -225,6 +223,9 @@ class _ResCompCore(utilities._ESNLogging):
 
     def get_out(self):
         return self._saved_out
+
+    def get_y_train(self):
+        return self._saved_y_train
 
 
 class _add_basic_defaults():
