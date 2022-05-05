@@ -1128,6 +1128,40 @@ def poincare_map(time_series, mode="minima", dimension=0):
 
     return extreme[:-1], extreme[1:]
 
+
+def model_likeness(y_pred, iterator, steps=10):
+    time_steps, dims = y_pred.shape
+    nr_parts = int(time_steps / steps)
+    print("nr_parts", nr_parts)
+    y_pred_parts = []
+    for i in range(nr_parts):
+        y_pred_parts.append(y_pred[i * steps: (i + 1) * steps, :].copy())
+
+    y_model_parts = []
+
+    for i in range(nr_parts):
+        y_pred_part = y_pred_parts[i]
+        y_model_part = np.zeros((steps, dims))
+        x = y_pred_part[0]
+        y_model_part[0, :] = x
+        for i_t in range(1, steps):
+            x = iterator(x)
+            y_model_part[i_t, :] = x
+        y_model_parts.append(y_model_part.copy())
+
+    error_parts = np.zeros((nr_parts, steps))
+    for i in range(nr_parts):
+        y_model_part = y_model_parts[i]
+        y_pred_part = y_pred_parts[i]
+        # error_parts[i, :] = error_over_time(y_pred_part, y_model_part, distance_measure="L2",
+        #                                                      normalization="root_of_avg_of_spacedist_squared")
+        error_parts[i, :] = error_over_time(y_pred_part, y_model_part, distance_measure="L2",
+                                                             normalization=None)
+
+    error = np.mean(error_parts, axis=0)
+    return error
+
+
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,
 #                                 dt=1., starting_point=None):
