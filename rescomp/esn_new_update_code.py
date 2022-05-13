@@ -7,6 +7,7 @@ import scipy.sparse.linalg
 from scipy.sparse.linalg.eigen.arpack.arpack \
     import ArpackNoConvergence as _ArpackNoConvergence
 import networkx as nx
+from sklearn import decomposition
 import pickle
 from copy import deepcopy
 import gc
@@ -121,7 +122,6 @@ class _ResCompCore(utilities._ESNLogging):
             if kwargs["save_out"]:  # can not save out during training before w_out is calculated
                 save_out = True
                 kwargs["save_out"] = False
-
 
         self.drive(x_train, **kwargs)
         r_gen_train = self._saved_r_gen
@@ -246,11 +246,14 @@ class _add_basic_defaults():
         self._act_fct_flag_synonyms = utilities._SynonymDict()
         self._act_fct_flag_synonyms.add_synonyms(0, ["tanh", "tanh_simple", "simple"])
         self._act_fct_flag_synonyms.add_synonyms(1, ["sigmoid"])
+        self._act_fct_flag_synonyms.add_synonyms(2, ["relu"])
+        self._act_fct_flag_synonyms.add_synonyms(3, ["identity", "linear"])
 
         self._node_bias_opt = None
         self._node_bias_flag_synonyms = utilities._SynonymDict()
         self._node_bias_flag_synonyms.add_synonyms(0, ["no_bias"])
         self._node_bias_flag_synonyms.add_synonyms(1, ["random_bias"])
+        self._node_bias_flag_synonyms.add_synonyms(2, ["constant_bias"])
         self._bias_scale = None
 
     def set_activation_function(self, act_fct_opt="tanh"):
@@ -261,6 +264,10 @@ class _add_basic_defaults():
                 self._act_fct = np.tanh
             elif act_fct_flag == 1:
                 self._act_fct = utilities.sigmoid
+            elif act_fct_flag == 2:
+                self._act_fct = utilities.relu
+            elif act_fct_flag == 3:
+                self._act_fct = lambda x: x
         else:
             self._act_fct_opt = "CUSTOM"
             self._act_fct = act_fct_opt
@@ -274,6 +281,9 @@ class _add_basic_defaults():
             elif node_bias_flag == 1:
                 self._bias_scale = bias_scale
                 self._node_bias = self._bias_scale * np.random.uniform(low=-1.0, high=1.0, size=self._r_dim)
+            elif node_bias_flag == 2:
+                self._bias_scale = bias_scale
+                self._node_bias = self._bias_scale * np.ones(self._r_dim)
         else:
             self._node_bias_opt = "CUSTOM"
             self._node_bias = node_bias_opt
@@ -311,6 +321,7 @@ class _add_network_update_fct():
         self._n_type_flag_synonyms.add_synonyms(1, ["scale_free", "barabasi_albert"])
         self._n_type_flag_synonyms.add_synonyms(2, ["small_world", "watts_strogatz"])
         self._n_type_flag_synonyms.add_synonyms(3, ["random_directed", "erdos_renyi_directed"])
+        self._n_type_flag_synonyms.add_synonyms(4, ["random_dense_gaussian"])
 
     def create_network(self, n_rad=0.1, n_avg_deg=6.0,
                        n_type_opt="erdos_renyi", network_creation_attempts=10):
@@ -355,6 +366,8 @@ class _add_network_update_fct():
         elif n_type_flag == 3:
             network = nx.fast_gnp_random_graph(self._r_dim, self._n_edge_prob,
                                                seed=np.random, directed=True)
+        elif n_type_flag == 4:
+            network = nx.from_numpy_matrix(np.random.randn(self._r_dim, self._r_dim))
         else:
             raise Exception("the network type %s is not implemented" %
                             str(self._n_type_opt))
@@ -464,6 +477,16 @@ class _add_dyn_sys_update_fct():
             self._res_internal_update_fct = dyn_sys_opt
 
 
+class _add_no_res_update_fct():
+    """
+    Use a Dynamical System as res_internal_update_fct
+    SETS:
+        - self._res_internal_update_fct r -> r
+    """
+    def __init__(self):
+        self._res_internal_update_fct = lambda r: np.zeros(r.shape)
+
+
 class _add_basic_r_to_rgen():
     """
     add basic r to r_gen behaviour
@@ -502,6 +525,9 @@ class _add_basic_r_to_rgen():
             self._r_to_r_gen_opt = "CUSTOM"
             self._r_to_r_gen_fct = r_to_r_gen_opt
 
+        self.set_r_to_r_gen_dim()
+
+    def set_r_to_r_gen_dim(self):
         self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), None).shape[0]
 
 
@@ -883,6 +909,271 @@ class ESN_output_hybrid(_ResCompCore, _add_basic_defaults, _add_network_update_f
                                 network_creation_attempts=network_creation_attempts)
 
         self.set_model(model)
+        self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_no_res(_ResCompCore, _add_basic_defaults, _add_no_res_update_fct, _add_basic_r_to_rgen,
+                 _add_w_in, _add_standard_input_coupling, _add_standard_y_to_x):
+    """
+    Pretty standard ESN class
+    """
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_no_res_update_fct.__init__(self)
+        _add_basic_r_to_rgen.__init__(self)
+        _add_w_in.__init__(self)
+        _add_standard_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+    def train(self, use_for_train, sync_steps=0, reset_res_state=True, **kwargs):
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+        super(ESN_no_res, self).train(sync, x_train, y_train, reset_res_state=reset_res_state, **kwargs)
+
+    def build(self, x_dim, r_dim=500,
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8,
+              bias_seed=None, w_in_seed=None):
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, # _add_basic_r_to_rgen,
+                 _add_w_in, _add_standard_input_coupling, _add_standard_y_to_x):
+    """
+    Train and r_to_r_gen definition is intertwined so we cant just predefine r_to_r_gen -> its all in train
+    """
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        # _add_basic_r_to_rgen.__init__(self)
+        _add_w_in.__init__(self)
+        _add_standard_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+        self._pca_components = None
+        self._pca_offset = True
+        self._pca = None
+
+    def set_pca_settings(self, pca_components=3, pca_offset=True):
+        self._pca_components = pca_components
+        self._pca_offset = pca_offset
+
+    def train(self, use_for_train, sync_steps=0, reset_res_state=True, save_y_train=False, **kwargs):
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+
+        if save_y_train:
+            self._saved_y_train = y_train
+
+        # r to r_gen with pca
+        if reset_res_state:
+            self.reset_r()
+
+        self.drive(sync)
+
+        kwargs["save_r"] = True
+        kwargs["save_r_gen"] = False
+
+        save_out = False
+        if "save_out" in kwargs.keys():
+            if kwargs["save_out"]:  # can not save out during training before w_out is calculated
+                save_out = True
+                kwargs["save_out"] = False
+
+        self.drive(x_train, **kwargs)
+        r_train = self.get_r()
+
+        self._pca = decomposition.PCA(n_components=self._pca_components)
+        self._pca.fit(r_train)
+        if self._pca_offset:
+            self._r_to_r_gen_fct = lambda r, x: np.hstack((self._pca.transform(r[np.newaxis, :])[0, :], 1))
+        else:
+            self._r_to_r_gen_fct = lambda r, x: self._pca.transform(r[np.newaxis, :])[0, :]
+
+        train_steps = r_train.shape[0]
+        r_gen = np.zeros((train_steps, self._r_gen_dim))
+        for i in range(train_steps):
+            r_gen[i, :] = self._r_to_r_gen_fct(r_train[i, :], None)
+
+        self._saved_r_gen = r_gen
+        self._fit_w_out(y_train, self._saved_r_gen)
+
+        if save_out:
+            self._saved_out = (self._w_out @ self._saved_r_gen.T).T
+
+    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
+              pca_components=5, pca_offset=True, act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
+              bias_seed=None, w_in_seed=None):
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self.set_pca_settings(pca_components, pca_offset)
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+        self._r_gen_dim = self._pca_components + 1 if pca_offset else self._pca_components
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_pca_adv(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_basic_r_to_rgen,
+                 _add_w_in, _add_standard_input_coupling, _add_standard_y_to_x):
+    """
+    Train and r_to_r_gen definition is intertwined so we cant just predefine r_to_r_gen -> its all in train
+    """
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        _add_basic_r_to_rgen.__init__(self)
+        _add_w_in.__init__(self)
+        _add_standard_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+        self._pca = None
+        self._pca_transform = None
+        self._dims_to_drop = None
+
+    def train(self, use_for_train, sync_steps=0, reset_res_state=True, save_y_train=False, **kwargs):
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+
+        if save_y_train:
+            self._saved_y_train = y_train
+
+        # r to r_gen with pca
+        if reset_res_state:
+            self.reset_r()
+
+        self.drive(sync)
+
+        self.drive(x_train, save_r=True)
+        r_train = self.get_r()
+
+        self._pca = decomposition.PCA(n_components=self._r_dim)
+        self._pca.fit(r_train)
+        self._pca_transform = self._pca.components_
+
+        # UPDATE BIAS W_In and self._network
+        self._w_in = self._pca_transform @ self._w_in
+        self._network = self._pca_transform @ self._network @ np.linalg.inv(self._pca_transform)
+        # self._node_bias = self._pca_transform @ self._node_bias
+
+        to_drop = self._dims_to_drop
+        if to_drop is not None:
+            prev_w_in_norm = np.linalg.norm(self._w_in)
+            self._w_in = self._w_in[: - to_drop, :]
+            self._w_in = self._w_in * (prev_w_in_norm / np.linalg.norm(self._w_in))
+
+            prev_network_norm = np.linalg.norm(self._network)
+            self._network = self._network[: - to_drop, : - to_drop]
+            self._network = self._network * (prev_network_norm / np.linalg.norm(self._network))
+
+            self._r_dim = self._r_dim - to_drop
+            self.set_r_to_r_gen_dim()
+            self.set_default_res_state()
+        super(ESN_pca_adv, self).train(sync, x_train, y_train, reset_res_state=reset_res_state, **kwargs)
+
+    def build(self, x_dim, r_dim=500, dims_to_drop=None, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
+              bias_seed=None, w_in_seed=None):
+
+        self._dims_to_drop = dims_to_drop
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
         self.set_activation_function(act_fct_opt=act_fct_opt)
 
