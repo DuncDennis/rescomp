@@ -3,6 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import yaml
 from datetime import datetime
+from sklearn import decomposition
 import rescomp
 import rescomp.esn_new_update_code as esn_new
 import rescomp.plotting as plot
@@ -46,6 +47,10 @@ def build(esntype, seed, **kwargs):
         esn = esn_new.ESN_dynsys()
     elif esntype == "difference":
         esn = esn_new.ESN_difference()
+    elif esntype == "no_res":
+        esn = esn_new.ESN_no_res()
+    elif esntype == "pca":
+        esn = esn_new.ESN_pca_adv()
 
     x_dim = 3
     np.random.seed(seed)
@@ -56,7 +61,9 @@ def build(esntype, seed, **kwargs):
 @st.cache(hash_funcs={rescomp.esn_new_update_code.ESN_normal: hash,
                       rescomp.esn_new_update_code.ESN_dynsys: hash,
                       rescomp.esn_new_update_code.ESN_difference: hash,
-                      rescomp.esn_new_update_code.ESN_output_hybrid: hash})
+                      rescomp.esn_new_update_code.ESN_output_hybrid: hash,
+                      rescomp.esn_new_update_code.ESN_no_res: hash,
+                      rescomp.esn_new_update_code.ESN_pca_adv: hash})
 def train(esn, x_train, t_train_sync):
     print("train")
     print("wout: ", esn._w_out)
@@ -74,10 +81,13 @@ def train(esn, x_train, t_train_sync):
     print("shapes: ", x_train_true.shape, x_train_pred.shape)
     return esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train
 
+
 @st.cache(hash_funcs={rescomp.esn_new_update_code.ESN_normal: hash,
                       rescomp.esn_new_update_code.ESN_dynsys: hash,
                       rescomp.esn_new_update_code.ESN_difference: hash,
-                      rescomp.esn_new_update_code.ESN_output_hybrid: hash})
+                      rescomp.esn_new_update_code.ESN_output_hybrid: hash,
+                      rescomp.esn_new_update_code.ESN_no_res: hash,
+                      rescomp.esn_new_update_code.ESN_pca_adv: hash})
 def predict(esn, x_pred, t_pred_sync):
     print("predict rc")
     y_pred, y_true = esn.predict(x_pred, sync_steps=t_pred_sync, save_res_inp=True, save_r_internal=True, save_r=True)
@@ -111,6 +121,12 @@ def plot_esn_architecture(w_in):
 
 
 @st.experimental_memo
+def plot_w_out(w_out):
+    fig = plot.plot_w_out(w_out, figsize=(10, 4))
+    return fig
+
+
+@st.experimental_memo
 def plot_train_pred_vs_true_trajectories(x_train_true, x_train_pred):
     print("replotting 4")
     figs = []
@@ -139,11 +155,11 @@ def plot_train_error(x_train_pred, x_train_true):
 
 @st.experimental_memo
 def plot_reservoir_histograms_train(r_input_train, r_internal_train,
-                                    act_fct_inp_train, r_train):
+                                    act_fct_inp_train, r_train, _act_fct):
     print("replotting 7")
     states_data_dict = {"r_input": r_input_train, "r_internal_update": r_internal_train,
                         "act_fct_inp": act_fct_inp_train, "r_states": r_train}
-    fig = plot.plot_node_value_histogram_multiple(states_data_dict)
+    fig = plot.plot_node_value_histogram_multiple(states_data_dict, act_fct=_act_fct)
     return fig
 
 
@@ -176,26 +192,63 @@ def plot_pred_error(y_pred, y_true):
 
 @st.experimental_memo
 def plot_reservoir_histograms_pred(r_input_pred, r_internal_pred,
-                                    act_fct_inp_pred, r_pred):
+                                    act_fct_inp_pred, r_pred, _act_fct):
     print("replotting 11")
     states_data_dict = {"r_input": r_input_pred, "r_internal_update": r_internal_pred,
                         "act_fct_inp": act_fct_inp_pred, "r_states": r_pred}
-    fig = plot.plot_node_value_histogram_multiple(states_data_dict)
+    fig = plot.plot_node_value_histogram_multiple(states_data_dict, act_fct=_act_fct)
     return fig
 
 
 @st.experimental_memo
-def plot_reservoir_histograms_pred(r_input_pred, r_internal_pred, r_pred, y_pred):
+def plot_trajectory_and_resstates(r_input_pred, r_internal_pred, r_pred, y_pred):
     fig = plot.plot_image_and_timeseries(r_input_pred, r_internal_pred, r_pred, y_pred, figsize=(13, 25))
     return fig
 
 
-esn_types = ["normal", "dynsys", "difference"]
+@st.experimental_memo
+def plot_model_likeness():
+    pass
+
+
+@st.experimental_memo
+def plot_correlation_dimension(y_pred, y_true, nr_steps):
+    fig = plot.plot_correlation_dimension(y_pred, y_true, nr_steps=nr_steps, figsize=(13, 5))
+    return fig
+
+
+@st.experimental_memo
+def plot_poincare_type_map(y_pred, y_true, mode="maxima", figsize=(13, 5)):
+    fig = plot.plot_poincare_type_map(y_pred, y_true, dim=None, mode=mode, figsize=figsize, alpha=0.2, s=10)
+    return fig
+
+
+@st.experimental_memo
+def plot_poincare_type_map_plotly(y_pred, y_true, mode="maxima", figsize=(20, 30)):
+    fig = plot.plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode=mode, figsize=figsize, alpha=0.5, s=3)
+    return fig
+
+
+@st.experimental_memo
+def perform_pca(r_train, n_components=3):
+    pca = decomposition.PCA(n_components=n_components)
+    pca.fit(r_train)
+    return pca
+
+
+@st.experimental_memo
+def plot_pca(r_pca):
+    data = {"r_pca": r_pca}
+    fig = plot.plot_3d_time_series_multiple(data)
+    return fig
+
+
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca"]
 systems_to_predict = ["Lorenz", "Roessler"]
 w_in_types = ["ordered_sparse", "random_sparse", "random_dense_uniform", "random_dense_gaussian"]
-bias_types = ["no_bias", "random_bias"]
-network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed"]
-activation_functions = ["tanh", "sigmoid"]
+bias_types = ["no_bias", "random_bias", "constant_bias"]
+network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
+activation_functions = ["tanh", "sigmoid", "relu", "linear"]
 r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt"]
 dyn_sys_types = ["L96", "KS"]
 
@@ -203,40 +256,27 @@ dyn_sys_types = ["L96", "KS"]
 with st.sidebar:
     # System to predict:
     st.header("System: ")
-    # sim_opts = {}
-    # sim_opts["system"] = st.sidebar.selectbox(
-    #     'System to Predict', systems_to_predict)
-    # dt = st.number_input('dt', value=0.01, step=0.01)
-    # sim_opts["dt"] = dt
-    # with st.expander("Time Steps"):
-    #     t_train_disc = int(st.number_input('t_train_disc', value=1000, step=1))
-    #     t_train_sync = int(st.number_input('t_train_sync', value=300, step=1))
-    #     t_train = int(st.number_input('t_train', value=1000, step=1))
-    #     t_pred_disc = int(st.number_input('t_pred_disc', value=1000, step=1))
-    #     t_pred_sync = int(st.number_input('t_pred_sync', value=300, step=1))
-    #     t_pred = int(st.number_input('t_pred', value=1000, step=1))
-    #     all_time_steps = int(t_train_disc + t_train_sync + t_train + t_pred_disc + t_pred_sync + t_pred)
-    #     time_boundaries = (0, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred)
-    #     st.write(f"Total Timessteps: {all_time_steps}, Maximal Time: {np.round(dt*all_time_steps, 1)}")
-    # sim_opts["normalize"] = st.checkbox('normalize')
 
     system_option = st.sidebar.selectbox(
         'System to Predict', systems_to_predict)
-    dt = st.number_input('dt', value=0.01, step=0.01)
+    dt = st.number_input('dt', value=0.05, step=0.01)
     with st.expander("Time Steps"):
         t_train_disc = int(st.number_input('t_train_disc', value=1000, step=1))
         t_train_sync = int(st.number_input('t_train_sync', value=300, step=1))
         t_train = int(st.number_input('t_train', value=1000, step=1))
         t_pred_disc = int(st.number_input('t_pred_disc', value=1000, step=1))
         t_pred_sync = int(st.number_input('t_pred_sync', value=300, step=1))
-        t_pred = int(st.number_input('t_pred', value=1000, step=1))
+        t_pred = int(st.number_input('t_pred', value=5000, step=1))
         all_time_steps = int(t_train_disc + t_train_sync + t_train + t_pred_disc + t_pred_sync + t_pred)
         time_boundaries = (0, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred)
         st.write(f"Total Timessteps: {all_time_steps}, Maximal Time: {np.round(dt*all_time_steps, 1)}")
     normalize = st.checkbox('normalize')
+    train_noise = st.checkbox("train noise")
+    noise_scale = st.number_input("noise scale", value=0.1, step=0.1, disabled=not(train_noise))
 
     sim_opts = {"system": system_option, "dt": dt, "t_train_disc": t_train_disc, "t_train_sync": t_train_sync,
-                "t_train": t_train, "t_pred_disc": t_pred_disc, "t_pred_sync": t_pred_sync, "t_pred": t_pred}
+                "t_train": t_train, "t_pred_disc": t_pred_disc, "t_pred_sync": t_pred_sync, "t_pred": t_pred,
+                "train_noise": train_noise, "noise_scale": noise_scale}
 
     st.markdown("""---""")
 
@@ -272,6 +312,12 @@ with st.sidebar:
             build_args["scale_factor"] = st.number_input('scale_factor', value=1.0, step=0.1)
             custom_dyn_sys_parameter = st.number_input('custom dyn_sys parameter', value=5.0, step=0.1)  # make dependent on case
             build_args["dyn_sys_other_params"] = (custom_dyn_sys_parameter, )
+        elif esn_type == "no_res":
+            pass
+        elif esn_type == "pca":
+            build_args["dims_to_drop"] = st.number_input('dims_to_drop', value=0, step=1)
+            if build_args["dims_to_drop"] == 0:
+                build_args["dims_to_drop"] = None
     st.markdown("""---""")
 
     if st.button("new seed"):
@@ -296,9 +342,6 @@ with st.expander("Simulate Timeseries"):
         if plot_attractor_time_series:
             fig = plot_original_attractor(time_series)
             st.plotly_chart(fig, use_container_width=True)
-            # fig = plot.plot_3d_time_series(time_series)
-            # st.plotly_chart(fig, use_container_width=True)
-
         left, right = st.columns(2)
         with left:
             plot_trajectory_time_series = st.checkbox("Plot Trajectory")
@@ -307,7 +350,6 @@ with st.expander("Simulate Timeseries"):
 
         if plot_trajectory_time_series:
             fig = plot_original_timeseries(time_series, i_dim, time_boundaries)
-            # fig = plot.plot_1d_time_series(time_series, i_dim, boundaries=time_boundaries)
             st.plotly_chart(fig, use_container_width=True)
 
     st.markdown("""---""")
@@ -328,7 +370,6 @@ with st.expander("RC architecture"):
 
         w_in_properties_bool = st.checkbox("Show W_in properties:")
         if w_in_properties_bool:
-            # fig = plot.plot_architecture(esn, figsize=(10, 4))
             w_in = esn._w_in
             fig = plot_esn_architecture(w_in)
             st.pyplot(fig)
@@ -348,9 +389,28 @@ with st.expander("Train RC"):
         x_train, x_pred_list = stat_test.data_simulation(time_series, t_train_disc, t_train_sync, t_train,
                                                          t_pred_disc, t_pred_sync, t_pred, nr_of_time_intervals=1,
                                                          sim_data_return=False, v=0)
+
+        if train_noise:
+            x_train = x_train + np.random.randn(*(x_train.shape)) * noise_scale
+
         esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train = train(esn,
                                                                                                              x_train,
                                                                                                  t_train_sync)
+        perform_pca_bool = st.checkbox("PCA:")
+        if perform_pca_bool:
+            pca = perform_pca(r_train)
+
+        show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not(perform_pca_bool))
+        if show_pca_states_bool:
+            r_train_pca = pca.transform(r_train)
+            fig = plot_pca(r_train_pca)
+            st.plotly_chart(fig)
+
+        w_out_properties_bool = st.checkbox("Show W_out properties:")
+        if w_out_properties_bool:
+            w_out = esn._w_out
+            fig = plot_w_out(w_out)
+            st.pyplot(fig)
 
         show_x_train_pred = st.checkbox("Show fitted and real trajectory:")
         if show_x_train_pred:
@@ -360,8 +420,6 @@ with st.expander("Train RC"):
 
         show_x_train_attr = st.checkbox("Show fitted and real attractor:")
         if show_x_train_attr:
-            # time_series_dict = {"Train True": x_train_true, "Train Fit": x_train_pred}
-            # fig = plot.plot_3d_time_series_multiple(time_series_dict)
             fig = plot_train_pred_vs_true_attractor(x_train_true, x_train_pred)
             st.plotly_chart(fig)
 
@@ -370,19 +428,24 @@ with st.expander("Train RC"):
             fig = plot_train_error(x_train_pred, x_train_true)
             st.plotly_chart(fig)
 
-        # show_reservoir = st.checkbox("Show Reservoir states: ")
-        # if show_reservoir:
-        #     fig = plot.show_reservoir_states(r_train)
-        #     st.plotly_chart(fig)
+        show_reservoir = st.checkbox("Show Reservoir states: ")
+        if show_reservoir:
+            fig = plot.show_reservoir_states(r_train)
+            st.plotly_chart(fig)
 
         show_reservoir_histograms_train = st.checkbox("Show Reservoir node value histograms - TRAIN: ")
         if show_reservoir_histograms_train:
-            # states_data_dict = {"r_input": r_input_train, "r_internal_update": r_internal_train,
-            #                     "act_fct_inp": act_fct_inp_train, "r_states": r_train}
-            # fig = plot.plot_node_value_histogram_multiple(states_data_dict)
+            act_fct = esn._act_fct
             fig = plot_reservoir_histograms_train(r_input_train, r_internal_train,
-                                    act_fct_inp_train, r_train)
+                                    act_fct_inp_train, r_train, act_fct)
             st.pyplot(fig)
+
+        show_poincare_type_map = st.checkbox("Show Poincare Type Map Train:", disabled=disabled)
+        if show_poincare_type_map:
+            poincare_mode = st.selectbox('Mode', ["maxima", "minima"], key="test")
+
+            fig = plot_poincare_type_map_plotly(x_train_pred, x_train_true, mode=poincare_mode)
+            st.plotly_chart(fig)
 
     st.markdown("""---""")
 
@@ -399,10 +462,6 @@ with st.expander("Prediction"):
             figs = plot_prediction_pred_vs_true_trajectories(y_true, y_pred)
             for i in range(x_dim):
                 st.plotly_chart(figs[i])
-                # title = f"Axis {i}:"
-                # data = {"True": y_true[:, i], "Predicted": y_pred[:, i]}
-                # fig = plot.plot_multiple_1d_time_series(data, title=title)
-                # st.plotly_chart(fig)
 
         show_x_pred_attr = st.checkbox("Show predicted and real attractor:")
         if show_x_pred_attr:
@@ -413,7 +472,6 @@ with st.expander("Prediction"):
 
         show_pred_error = st.checkbox("Show predicted error:")
         if show_pred_error:
-            # fig = plot.plot_error_single(y_pred, y_true, title="Prediction Error")
             fig = plot_pred_error(y_pred, y_true)
             st.plotly_chart(fig)
 
@@ -422,17 +480,51 @@ with st.expander("Prediction"):
         #     fig = plot.show_reservoir_states(r_pred)
         #     st.plotly_chart(fig)
 
+        show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not(perform_pca_bool), key=1)
+        if show_pca_states_bool:
+            r_pred_pca = pca.transform(r_pred)
+            fig = plot_pca(r_pred_pca)
+            st.plotly_chart(fig)
+
         show_reservoir_histograms_pred = st.checkbox("Show Reservoir node value histograms - PRED: ")
         if show_reservoir_histograms_pred:
-            # states_data_dict = {"r_input": r_input_pred, "r_internal_update": r_internal_pred,
-            #                     "act_fct_inp": act_fct_inp_pred, "r_states": r_pred}
-            # fig = plot.plot_node_value_histogram_multiple(states_data_dict)
-            fig = plot_reservoir_histograms_pred(r_input_pred, r_internal_pred, act_fct_inp_pred, r_pred)
+            act_fct = esn._act_fct
+            fig = plot_reservoir_histograms_pred(r_input_pred, r_internal_pred, act_fct_inp_pred, r_pred, act_fct)
             st.pyplot(fig)
 
         show_trajectory_and_resstates = st.checkbox("Show Reservoir states and trajectories - PRED: ")
         if show_trajectory_and_resstates:
-            # fig = plot.plot_image_and_timeseries(r_input_pred, r_internal_pred, r_pred, y_pred, figsize=(13, 25))
-            fig = plot_reservoir_histograms_pred(r_input_pred, r_internal_pred, r_pred, y_pred)
+            fig = plot_trajectory_and_resstates(r_input_pred, r_internal_pred, r_pred, y_pred)
             st.pyplot(fig)
     st.markdown("""---""")
+
+# Advanced measures:
+disabled = False if predict_bool else True
+with st.expander("Advanced Measures on Prediction: "):
+    st.header("Advanced Measures: ")
+    show_correlation_dimension = st.checkbox("Show Correlation Dimension:", disabled=disabled)
+    if show_correlation_dimension:
+        nr_steps = st.slider("nr_steps", 2, 30, 10)
+        fig = plot_correlation_dimension(y_pred, y_true, nr_steps)
+        st.pyplot(fig)
+
+    show_poincare_type_map = st.checkbox("Show Poincare Type Map:", disabled=disabled)
+    if show_poincare_type_map:
+        poincare_mode = st.selectbox('Mode', ["maxima", "minima"])
+        # fig = plot_poincare_type_map(y_pred, y_true, mode=poincare_mode, figsize=(13, 16))
+        # st.pyplot(fig)
+
+        fig = plot_poincare_type_map_plotly(y_pred, y_true, mode=poincare_mode)
+        st.plotly_chart(fig)
+
+    # disabled = True if normalize else False
+    # show_model_likeness = st.checkbox("Show Model Likeness:", disabled=disabled)
+    # if show_model_likeness:
+    #     # PROTOTYPE:
+    #     if system_option == "Lorenz":
+    #         iterator = lambda x: rescomp.simulations.simulate_trajectory("lorenz", dt, 2, x)[-1]
+    #     elif system_option == "Roessler":
+    #         iterator = lambda x: rescomp.simulations.simulate_trajectory("roessler_sprott", dt, 2, x)[-1]
+    #     nr_steps_model_likeness = st.slider("steps", 2, 200, 10)
+    #     fig = plot.plot_model_likeness(y_pred, iterator, steps=nr_steps_model_likeness, figsize=(15, 4))
+    #     st.pyplot(fig)

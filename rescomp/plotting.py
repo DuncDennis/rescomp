@@ -254,6 +254,44 @@ def plot_architecture(w_in, figsize=(10, 5)):
     return fig
 
 
+def plot_w_out(w_out, figsize=(10, 5)):
+    """
+    Plot w_out distribution and plot
+    """
+    fig, axs = plt.subplots(1, 2, figsize=figsize)
+
+    # w_in = esn._w_in
+    w_out_flat = w_out.flatten()
+    n_dim, x_dim = w_out.shape
+
+    max_val, min_val = np.max(w_out_flat), np.min(w_out_flat)
+    max_abs_val = np.max([np.abs(max_val), np.abs(min_val)])
+    for i_x in range(x_dim):
+        y_left = i_x
+        for i_n in range(n_dim):
+            y_right = i_n/(n_dim/x_dim)
+
+            val = w_out[i_n, i_x]
+
+            # c = "r" if val > 0 else "b"
+            # axs[0].plot([0, 1], [y_left, y_right], c=f"{c}", linewidth=np.abs(val))  # , marker="."
+
+            val_norm = (val - min_val)/(max_val - min_val)
+            c = (val_norm, 1-val_norm, 0, np.abs(val)/(max_abs_val))
+            axs[0].plot([0, 1], [y_left, y_right], c=c, linewidth=np.abs(val)/(max_abs_val))  # , marker="."
+
+    axs[0].axis('off')
+    axs[0].set_title("W_out connection")
+
+    w_out_non_zero = w_out_flat[w_out_flat != 0]
+    w_out_non_zero_mean = w_out_non_zero.mean()
+    axs[1].hist(w_out_non_zero, bins="auto")
+    axs[1].axvline(w_out_non_zero_mean, c="r", linestyle="--")
+    axs[1].set_title(f"W_out value histogram, non-zero mean: {np.round(w_out_non_zero_mean, 4)}")
+
+    return fig
+
+
 ## plotly:
 def plot_3d_time_series(time_series):
     x = time_series[:, 0]
@@ -263,7 +301,7 @@ def plot_3d_time_series(time_series):
     return fig
 
 
-def plot_3d_time_series_multiple(time_series_dict):
+def plot_3d_time_series_multiple(time_series_dict, mode="line", size=None):
     to_plot_dict = {"x": [], "y": [], "z": [], "label": []}
     for label, time_series in time_series_dict.items():
         to_plot_dict["x"].extend(time_series[:, 0])
@@ -271,7 +309,12 @@ def plot_3d_time_series_multiple(time_series_dict):
         to_plot_dict["z"].extend(time_series[:, 2])
         to_plot_dict["label"].extend([label, ] * time_series.shape[0])
 
-    fig = px.line_3d(to_plot_dict, x="x", y="y", z="z", color="label")
+    if mode == "line":
+        fig = px.line_3d(to_plot_dict, x="x", y="y", z="z", color="label")
+    elif mode == "scatter":
+        fig = px.scatter_3d(to_plot_dict, x="x", y="y", z="z", color="label")
+        if size is not None:
+            fig.update_traces(marker={'size': size})
     return fig
 
 
@@ -350,7 +393,7 @@ def plot_node_value_histogram(states, ax=None, title="", figsize=(8, 3)):
         return fig
 
 
-def plot_node_value_histogram_multiple(states_data_dict, figsize=(15, 7)):
+def plot_node_value_histogram_multiple(states_data_dict, act_fct=None, figsize=(15, 7)):
     nr_of_hists = len(states_data_dict.keys())
 
     ncols = 2
@@ -361,9 +404,15 @@ def plot_node_value_histogram_multiple(states_data_dict, figsize=(15, 7)):
     for i, (title, states) in enumerate(states_data_dict.items()):
         i_col = i % ncols
         i_row = int(i/ncols)
+
         ax = axs[i_row, i_col]
         plot_node_value_histogram(states, ax=ax, title=title)
-
+        if title == "act_fct_inp":
+            if act_fct is not None:
+                ax_twin = ax.twinx()
+                x_lim_low, x_lim_high = ax.get_xlim()
+                x_range = np.arange(x_lim_low, x_lim_high, 0.05)
+                ax_twin.plot(x_range, act_fct(x_range), c="r")
     return fig
 
 
@@ -396,4 +445,111 @@ def plot_image_and_timeseries(inp_res, upd_res, res, time_series, figsize=(13, 5
     ax.set_title("res")
     ax.grid(True)
 
+    return fig
+
+
+def plot_correlation_dimension(y_pred, y_true, nr_steps=20, figsize=(13, 5)):
+    fig = plt.figure(figsize=figsize)
+
+    sloap_true, N_r = measures.dimension(y_true, return_neighbours=True, nr_steps=nr_steps)
+    plt.loglog(N_r[0], N_r[1], label=f"True: {sloap_true}")
+
+    sloap_pred, N_r = measures.dimension(y_pred, return_neighbours=True, nr_steps=nr_steps)
+    plt.loglog(N_r[0], N_r[1], label=f"Pred: {sloap_pred}")
+
+    plt.legend()
+    plt.xlabel("radius")
+    plt.ylabel("Nr of Points")
+    return fig
+
+
+def plot_poincare_type_map(y_pred, y_true, dim=None, mode="maxima", figsize=(13, 5), s=1.0, alpha=1.0):
+    x_dim = y_pred.shape[1]
+    if dim is None:
+        dims = list(np.arange(x_dim))
+    else:
+        dims = (dim, )
+
+    dims_to_show = len(dims)
+
+    fig, axs = plt.subplots(nrows=dims_to_show, ncols=1, figsize=figsize)
+    if dims_to_show == 1:
+        axs = (axs, )
+
+    for i_d, d in enumerate(dims):
+        ax = axs[i_d]
+        x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
+        ax.scatter(x, y, label="True", s=s, alpha=alpha)
+
+        x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
+        ax.scatter(x, y, label="Pred", s=s, alpha=alpha)
+
+        ax.set_title(f"Dimension: {d}")
+        ax.legend()
+
+    return fig
+
+
+def plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode="maxima", figsize=(13, 5), s=1.0, alpha=1.0):
+    x_dim = y_pred.shape[1]
+    if dim is None:
+        dims = list(np.arange(x_dim))
+    else:
+        dims = (dim, )
+
+    dims_to_show = len(dims)
+
+    fig = make_subplots(rows=dims_to_show, cols=1, subplot_titles=([f"dim {x}" for x in range(dims_to_show)]))
+
+    # fig, axs = plt.subplots(nrows=dims_to_show, ncols=1, figsize=figsize)
+    # if dims_to_show == 1:
+    #     axs = (axs, )
+
+    for i_d, d in enumerate(dims):
+        x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
+        fig.add_trace(
+            go.Scatter(x=x, y=y, opacity=alpha, name="True", mode='markers'),
+            row=i_d+1, col=1
+        )
+
+        # ax.scatter(x, y, label="True", s=s, alpha=alpha)
+
+        x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
+        fig.add_trace(
+            go.Scatter(x=x, y=y, opacity=alpha, name="Pred", mode='markers'),
+            row=i_d+1, col=1
+        )
+        # ax.scatter(x, y, label="Pred", s=s, alpha=alpha)
+
+        # ax.set_title(f"Dimension: {d}")
+        # ax.legend()
+    fig.update_traces(marker={'size': s})
+    fig.update_layout(height=figsize[1]*30, width=figsize[0]*30)
+    return fig
+
+
+def plot_model_likeness(y_pred, iterator, steps=10, figsize=(15, 4)):
+    error = measures.model_likeness(y_pred, iterator, steps=steps)
+
+    error_sum = np.sum(error)
+
+    fig = plt.figure(figsize=figsize)
+
+
+    plt.plot(error)
+    plt.xlabel("steps")
+    plt.ylabel("Avg L2 Distance: True iterator vs Y_pred")
+    plt.title(f"error sum: {error_sum}")
+    plt.grid()
+    return fig
+
+
+def plot_val_vs_next_val(data, figsize=(13, 6), alpha=1, size=1):
+    fig = plt.figure(figsize=figsize)
+    for key, y in data.items():
+        plt.scatter(y[:-1], y[1:], label=key, alpha=alpha, s=size)
+
+    plt.xlabel("x(t)")
+    plt.ylabel("x(t+1)")
+    plt.legend()
     return fig
