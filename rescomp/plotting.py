@@ -349,16 +349,20 @@ def show_reservoir_states(res_states):
     return fig
 
 
-def plot_log_divergence(log_div_list, dt=1.0, fit=True, t_min=None, t_max=None, figsize=(9, 4), ax=None):
+def plot_log_divergence(log_div_list, dt=1.0, fit=True, t_min=None, t_max=None, figsize=(9, 4), ax=None, label=None):
     time_steps = log_div_list.size
     t_list = np.arange(time_steps) * dt
 
+    return_fig = False
     if ax is None:
+        return_fig = True
         fig = plt.figure(figsize=figsize)
         ax = plt.gca()
 
     round_digs = 5
 
+    ax.plot(t_list, log_div_list, label=label)
+    c = ax.lines[-1].get_color()
     if fit:
         if t_min is None:
             t_min = 0
@@ -369,13 +373,15 @@ def plot_log_divergence(log_div_list, dt=1.0, fit=True, t_min=None, t_max=None, 
 
         ax.plot(x_fit, y_fit,
                 label=f"Sloap = {np.round(coefs[0], round_digs)}, Intersect = {np.round(coefs[1], round_digs)}",
-                linestyle="--", c="k")
+                linestyle="--", c=c)
 
-    ax.plot(t_list, log_div_list)
     ax.grid()
     ax.legend()
     ax.set_xlabel("time")
     ax.set_ylabel(r"avg. log distance")
+    # ax.set_title(title)
+    if return_fig:
+        return fig
 
 
 def plot_node_value_histogram(states, ax=None, title="", figsize=(8, 3)):
@@ -447,14 +453,15 @@ def plot_image_and_timeseries(inp_res, upd_res, res, time_series, figsize=(13, 5
 
     return fig
 
-
-def plot_correlation_dimension(y_pred, y_true, nr_steps=20, figsize=(13, 5)):
+def plot_correlation_dimension(y_pred, y_true, nr_steps=20, r_min=1.5, r_max=5., figsize=(13, 5)):
     fig = plt.figure(figsize=figsize)
 
-    sloap_true, N_r = measures.dimension(y_true, return_neighbours=True, nr_steps=nr_steps)
+    sloap_true, N_r = measures.dimension(y_true, return_neighbours=True, nr_steps=nr_steps, r_min=r_min,
+                                         r_max=r_max)
     plt.loglog(N_r[0], N_r[1], label=f"True: {sloap_true}")
 
-    sloap_pred, N_r = measures.dimension(y_pred, return_neighbours=True, nr_steps=nr_steps)
+    sloap_pred, N_r = measures.dimension(y_pred, return_neighbours=True, nr_steps=nr_steps, r_min=r_min,
+                                         r_max=r_max)
     plt.loglog(N_r[0], N_r[1], label=f"Pred: {sloap_pred}")
 
     plt.legend()
@@ -508,15 +515,15 @@ def plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode="maxima", figsi
     for i_d, d in enumerate(dims):
         x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
         fig.add_trace(
-            go.Scatter(x=x, y=y, opacity=alpha, name="True", mode='markers'),
+            go.Scatter(x=x, y=y, opacity=alpha, name="True", mode='markers', marker=dict(color="lightgreen")),
             row=i_d+1, col=1
         )
-
+        fig.update_traces(marker={'size': s})
         # ax.scatter(x, y, label="True", s=s, alpha=alpha)
 
         x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
         fig.add_trace(
-            go.Scatter(x=x, y=y, opacity=alpha, name="Pred", mode='markers'),
+            go.Scatter(x=x, y=y, opacity=alpha, name="Pred", mode='markers', marker=dict(color="red")),
             row=i_d+1, col=1
         )
         # ax.scatter(x, y, label="Pred", s=s, alpha=alpha)
@@ -552,4 +559,32 @@ def plot_val_vs_next_val(data, figsize=(13, 6), alpha=1, size=1):
     plt.xlabel("x(t)")
     plt.ylabel("x(t+1)")
     plt.legend()
+    return fig
+
+
+def plot_lyapunov_spectrum(time_series, dt=1.0, freq_cut=True, pnts_to_try=50, steps=100, figsize=(13, 5), ax=None,
+                           label=None):
+    return_fig = False
+    if ax is None:
+        return_fig = True
+        fig = plt.figure(figsize=figsize)
+        ax = plt.gca()
+
+    avg_log_dist, t_list = measures.lyapunov_rosenstein(time_series, dt=dt, freq_cut=freq_cut, pnts_to_try=pnts_to_try,
+                                                        steps=steps)
+    plot_log_divergence(avg_log_dist, dt=dt, fit=True, t_min=None, t_max=None, ax=ax, label=label)
+
+    if return_fig:
+        return fig
+
+
+def plot_lyapunov_spectrum_multiple(data, dt=1.0, freq_cut=True, pnts_to_try=50, steps=100, figsize=(13, 5)):
+    fig = plt.figure(figsize=figsize)
+    ax = plt.gca()
+
+    for label, time_series in data.items():
+        # print("timeseiresshape: ", time_series.shape)
+        plot_lyapunov_spectrum(time_series, dt=dt, freq_cut=freq_cut, pnts_to_try=pnts_to_try,
+                                                        steps=steps, ax=ax, label=label)
+
     return fig

@@ -11,6 +11,24 @@ import rescomp.statistical_tests as stat_test
 plt.style.use('dark_background')
 
 
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca"]
+systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen"]
+w_in_types = ["ordered_sparse", "random_sparse", "random_dense_uniform", "random_dense_gaussian"]
+bias_types = ["no_bias", "random_bias", "constant_bias"]
+network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
+activation_functions = ["tanh", "sigmoid", "relu", "linear"]
+r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt"]
+dyn_sys_types = ["L96", "KS"]
+
+
+esn_hash_funcs = {rescomp.esn_new_update_code.ESN_normal: hash,
+                      rescomp.esn_new_update_code.ESN_dynsys: hash,
+                      rescomp.esn_new_update_code.ESN_difference: hash,
+                      rescomp.esn_new_update_code.ESN_output_hybrid: hash,
+                      rescomp.esn_new_update_code.ESN_no_res: hash,
+                      rescomp.esn_new_update_code.ESN_pca_adv: hash}
+
+
 def save_to_yaml(parameter_dict):
     now = datetime.now()
     dt_string = now.strftime("%d_%m_%Y_%Hh_%Mm_%Ss")
@@ -34,6 +52,12 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
         starting_point = np.array([0, 1, 0])
         time_series = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps,
                                                               starting_point)
+    elif system_option == "Chua":
+        starting_point = np.array([0, 0, 0.6])
+        time_series = rescomp.simulations.simulate_trajectory("chua", dt, all_time_steps, starting_point)
+    elif system_option == "Chen":
+        starting_point = np.array([-10, 0, 37])
+        time_series = rescomp.simulations.simulate_trajectory("chen", dt, all_time_steps, starting_point)
     if normalize:
         time_series = rescomp.utilities.normalize_timeseries(time_series)
     return time_series
@@ -58,12 +82,7 @@ def build(esntype, seed, **kwargs):
     return esn
 
 
-@st.cache(hash_funcs={rescomp.esn_new_update_code.ESN_normal: hash,
-                      rescomp.esn_new_update_code.ESN_dynsys: hash,
-                      rescomp.esn_new_update_code.ESN_difference: hash,
-                      rescomp.esn_new_update_code.ESN_output_hybrid: hash,
-                      rescomp.esn_new_update_code.ESN_no_res: hash,
-                      rescomp.esn_new_update_code.ESN_pca_adv: hash})
+@st.cache(hash_funcs=esn_hash_funcs)
 def train(esn, x_train, t_train_sync):
     print("train")
     print("wout: ", esn._w_out)
@@ -82,12 +101,7 @@ def train(esn, x_train, t_train_sync):
     return esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train
 
 
-@st.cache(hash_funcs={rescomp.esn_new_update_code.ESN_normal: hash,
-                      rescomp.esn_new_update_code.ESN_dynsys: hash,
-                      rescomp.esn_new_update_code.ESN_difference: hash,
-                      rescomp.esn_new_update_code.ESN_output_hybrid: hash,
-                      rescomp.esn_new_update_code.ESN_no_res: hash,
-                      rescomp.esn_new_update_code.ESN_pca_adv: hash})
+@st.cache(hash_funcs=esn_hash_funcs)
 def predict(esn, x_pred, t_pred_sync):
     print("predict rc")
     y_pred, y_true = esn.predict(x_pred, sync_steps=t_pred_sync, save_res_inp=True, save_r_internal=True, save_r=True)
@@ -97,6 +111,31 @@ def predict(esn, x_pred, t_pred_sync):
     r_input_pred = esn.get_res_inp()
     return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred
 
+
+@st.cache(hash_funcs=esn_hash_funcs)
+def predict_2(esn, x_pred, t_pred_sync):
+
+    esn.reset_r()
+
+    if t_pred_sync > 0:
+        sync = x_pred[:t_pred_sync]
+        true_data = x_pred[t_pred_sync:]
+        esn.drive(sync, save_r=True)
+    else:
+        true_data = x_pred
+
+    r_drive = esn.get_r()
+
+    steps = true_data.shape[0]
+    y_pred, y_true = esn.loop(steps, save_res_inp=True, save_r_internal=True, save_r=True), \
+                     true_data
+
+    r_pred = esn.get_r()
+    act_fct_inp_pred = esn.get_act_fct_inp()
+    r_internal_pred = esn.get_r_internal()
+    r_input_pred = esn.get_res_inp()
+
+    return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_drive
 
 # CASHING PLOT FUNCTIONS:
 @st.experimental_memo
@@ -212,8 +251,8 @@ def plot_model_likeness():
 
 
 @st.experimental_memo
-def plot_correlation_dimension(y_pred, y_true, nr_steps):
-    fig = plot.plot_correlation_dimension(y_pred, y_true, nr_steps=nr_steps, figsize=(13, 5))
+def plot_correlation_dimension(y_pred, y_true, nr_steps, r_min, r_max):
+    fig = plot.plot_correlation_dimension(y_pred, y_true, nr_steps=nr_steps, figsize=(13, 5), r_min=r_min, r_max=r_max)
     return fig
 
 
@@ -243,14 +282,19 @@ def plot_pca(r_pca):
     return fig
 
 
-esn_types = ["normal", "dynsys", "difference", "no_res", "pca"]
-systems_to_predict = ["Lorenz", "Roessler"]
-w_in_types = ["ordered_sparse", "random_sparse", "random_dense_uniform", "random_dense_gaussian"]
-bias_types = ["no_bias", "random_bias", "constant_bias"]
-network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
-activation_functions = ["tanh", "sigmoid", "relu", "linear"]
-r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt"]
-dyn_sys_types = ["L96", "KS"]
+@st.experimental_memo
+def plot_pca_with_drive(r_pca_drive, r_pca):
+    data = {"r_pca_pred": r_pca, "r_pca_drive": r_pca_drive}
+    fig = plot.plot_3d_time_series_multiple(data)
+    return fig
+
+
+@st.experimental_memo
+def show_lypunov_from_data(y_pred, y_true, dt, freq_cut=True, steps=100):
+    data = {"True": y_true, "Predicted": y_pred}
+    fig = plot.plot_lyapunov_spectrum_multiple(data, dt=dt, freq_cut=freq_cut, pnts_to_try=50, steps=steps,
+                                               figsize=(13, 5))
+    return fig
 
 
 with st.sidebar:
@@ -456,7 +500,8 @@ with st.expander("Prediction"):
     predict_bool = st.checkbox("Predict with RC", disabled=disabled)
     if predict_bool:
         x_pred = x_pred_list[0]
-        y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred = predict(esn, x_pred, t_pred_sync)
+        # y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred = predict(esn, x_pred, t_pred_sync)
+        y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_drive = predict_2(esn, x_pred, t_pred_sync)
         show_x_pred = st.checkbox("Show predicted and real trajectory:")
         if show_x_pred:
             figs = plot_prediction_pred_vs_true_trajectories(y_true, y_pred)
@@ -483,7 +528,9 @@ with st.expander("Prediction"):
         show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not(perform_pca_bool), key=1)
         if show_pca_states_bool:
             r_pred_pca = pca.transform(r_pred)
-            fig = plot_pca(r_pred_pca)
+            # fig = plot_pca(r_pred_pca)
+            r_pca_drive = pca.transform(r_drive)
+            fig = plot_pca_with_drive(r_pca_drive, r_pred_pca)
             st.plotly_chart(fig)
 
         show_reservoir_histograms_pred = st.checkbox("Show Reservoir node value histograms - PRED: ")
@@ -504,8 +551,10 @@ with st.expander("Advanced Measures on Prediction: "):
     st.header("Advanced Measures: ")
     show_correlation_dimension = st.checkbox("Show Correlation Dimension:", disabled=disabled)
     if show_correlation_dimension:
-        nr_steps = st.slider("nr_steps", 2, 30, 10)
-        fig = plot_correlation_dimension(y_pred, y_true, nr_steps)
+        nr_steps = st.slider("nr_steps", 2., 30., 10.)
+        r_min = st.slider("r_min", 0.1, 10., 1.5)
+        r_max = st.slider("r_max", 2.5, 10., 5.)
+        fig = plot_correlation_dimension(y_pred, y_true, nr_steps, r_min, r_max)
         st.pyplot(fig)
 
     show_poincare_type_map = st.checkbox("Show Poincare Type Map:", disabled=disabled)
@@ -517,6 +566,16 @@ with st.expander("Advanced Measures on Prediction: "):
         fig = plot_poincare_type_map_plotly(y_pred, y_true, mode=poincare_mode)
         st.plotly_chart(fig)
 
+    show_lyapunov_bool = st.checkbox("Show Lyapunov from Data:")
+    if show_lyapunov_bool:
+        # Some parameters:
+        left, right = st.columns(2)
+        with left:
+            freq_cut = st.checkbox("freq_cut", value=True)
+        with right:
+            steps = st.number_input("steps", key=1, min_value=2, max_value=2000, value=100)
+        fig = show_lypunov_from_data(y_pred, y_true, dt, freq_cut=freq_cut, steps=steps)
+        st.pyplot(fig)
     # disabled = True if normalize else False
     # show_model_likeness = st.checkbox("Show Model Likeness:", disabled=disabled)
     # if show_model_likeness:
