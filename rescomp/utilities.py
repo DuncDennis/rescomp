@@ -544,6 +544,10 @@ def sigmoid(x):
     return 1 / (1 + np.exp(-x))
 
 
+def relu(x):
+    return x * (x > 0)
+
+
 def normalize_timeseries(time_series):
     """
     Shift re-scale the time_series so that it has zero-mean and unit-standard deviation
@@ -561,7 +565,6 @@ def temp_seed(seed):
     Use like:
     with temp_seed(5):
         <do_smth_that_uses_np.random>
-
     """
 
     state = np.random.get_state()
