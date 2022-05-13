@@ -1129,7 +1129,7 @@ def poincare_map(time_series, mode="minima", dimension=0):
     return extreme[:-1], extreme[1:]
 
 
-def model_likeness(y_pred, iterator, steps=10):
+def model_likeness(y_pred, iterator, steps=10, debug=False):
     time_steps, dims = y_pred.shape
     nr_parts = int(time_steps / steps)
     print("nr_parts", nr_parts)
@@ -1159,6 +1159,11 @@ def model_likeness(y_pred, iterator, steps=10):
                                                              normalization=None)
 
     error = np.mean(error_parts, axis=0)
+
+    if debug:
+        error_first_part = error_parts[0, :]
+        return error, error_first_part
+
     return error
 
 
