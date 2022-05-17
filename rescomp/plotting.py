@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
@@ -7,6 +8,51 @@ import numpy as np
 import math
 import rescomp.measures as measures
 import rescomp.utilities as utilities
+
+
+
+def line_plotly_extension(error_y_mode=None, **kwargs): # Not used yet
+    """Extension of `plotly.express.line` to use error bands.
+    From: https://stackoverflow.com/questions/69587547/continuous-error-band-with-plotly-express-in-python
+    """
+    ERROR_MODES = {'bar','band','bars','bands',None}
+    if error_y_mode not in ERROR_MODES:
+        raise ValueError(f"'error_y_mode' must be one of {ERROR_MODES}, received {repr(error_y_mode)}.")
+    if error_y_mode in {'bar','bars',None}:
+        fig = px.line(**kwargs)
+    elif error_y_mode in {'band','bands'}:
+        if 'error_y' not in kwargs:
+            raise ValueError(f"If you provide argument 'error_y_mode' you must also provide 'error_y'.")
+        figure_with_error_bars = px.line(**kwargs)
+        fig = px.line(**{arg: val for arg,val in kwargs.items() if arg != 'error_y'})
+        for data in figure_with_error_bars.data:
+            x = list(data['x'])
+            y_upper = list(data['y'] + data['error_y']['array'])
+            y_lower = list(data['y'] - data['error_y']['array'] if data['error_y']['arrayminus'] is None else data['y'] - data['error_y']['arrayminus'])
+            color = f"rgba({tuple(int(data['line']['color'].lstrip('#')[i:i+2], 16) for i in (0, 2, 4))},.3)".replace('((','(').replace('),',',').replace(' ','')
+            fig.add_trace(
+                go.Scatter(
+                    x = x+x[::-1],
+                    y = y_upper+y_lower[::-1],
+                    fill = 'toself',
+                    fillcolor = color,
+                    line = dict(
+                        color = 'rgba(255,255,255,0)'
+                    ),
+                    hoverinfo = "skip",
+                    showlegend = False,
+                    legendgroup = data['legendgroup'],
+                    xaxis = data['xaxis'],
+                    yaxis = data['yaxis'],
+                )
+            )
+        # Reorder data as said here: https://stackoverflow.com/a/66854398/8849755
+        reordered_data = []
+        for i in range(int(len(fig.data)/2)):
+            reordered_data.append(fig.data[i+int(len(fig.data)/2)])
+            reordered_data.append(fig.data[i])
+        fig.data = tuple(reordered_data)
+    return fig
 
 
 #### Some functions to plot a trajectory results numpy array:
@@ -71,6 +117,33 @@ def plot_error(trajs, params_to_show, f, max_x, error_bar=False, ylog=False):
     return fig
 
 
+def plot_error_plotly(trajs, params_to_show, f, error_bar=False, ylog=False):
+    fig = make_subplots(rows=1, cols=1, subplot_titles=(("error")))
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:]
+        error = get_error(data)
+        mean_error = np.mean(error, axis=(0, 1))
+        x = np.arange(mean_error.shape[0])
+        name = f"{params_to_show[i_traj]}"
+        if error_bar:
+            std_error = np.std(error, axis=(0, 1))
+            error_y = dict(
+            type='data', # value of error bar given in data coordinates
+            array=std_error,
+            visible=True)
+        else:
+            error_y = None
+
+        fig.add_trace(
+            go.Scatter(x=x, y=mean_error, error_y=error_y, mode="lines", name=name)
+        )
+        if ylog:
+            fig.update_yaxes(type="log")
+
+    return fig
+
+
 def plot_attractor_2(trajs, params_to_show, f, i_ens, i_time_period, base_fig_size=(5, 10)):
     fig, axs = plt.subplots(len(trajs), 1, figsize=(base_fig_size[0], base_fig_size[1]*len(trajs)))
 
@@ -109,6 +182,9 @@ def plot_trajectories(trajs, params_to_show, f, i_ens, i_time_period, i_dim, bas
 
 # Utility:
 def get_error(data):
+    """
+    data like:  data = f["runs"][traj][:]
+    """
     n_ens = data.shape[0]
     n_interval = data.shape[1]
     n_pred_steps = data.shape[3]
@@ -122,6 +198,20 @@ def get_error(data):
             error[i_ens, i_interval, :] = measures.error_over_time(y_pred, y_test, distance_measure="L2",
                                                                     normalization="root_of_avg_of_spacedist_squared")
     return error
+
+
+def get_valid_times(data, error_threshhold=1.0):
+    """
+    data like:  data = f["runs"][traj][:]
+    """
+    error = get_error(data)
+    n_ens, n_interval = data.shape[0], data.shape[1]
+    valid_times = np.zeros((n_ens, n_interval))
+    for i_ens in range(n_ens):
+        for i_interval in range(n_interval):
+            valid_times[i_ens, i_interval] = measures.valid_time_index(error[i_ens, i_interval, :],
+                                                                       error_threshhold)
+    return valid_times
 
 
 def plot_valid_times_heatmap(trajs, params_to_show, f, error_threshhold, base_fig_size=(5, 10)):
@@ -159,7 +249,7 @@ def plot_valid_times_heatmap(trajs, params_to_show, f, error_threshhold, base_fi
     return fig
 
 
-def plot_correlation_dimension(trajs, params_to_show, f, i_ens, i_time_period, figsize=(5, 10), nr_steps=10):
+def plot_correlation_dimension_hdf5(trajs, params_to_show, f, i_ens, i_time_period, figsize=(5, 10), nr_steps=10):
     fig = plt.figure(figsize=figsize)
 
     corr_dim_true = None
@@ -470,7 +560,14 @@ def plot_correlation_dimension(y_pred, y_true, nr_steps=20, r_min=1.5, r_max=5.,
     return fig
 
 
-def plot_poincare_type_map(y_pred, y_true, dim=None, mode="maxima", figsize=(13, 5), s=1.0, alpha=1.0):
+def plot_poincare_type_map(y_pred, y_true, dim=None, mode="maxima", value_or_time="value", figsize=(13, 5), s=1.0, alpha=1.0):
+    if value_or_time == "value":
+        val_bool = True
+    elif value_or_time == "time":
+        val_bool = False
+    else:
+        raise Exception(f"value_or_time not recognized: {value_or_time}")
+
     x_dim = y_pred.shape[1]
     if dim is None:
         dims = list(np.arange(x_dim))
@@ -485,10 +582,16 @@ def plot_poincare_type_map(y_pred, y_true, dim=None, mode="maxima", figsize=(13,
 
     for i_d, d in enumerate(dims):
         ax = axs[i_d]
-        x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
-        ax.scatter(x, y, label="True", s=s, alpha=alpha)
 
-        x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
+        if val_bool:
+            x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
+        else:
+            x, y = measures.poincare_map_for_time(y_true, dimension=d, mode=mode)
+        ax.scatter(x, y, label="True", s=s, alpha=alpha)
+        if val_bool:
+            x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
+        else:
+            x, y = measures.poincare_map_for_time(y_pred, dimension=d, mode=mode)
         ax.scatter(x, y, label="Pred", s=s, alpha=alpha)
 
         ax.set_title(f"Dimension: {d}")
@@ -497,7 +600,14 @@ def plot_poincare_type_map(y_pred, y_true, dim=None, mode="maxima", figsize=(13,
     return fig
 
 
-def plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode="maxima", figsize=(13, 5), s=1.0, alpha=1.0):
+def plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode="maxima", value_or_time="value", figsize=(13, 5),
+                                  s=1.0, alpha=1.0):
+
+    if value_or_time == "value":
+        val_bool = True
+    elif value_or_time == "time":
+        val_bool = False
+
     x_dim = y_pred.shape[1]
     if dim is None:
         dims = list(np.arange(x_dim))
@@ -513,7 +623,10 @@ def plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode="maxima", figsi
     #     axs = (axs, )
 
     for i_d, d in enumerate(dims):
-        x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
+        if val_bool:
+            x, y = measures.poincare_map(y_true, dimension=d, mode=mode)
+        else:
+            x, y = measures.poincare_map_for_time(y_true, dimension=d, mode=mode)
         fig.add_trace(
             go.Scatter(x=x, y=y, opacity=alpha, name="True", mode='markers', marker=dict(color="lightgreen")),
             row=i_d+1, col=1
@@ -521,7 +634,10 @@ def plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode="maxima", figsi
         fig.update_traces(marker={'size': s})
         # ax.scatter(x, y, label="True", s=s, alpha=alpha)
 
-        x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
+        if val_bool:
+            x, y = measures.poincare_map(y_pred, dimension=d, mode=mode)
+        else:
+            x, y = measures.poincare_map_for_time(y_pred, dimension=d, mode=mode)
         fig.add_trace(
             go.Scatter(x=x, y=y, opacity=alpha, name="Pred", mode='markers', marker=dict(color="red")),
             row=i_d+1, col=1
@@ -587,4 +703,85 @@ def plot_lyapunov_spectrum_multiple(data, dt=1.0, freq_cut=True, pnts_to_try=50,
         plot_lyapunov_spectrum(time_series, dt=dt, freq_cut=freq_cut, pnts_to_try=pnts_to_try,
                                                         steps=steps, ax=ax, label=label)
 
+    return fig
+
+
+def plot_poincare_type_map_plotly_hdf5(trajs, params_to_show, f, i_ens, i_time_period, **kwargs):
+    figs = {}
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:][i_ens, i_time_period, :, :, :]
+        params = params_to_show[i_traj]
+        y_pred = data[0, :, :]
+        y_true = data[1, :, :]
+
+        fig = plot_poincare_type_map_plotly(y_pred, y_true, **kwargs)
+        figs[str(params)] = fig
+    return figs
+
+
+def plot_valid_times_histogram(trajs, params_to_show, f, i_ens=None, i_time_period=None, figsize=(150, 150),
+                               error_threshhold=0.4):
+    df = pd.DataFrame()
+    means = []
+    for i_traj, traj in enumerate(trajs):
+        # data = f["runs"][traj][:][i_ens, i_time_period, :, :, :]
+        data = f["runs"][traj][:]
+        valid_times = get_valid_times(data, error_threshhold=error_threshhold)
+        params_str = str(params_to_show[i_traj])
+        if i_ens is None and i_time_period is None:
+            valid_times = valid_times.flatten()
+        elif i_ens is None and i_time_period is not None:
+            valid_times = valid_times[:, i_time_period]
+        elif i_ens is not None and i_time_period is None:
+            valid_times = valid_times[i_ens, :]
+
+        df_to_add = pd.DataFrame()
+        df_to_add["valid times"] = valid_times
+        df_to_add["parameters"] = params_str
+
+        df = pd.concat([df, df_to_add])
+        means.append(np.mean(valid_times))
+
+    fig = px.histogram(df, x="valid times", color="parameters", width=figsize[0], height=figsize[1],
+                       opacity=0.5)
+    for i_m, mean in enumerate(means):
+        color = fig.data[i_m].marker.color
+        fig.add_vline(x=mean, line_dash="dash", line_color=color)
+    return fig
+
+
+def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
+                               error_threshhold=0.4):
+    df = pd.DataFrame()
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:]
+        params = params_to_show[i_traj]
+
+        valid_times = get_valid_times(data, error_threshhold=error_threshhold)
+
+        if i_ens is None and i_time_period is None:
+            valid_times = valid_times.flatten()
+        elif i_ens is None and i_time_period is not None:
+            valid_times = valid_times[:, i_time_period]
+        elif i_ens is not None and i_time_period is None:
+            valid_times = valid_times[i_ens, :]
+
+        valid_times_mean = np.mean(valid_times)
+        valid_times_std = np.std(valid_times)
+        print(valid_times_mean)
+        df_to_add = pd.DataFrame()
+        df_to_add["valid times"] = [valid_times_mean]
+        df_to_add["valid times std"] = [valid_times_std]
+        df_to_add[sweep_variable] = [params[sweep_variable]]
+        print(df_to_add)
+        del params[sweep_variable]
+        params_str = str(params)
+        df_to_add["Other Parameters"] = [params_str]
+
+        df = pd.concat([df, df_to_add])
+
+    print(df)
+    fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times std", color="Other Parameters", width=figsize[0],
+                  height=figsize[1],)
     return fig
