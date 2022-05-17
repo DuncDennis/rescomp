@@ -1124,9 +1124,24 @@ def poincare_map(time_series, mode="minima", dimension=0):
         ix = argrelextrema(x, np.greater)[0]
     else:
         raise Exception(f"mode: {mode} not recognized")
-    extreme = x[ix]
 
+    extreme = x[ix]
     return extreme[:-1], extreme[1:]
+
+
+def poincare_map_for_time(time_series, dt=1.0, mode="minima", dimension=0):
+    # Bad name
+    x = time_series[:, dimension]
+    if mode == "minima":
+        ix = argrelextrema(x, np.less)[0]
+    elif mode == "maxima":
+        ix = argrelextrema(x, np.greater)[0]
+    else:
+        raise Exception(f"mode: {mode} not recognized")
+
+    time_diff = (ix[1:] - ix[:-1])*dt
+
+    return time_diff[:-1], time_diff[1:]
 
 
 def model_likeness(y_pred, iterator, steps=10, debug=False):
