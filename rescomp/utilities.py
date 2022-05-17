@@ -548,14 +548,19 @@ def relu(x):
     return x * (x > 0)
 
 
-def normalize_timeseries(time_series):
+def normalize_timeseries(time_series, normalize_on=None):
     """
     Shift re-scale the time_series so that it has zero-mean and unit-standard deviation
     """
-
-    mean = time_series.mean(axis=0)
-    std = time_series.std(axis=0)
+    if normalize_on is not None:
+        mean = normalize_on.mean(axis=0)
+        std = normalize_on.std(axis=0)
+    else:
+        mean = time_series.mean(axis=0)
+        std = time_series.std(axis=0)
     return (time_series - mean)/std
+
+
 
 
 @contextlib.contextmanager
