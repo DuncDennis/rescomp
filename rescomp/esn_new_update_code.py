@@ -444,7 +444,8 @@ class _add_dyn_sys_update_fct():
         self._dyn_sys_flag_synonyms.add_synonyms(0, ["L96"])
         self._dyn_sys_flag_synonyms.add_synonyms(1, ["KS"])
 
-    def create_dyn_sys_upd_fct(self, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1.0, dyn_sys_other_params=(5., )):
+    # def create_dyn_sys_upd_fct(self, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1.0, dyn_sys_other_params=(5., )):
+    def create_dyn_sys_upd_fct(self, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1.0, **dyn_sys_other_params):
         if type(dyn_sys_opt) == str:
             self._dyn_sys_opt = dyn_sys_opt
             self._dyn_sys_dt = dyn_sys_dt
@@ -452,7 +453,12 @@ class _add_dyn_sys_update_fct():
             self._dyn_sys_other_params = dyn_sys_other_params
             dyn_sys_flag = self._dyn_sys_flag_synonyms.get_flag(dyn_sys_opt)
             if dyn_sys_flag == 0:
-                L96_force = dyn_sys_other_params[0]
+                # L96_force = dyn_sys_other_params[0]
+
+                if "L96_force" not in dyn_sys_other_params.keys():
+                    dyn_sys_other_params = {"L96_force": 0.0}
+
+                L96_force = dyn_sys_other_params["L96_force"]
 
                 def _lorenz_96(x):
                     return simulations._lorenz_96(x, force=L96_force)
@@ -463,7 +469,10 @@ class _add_dyn_sys_update_fct():
                 self._res_internal_update_fct = lambda r: (f_L96(r)-r) * self._dyn_sys_scale_factor
 
             elif dyn_sys_flag == 1:
-                KS_system_size = dyn_sys_other_params[0]
+                # KS_system_size = dyn_sys_other_params[0]
+                if "KS_system_size" not in dyn_sys_other_params.keys():
+                    dyn_sys_other_params = {"KS_system_size": 20}
+                KS_system_size = dyn_sys_other_params["KS_system_size"]
 
                 def f_KS(x):
                     return simulations._kuramoto_sivashinsky(self._r_dim, system_size=KS_system_size, dt=dyn_sys_dt,
@@ -753,9 +762,9 @@ class ESN_dynsys(_ResCompCore, _add_basic_defaults, _add_dyn_sys_update_fct, _ad
         y_train = train[1:]
         super(ESN_dynsys, self).train(sync, x_train, y_train, reset_res_state=reset_res_state, **kwargs)
 
-    def build(self, x_dim, r_dim=500, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1., dyn_sys_other_params=(5.,),
+    def build(self, x_dim, r_dim=500, dyn_sys_opt="L96", dyn_sys_dt=0.1, scale_factor=1., # , dyn_sys_other_params=(5.,),
               r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0, w_in_opt="random_sparse",
-              w_in_scale=1.0, default_res_state=None, reg_param=1e-8, bias_seed=None, w_in_seed=None):
+              w_in_scale=1.0, default_res_state=None, reg_param=1e-8, bias_seed=None, w_in_seed=None, **dyn_sys_other_params):
 
         self.logger.debug("Building ESN Archtecture")
 
@@ -764,7 +773,7 @@ class ESN_dynsys(_ResCompCore, _add_basic_defaults, _add_dyn_sys_update_fct, _ad
         self._r_dim = r_dim
 
         self.create_dyn_sys_upd_fct(dyn_sys_opt=dyn_sys_opt, dyn_sys_dt=dyn_sys_dt, scale_factor=scale_factor,
-                                    dyn_sys_other_params=dyn_sys_other_params)
+                                    **dyn_sys_other_params)
 
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
         self.set_activation_function(act_fct_opt=act_fct_opt)
