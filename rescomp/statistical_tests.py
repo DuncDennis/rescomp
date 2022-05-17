@@ -2,6 +2,7 @@ import numpy as np
 import time
 from . import utilities
 from . import measures
+from . import simulations
 import os
 import pathlib
 import itertools
@@ -500,6 +501,71 @@ def data_simulation(simulation_function_or_sim_data, t_train_disc, t_train_sync,
     n_period = pred_disc_steps + pred_sync_steps + pred_steps
     for i in range(nr_of_time_intervals):
         # x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period + 1]
+        x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period]
+        x_pred_list.append(x_pred)
+    x_pred_list = np.array(x_pred_list)
+
+    if v == 1:
+        print("train_disc_steps: ", train_disc_steps)
+        print("train_sync_steps: ", train_sync_steps)
+        print("train_steps: ", train_steps)
+        print("pred_disc_steps: ", pred_disc_steps)
+        print("pred_sync_steps: ", pred_sync_steps)
+        print("pred_steps: ", pred_steps)
+        print("total_time_steps: ", total_time_steps)
+        print("................................")
+        print("x_train shape: ", x_train.shape)
+        print("x_pred_list shape :", x_pred_list.shape)
+
+    if sim_data_return:
+        print("sim_data shape :", sim_data.shape)
+        return x_train, x_pred_list, sim_data
+
+    return x_train, x_pred_list
+
+
+def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_train=2000, t_pred_disc=1000,
+                        t_pred_sync=300, t_pred=2000, nr_of_time_intervals=1, dt=0.05, normalize=False, train_noise=0.0,
+                        sim_data_return=False, v=1):
+    """
+
+    """
+    # t_train_disc = simulation_args["t_train_disc"]
+    # t_train_sync = simulation_args["t_train_sync"]
+    # t_train = simulation_args["t_train"]
+    # t_pred_disc = simulation_args["t_pred_disc"]
+    # t_pred_sync = simulation_args["t_pred_sync"]
+    # t_pred = simulation_args["t_pred"]
+    # nr_of_time_intervals = simulation_args["nr_of_time_intervals"]
+    # dt = simulation_args["dt"]
+    # system = simulation_args["system"]
+    # normalize = simulation_args["normalize"]
+    # train_noise = simulation_args["train_noise"]
+
+    train_disc_steps = int(t_train_disc / dt)
+    train_sync_steps = int(t_train_sync / dt)
+    train_steps = int(t_train / dt)
+    pred_disc_steps = int(t_pred_disc / dt)
+    pred_sync_steps = int(t_pred_sync / dt)
+    pred_steps = int(t_pred / dt)
+    total_time_steps = train_disc_steps + train_sync_steps + train_steps + (
+            pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
+
+    sim_data = simulations.simulate_trajectory(system, dt, total_time_steps)
+
+    x_train = sim_data[train_disc_steps: train_disc_steps + train_sync_steps + train_steps]
+
+    if normalize:
+        sim_data = utilities.normalize_timeseries(sim_data, normalize_on=x_train)  # Only normalize on x train?
+        x_train = sim_data[train_disc_steps: train_disc_steps + train_sync_steps + train_steps]
+
+    # add noise
+    x_train = x_train + np.random.randn(*(x_train.shape)) * train_noise
+
+    x_pred_list = []
+    start = train_disc_steps + train_sync_steps + train_steps - 1
+    n_period = pred_disc_steps + pred_sync_steps + pred_steps
+    for i in range(nr_of_time_intervals):
         x_pred = sim_data[start + i * n_period + pred_disc_steps: start + (i + 1) * n_period]
         x_pred_list.append(x_pred)
     x_pred_list = np.array(x_pred_list)
