@@ -137,6 +137,7 @@ def predict_2(esn, x_pred, t_pred_sync):
 
     return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_drive
 
+
 # CASHING PLOT FUNCTIONS:
 @st.experimental_memo
 def plot_original_attractor(time_series):
@@ -263,8 +264,9 @@ def plot_poincare_type_map(y_pred, y_true, mode="maxima", figsize=(13, 5)):
 
 
 @st.experimental_memo
-def plot_poincare_type_map_plotly(y_pred, y_true, mode="maxima", figsize=(20, 30)):
-    fig = plot.plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode=mode, figsize=figsize, alpha=0.5, s=3)
+def plot_poincare_type_map_plotly(y_pred, y_true, mode="maxima", value_or_time="value", figsize=(20, 30)):
+    fig = plot.plot_poincare_type_map_plotly(y_pred, y_true, dim=None, mode=mode, value_or_time=value_or_time,
+                                             figsize=figsize, alpha=0.5, s=3)
     return fig
 
 
@@ -354,8 +356,12 @@ with st.sidebar:
             build_args["dyn_sys_opt"] = st.selectbox('dyn_sys_opt', dyn_sys_types)
             build_args["dyn_sys_dt"] = st.number_input('dyn_sys_dt', value=0.1, step=0.01)
             build_args["scale_factor"] = st.number_input('scale_factor', value=1.0, step=0.1)
-            custom_dyn_sys_parameter = st.number_input('custom dyn_sys parameter', value=5.0, step=0.1)  # make dependent on case
-            build_args["dyn_sys_other_params"] = (custom_dyn_sys_parameter, )
+            if build_args["dyn_sys_opt"] == "L96":
+                build_args["L96_force"] = st.number_input('L96_force', value=5.0, step=0.1)
+            elif build_args["dyn_sys_opt"] == "KS":
+                build_args["KS_system_size"] = st.number_input('KS_system_size', value=5.0, step=0.1)
+            # custom_dyn_sys_parameter = st.number_input('custom dyn_sys parameter', value=5.0, step=0.1)  # make dependent on case
+            # build_args["dyn_sys_other_params"] = (custom_dyn_sys_parameter, )
         elif esn_type == "no_res":
             pass
         elif esn_type == "pca":
@@ -553,17 +559,21 @@ with st.expander("Advanced Measures on Prediction: "):
     if show_correlation_dimension:
         nr_steps = st.slider("nr_steps", 2., 30., 10.)
         r_min = st.slider("r_min", 0.1, 10., 1.5)
-        r_max = st.slider("r_max", 2.5, 10., 5.)
+        r_max = st.slider("r_max", 0.5, 10., 5.)
         fig = plot_correlation_dimension(y_pred, y_true, nr_steps, r_min, r_max)
         st.pyplot(fig)
 
     show_poincare_type_map = st.checkbox("Show Poincare Type Map:", disabled=disabled)
     if show_poincare_type_map:
-        poincare_mode = st.selectbox('Mode', ["maxima", "minima"])
+        left, right = st.columns(2)
+        with left:
+            poincare_mode = st.selectbox('Mode', ["maxima", "minima"])
+        with right:
+            value_or_time = st.selectbox('Value or Time', ["value", "time"])
         # fig = plot_poincare_type_map(y_pred, y_true, mode=poincare_mode, figsize=(13, 16))
         # st.pyplot(fig)
 
-        fig = plot_poincare_type_map_plotly(y_pred, y_true, mode=poincare_mode)
+        fig = plot_poincare_type_map_plotly(y_pred, y_true, mode=poincare_mode, value_or_time=value_or_time)
         st.plotly_chart(fig)
 
     show_lyapunov_bool = st.checkbox("Show Lyapunov from Data:")
