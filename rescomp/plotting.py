@@ -775,13 +775,67 @@ def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None,
         df_to_add["valid times std"] = [valid_times_std]
         df_to_add[sweep_variable] = [params[sweep_variable]]
         print(df_to_add)
-        del params[sweep_variable]
-        params_str = str(params)
+        # del params[sweep_variable]
+        # params_str = str(params)
+        params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
         df_to_add["Other Parameters"] = [params_str]
 
         df = pd.concat([df, df_to_add])
 
     print(df)
+    df.sort_values(["Other Parameters", sweep_variable], inplace=True)
     fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times std", color="Other Parameters", width=figsize[0],
                   height=figsize[1],)
+    return fig
+
+
+def plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
+                               error_threshhold=0.4):
+    df = pd.DataFrame()
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:]
+        params = params_to_show[i_traj]
+        error = get_error(data)
+
+        if i_ens is None and i_time_period is None:
+            error_mean = np.mean(error, axis=(0, 1))
+        elif i_ens is None and i_time_period is not None:
+            error_mean = np.mean(error[:, i_time_period, :], axis=0)
+        elif i_ens is not None and i_time_period is None:
+            error_mean = np.mean(error[i_ens, :, :], axis=0)
+
+        valid_times_mean = measures.valid_time_index(error_mean, error_threshhold)
+
+        # valid_times_mean = np.mean(valid_times)
+        # valid_times_std = np.std(valid_times)
+        # print(valid_times_mean)
+        df_to_add = pd.DataFrame()
+        df_to_add["valid times"] = [valid_times_mean]
+        # df_to_add["valid times std"] = [valid_times_std]
+        df_to_add[sweep_variable] = [params[sweep_variable]]
+        print(df_to_add)
+        params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
+        # del params[sweep_variable]
+        # params_str = str(params)
+        df_to_add["Other Parameters"] = [params_str]
+
+        df = pd.concat([df, df_to_add])
+
+    print(df)
+    df.sort_values(["Other Parameters", sweep_variable], inplace=True)
+    fig = px.line(df, x=sweep_variable, y="valid times", color="Other Parameters", width=figsize[0],
+                  height=figsize[1],)
+    return fig
+
+
+def show_hist(data, bins=100, figsize=(15, 8)):
+    # assume data is a dict of the kind: {"r_pred_3dim": np.array(1000, 3), "r_..." ..)
+    fig, axs = plt.subplots(3, 1, figsize=figsize)
+    for i_ax, ax in enumerate(axs):
+        ax.set_title(f"axes: {i_ax}")
+        for label, traj in data.items():
+            ax.hist(traj[:, i_ax], alpha=0.5, label=label, bins=bins)
+            ax.legend()
+
     return fig
