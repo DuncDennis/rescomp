@@ -5,6 +5,7 @@ import numpy as np
 import scipy
 import scipy.sparse
 from scipy.signal import argrelextrema
+import pandas as pd
 
 # import matplotlib.pyplot as plt
 import warnings
@@ -1180,6 +1181,65 @@ def model_likeness(y_pred, iterator, steps=10, debug=False):
         return error, error_first_part
 
     return error
+
+
+def attractor_likeness(r_true, r_to_test):
+    """
+    return a number between 1 and 0 if the attractor is similar or not
+    """
+    data_true = r_true.flatten()
+    data_to_test = r_to_test.flatten()
+
+    min_val = np.min((np.min(data_true), np.min(data_to_test)))
+    max_val = np.max((np.max(data_true), np.max(data_to_test)))
+
+    hist_true = np.histogram(data_true, bins=100, range=(min_val, max_val), density=True)[0]
+    hist_to_test = np.histogram(data_to_test, bins=100, range=(min_val, max_val), density=True)[0]
+
+    difference = np.linalg.norm(hist_true - hist_to_test)
+    return difference
+
+
+def perturbation_of_res_dynamics(trained_esn, time_steps, r_init, t_disc=100, pert_min=0.0, pert_max=1.0, pert_steps=5, n_ens=100, local_seed=None):
+
+    esn = trained_esn
+    r_dim = r_init.size
+
+    # Baseline:
+    esn.set_r(r_init)
+    esn.loop(time_steps, save_r=True)
+    r_base = esn.get_r()
+
+    # Perturbations:
+    pert_scale_range = np.linspace(pert_min, pert_max, pert_steps, endpoint=True)
+    # r_pert_array = np.zeros((n_ens, pert_steps, time_steps, r_dim))
+    diff_array = np.zeros((n_ens, pert_steps))
+    for i in range(n_ens):
+        perturbations_normed = np.random.randn(r_dim)
+        perturbations_normed = perturbations_normed/np.linalg.norm(perturbations_normed)
+
+        for i_p, pert_scale in enumerate(pert_scale_range):
+            pert = perturbations_normed * pert_scale
+
+            r_pert_init = r_init + pert
+            esn.set_r(r_pert_init)
+            esn.loop(time_steps, save_r=True)
+            r_pert = esn.get_r()
+            # r_pert_array[i, i_p, :, :] = r_pert
+
+            diff = attractor_likeness(r_base[t_disc:, :], r_pert[t_disc:, :])
+            diff_array[i, i_p] = diff
+
+    df = pd.DataFrame()
+    # df["diff_mean"] = np.mean(diff_array, axis=0)
+    # df["diff_std"] = np.std(diff_array, axis=0)
+    df["diff_median"] = np.median(diff_array, axis=0)
+    df["diff_lower_quartile"] = df["diff_median"] - np.quantile(diff_array, q=0.25, axis=0)
+    df["diff_upper_quartile"] = np.quantile(diff_array, q=0.75, axis=0) - df["diff_median"]
+    df["pert_scale"] = pert_scale_range
+    return df
+
+    # return diff_array
 
 
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
