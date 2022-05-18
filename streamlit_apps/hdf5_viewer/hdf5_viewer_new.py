@@ -213,7 +213,7 @@ if option is not None:
             elif ensemble_along == "Combined":
                 i_ens, i_time_period = None, None
 
-            error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4)
+            error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4, step=0.1)
             fig = plot.plot_valid_times_histogram(trajs, params_to_show, f, i_ens=i_ens, i_time_period=i_time_period,
                                                   error_threshhold=error_threshhold, figsize=(800, 500))
             st.plotly_chart(fig)
@@ -248,10 +248,14 @@ if option is not None:
             elif ensemble_along == "Combined":
                 i_ens, i_time_period = None, None
 
-            error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4, key="error2")
+            error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4, key="error2", step=0.1)
             #####
 
             fig = plot.plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
+                                                  error_threshhold=error_threshhold, figsize=(800, 500))
+            st.plotly_chart(fig)
+
+            fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
                                                   error_threshhold=error_threshhold, figsize=(800, 500))
             st.plotly_chart(fig)
             # print(params_to_show)

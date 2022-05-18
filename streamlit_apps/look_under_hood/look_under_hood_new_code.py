@@ -4,6 +4,9 @@ import matplotlib.pyplot as plt
 import yaml
 from datetime import datetime
 from sklearn import decomposition
+import pandas as pd
+import plotly.express as px
+
 import rescomp
 import rescomp.esn_new_update_code as esn_new
 import rescomp.plotting as plot
@@ -137,6 +140,22 @@ def predict_2(esn, x_pred, t_pred_sync):
 
     return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_drive
 
+
+@st.cache(hash_funcs=esn_hash_funcs)
+def loop_with_perturbation(esn, perturbation, r_pred_previous, time_steps_loop=1000):
+    # set esn state to first prediction esn state:
+    # r_dim = r_pred_previous.size
+    # perturbation = np.random.randn(r_dim)
+    # pert_len = np.linalg.norm(perturbation)
+    # if pert_len != 0:
+    #     perturbation = perturbation/pert_len
+    # perturbation = perturbation * perturbation_scale
+
+    esn.set_r(r_pred_previous + perturbation)
+
+    esn.loop(time_steps_loop, save_r=True)
+    r_loop_perturbed = esn.get_r()
+    return r_loop_perturbed
 
 # CASHING PLOT FUNCTIONS:
 @st.experimental_memo
@@ -290,6 +309,12 @@ def plot_pca_with_drive(r_pca_drive, r_pca):
     fig = plot.plot_3d_time_series_multiple(data)
     return fig
 
+@st.experimental_memo
+def plot_pca_with_perturbed_pca(r_loop_perturbed_pca, r_pred_pca):
+    data = {"r_loop_perturbed": r_loop_perturbed_pca, "r_pred_pca": r_pred_pca}
+    fig = plot.plot_3d_time_series_multiple(data)
+    return fig
+
 
 @st.experimental_memo
 def show_lypunov_from_data(y_pred, y_true, dt, freq_cut=True, steps=100):
@@ -297,6 +322,14 @@ def show_lypunov_from_data(y_pred, y_true, dt, freq_cut=True, steps=100):
     fig = plot.plot_lyapunov_spectrum_multiple(data, dt=dt, freq_cut=freq_cut, pnts_to_try=50, steps=steps,
                                                figsize=(13, 5))
     return fig
+
+@st.cache(hash_funcs=esn_hash_funcs)
+def plot_pde_difference_vs_pert(esn, r_init, time_steps=2000, n_ens=30, pert_max=2,
+                                              pert_min=0.01, pert_steps=20):
+    df = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_init, time_steps=time_steps, n_ens=n_ens,
+                                                       pert_max=pert_max, pert_min=pert_min, pert_steps=pert_steps)
+    fig = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
+    return df, fig
 
 
 with st.sidebar:
@@ -597,3 +630,74 @@ with st.expander("Advanced Measures on Prediction: "):
     #     nr_steps_model_likeness = st.slider("steps", 2, 200, 10)
     #     fig = plot.plot_model_likeness(y_pred, iterator, steps=nr_steps_model_likeness, figsize=(15, 4))
     #     st.pyplot(fig)
+
+disabled = False if predict_bool else True
+# Disable also if PCA not active
+with st.expander("Free looping of Reservoir Dynamics: "):
+    free_loop_with_perturbed_res = st.checkbox("Loop Reservoir with perturbed initial state:")
+    if free_loop_with_perturbed_res:
+        perturbation_scale = st.number_input("perturbation scale", min_value=0.0, max_value=1000., value=0.005, step=0.001, format="%f")
+        perturb_only_pca = st.checkbox("Perturb only along PCA dimension:")
+        # time_steps_loop = st.number_input("timesteps for loop", min_value=10, max_value=10000, value=1000)
+        # r_pred_previous = r_pred[0, :]
+        r_pred_previous = r_drive[-1, :]
+
+        r_dim = r_pred_previous.size
+        if perturb_only_pca:
+            perturbation_pca = np.random.randn(3)
+            perturbation = pca.inverse_transform(perturbation_pca)
+        else:
+            perturbation = np.random.randn(r_dim)
+        pert_len = np.linalg.norm(perturbation)
+        if pert_len != 0:
+            perturbation = perturbation / pert_len
+        perturbation = perturbation * perturbation_scale
+        # st.table(perturbation)
+        st.table(pd.DataFrame(perturbation).describe())
+        r_loop_perturbed = loop_with_perturbation(esn, perturbation, r_pred_previous,
+                                                  time_steps_loop=t_pred)
+        r_loop_perturbed_pca = pca.transform(r_loop_perturbed)
+        r_pred_pca = pca.transform(r_pred)
+        fig = plot_pca_with_perturbed_pca(r_loop_perturbed_pca, r_pred_pca)
+        st.plotly_chart(fig)
+
+        show_hist = st.checkbox("show value hist")
+        if show_hist:
+            data = {"real": r_pred_pca[200:, :], "perturbed": r_loop_perturbed_pca[200:, :]}
+            fig = plot.show_hist(data, bins=100)
+            st.pyplot(fig)
+
+        checkbox = st.checkbox("Attractor Likeness vs. perturbation scale")
+        if checkbox:
+            # diff = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_pred_previous, time_steps=3000, n_ens=30, pert_max=2000, pert_min=0.01)
+            # mean_diff = np.mean(diff, axis=0)
+            # # std_diff = np.std(diff, axis=0)
+            # df = pd.DataFrame()
+            #
+            # fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times std", color="Other Parameters",
+            #               width=figsize[0],
+            #               height=figsize[1], )
+            # fig = plt.figure()
+            # plt.plot(mean_diff)
+            # st.pyplot(fig)
+
+            left, right = st.columns(2)
+            with left:
+                time_steps = st.number_input("time_steps", value=1000, min_value=200, key="timesteps_pert")
+            with right:
+                n_ens = st.number_input("n_ens", value=10, min_value=1, key="nens_pert")
+
+            l, m, r = st.columns(3)
+            with l:
+                pert_min = st.number_input("pert_scale_min", value=0.0, key="minpert", format="%f")
+            with m:
+                pert_max = st.number_input("pert_scale_max", value=5., key="maxpert", format="%f")
+            with r:
+                pert_steps = st.number_input("pert_steps", value=5, key="pertsteps")
+            df, fig = plot_pde_difference_vs_pert(esn, r_init=r_pred_previous, time_steps=time_steps, n_ens=n_ens, pert_max=pert_max,
+                                              pert_min=pert_min, pert_steps=pert_steps)
+            # df = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_pred_previous, time_steps=2000, n_ens=30, pert_max=2, pert_min=0.01, pert_steps=20)
+            # # fig = px.line(df, x="pert_scale", y="diff_median", error_y="diff_std")
+            # fig = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
+            st.plotly_chart(fig)
+            st.table(df)
