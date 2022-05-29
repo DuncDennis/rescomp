@@ -1231,7 +1231,7 @@ def perturbation_of_res_dynamics(trained_esn, time_steps, r_init, t_disc=100, pe
             diff_array[i, i_p] = diff
 
     df = pd.DataFrame()
-    # df["diff_mean"] = np.mean(diff_array, axis=0)
+    df["diff_mean"] = np.mean(diff_array, axis=0)
     # df["diff_std"] = np.std(diff_array, axis=0)
     df["diff_median"] = np.median(diff_array, axis=0)
     df["diff_lower_quartile"] = df["diff_median"] - np.quantile(diff_array, q=0.25, axis=0)
@@ -1239,8 +1239,15 @@ def perturbation_of_res_dynamics(trained_esn, time_steps, r_init, t_disc=100, pe
     df["pert_scale"] = pert_scale_range
     return df
 
-    # return diff_array
 
+def distances_to_closest_point(y_to_test, y_true):
+    time_steps = y_to_test.shape[0]
+    closest_distance = np.zeros(time_steps)
+    for i in range(time_steps):
+        y_to_test_point = y_to_test[i, :]
+        diff_len = np.linalg.norm(y_true - y_to_test_point, axis=1)
+        closest_distance[i] = np.min(diff_len)
+    return closest_distance
 
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,
