@@ -839,3 +839,18 @@ def show_hist(data, bins=100, figsize=(15, 8)):
             ax.legend()
 
     return fig
+
+
+def show_res_state_scatter(res_states, figsize=(15, 8), sort=True, s=0.1, alpha=0.5):
+    # assume data is a dict of the kind: {"r_pred_3dim": np.array(1000, 3), "r_..." ..)
+    fig, ax = plt.subplots(1, 1, figsize=figsize)
+    if sort:
+        pass
+    n_points, r_dim = res_states.shape
+    y = np.repeat(np.arange(0, r_dim), n_points)  # array like [0,0,0, 1,1,1, 2,2,2, ..]
+    x = res_states.flatten()
+
+    ax.scatter(x, y, s=s, alpha=alpha)
+
+    return fig
+
