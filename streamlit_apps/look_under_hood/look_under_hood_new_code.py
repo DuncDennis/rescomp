@@ -14,8 +14,8 @@ import rescomp.statistical_tests as stat_test
 plt.style.use('dark_background')
 
 
-esn_types = ["normal", "dynsys", "difference", "no_res", "pca"]
-systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen"]
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "input_to_rgen"]
+systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen", "Lorenz_plus_Roessler"]
 w_in_types = ["ordered_sparse", "random_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
 network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
@@ -61,6 +61,13 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
     elif system_option == "Chen":
         starting_point = np.array([-10, 0, 37])
         time_series = rescomp.simulations.simulate_trajectory("chen", dt, all_time_steps, starting_point)
+
+    elif system_option == "Lorenz_plus_Roessler":
+        starting_point = np.array([0, 1, 0])
+        time_series_1 = rescomp.simulations.simulate_trajectory("lorenz", dt, all_time_steps, starting_point)
+        time_series_2 = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps, starting_point)
+        time_series = time_series_1 + time_series_2
+
     if normalize:
         time_series = rescomp.utilities.normalize_timeseries(time_series)
     return time_series
@@ -78,6 +85,8 @@ def build(esntype, seed, **kwargs):
         esn = esn_new.ESN_no_res()
     elif esntype == "pca":
         esn = esn_new.ESN_pca_adv()
+    elif esntype == "input_to_rgen":
+        esn = esn_new.ESN_output_hybrid()  # but dont give a model -> i.e. its just the identiy: f:x -> x
 
     x_dim = 3
     np.random.seed(seed)
@@ -143,6 +152,8 @@ def predict_2(esn, x_pred, t_pred_sync):
 
 @st.cache(hash_funcs=esn_hash_funcs)
 def loop_with_perturbation(esn, perturbation, r_pred_previous, time_steps_loop=1000):
+    print("run loop")
+    print(perturbation)
     # set esn state to first prediction esn state:
     # r_dim = r_pred_previous.size
     # perturbation = np.random.randn(r_dim)
@@ -328,8 +339,15 @@ def plot_pde_difference_vs_pert(esn, r_init, time_steps=2000, n_ens=30, pert_max
                                               pert_min=0.01, pert_steps=20):
     df = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_init, time_steps=time_steps, n_ens=n_ens,
                                                        pert_max=pert_max, pert_min=pert_min, pert_steps=pert_steps)
-    fig = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
-    return df, fig
+    fig1 = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
+    fig2 = px.line(df, x="pert_scale", y="diff_mean")
+    return df, fig1, fig2
+
+@st.experimental_memo
+def plot_closest_distance_to_attractor(y_pred, y_true):
+    closest_dist = rescomp.measures.distances_to_closest_point(y_to_test=y_pred, y_true=y_true)
+    fig = plot.plot_multiple_1d_time_series({"closest_distance": closest_dist})
+    return fig
 
 
 with st.sidebar:
@@ -378,7 +396,7 @@ with st.sidebar:
 
     # settings depending on esn_type:
     with st.expander("ESN type specific settings:"):
-        if esn_type in ["normal", "difference"]:
+        if esn_type in ["normal", "difference", "input_to_rgen"]:
             # network:
             build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1)
             build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1)
@@ -403,9 +421,13 @@ with st.sidebar:
                 build_args["dims_to_drop"] = None
     st.markdown("""---""")
 
-    if st.button("new seed"):
-        get_random_int.clear()
-    seed = get_random_int()  # lets see what to do with that
+    if st.checkbox("custom seed"):
+        seed = st.number_input("custom seed", max_value=1000000)
+    else:
+        if st.button("new seed"):
+            get_random_int.clear()
+        seed = get_random_int()  # lets see what to do with that
+
     st.write(f"Current seed: {seed}")
 
     st.markdown("""---""")
@@ -518,6 +540,9 @@ with st.expander("Train RC"):
 
         show_reservoir_histograms_train = st.checkbox("Show Reservoir node value histograms - TRAIN: ")
         if show_reservoir_histograms_train:
+
+            # fig = plot.show_res_state_scatter(r_train,  figsize=(15, 8), sort=True, s=0.1, alpha=0.5)
+            # st.pyplot(fig)
             act_fct = esn._act_fct
             fig = plot_reservoir_histograms_train(r_input_train, r_internal_train,
                                     act_fct_inp_train, r_train, act_fct)
@@ -582,6 +607,12 @@ with st.expander("Prediction"):
         if show_trajectory_and_resstates:
             fig = plot_trajectory_and_resstates(r_input_pred, r_internal_pred, r_pred, y_pred)
             st.pyplot(fig)
+
+        if st.checkbox("Closest point to attractor"):
+            fig = plot_closest_distance_to_attractor(y_pred, y_true)
+            st.plotly_chart(fig)
+            # closest_dist = rescomp.measures.distances_to_closest_point(y_to_test=y_pred, y_true=y_true)
+            # st.line_chart(closest_dist)
     st.markdown("""---""")
 
 # Advanced measures:
@@ -694,10 +725,11 @@ with st.expander("Free looping of Reservoir Dynamics: "):
                 pert_max = st.number_input("pert_scale_max", value=5., key="maxpert", format="%f")
             with r:
                 pert_steps = st.number_input("pert_steps", value=5, key="pertsteps")
-            df, fig = plot_pde_difference_vs_pert(esn, r_init=r_pred_previous, time_steps=time_steps, n_ens=n_ens, pert_max=pert_max,
+            df, fig1, fig2 = plot_pde_difference_vs_pert(esn, r_init=r_pred_previous, time_steps=time_steps, n_ens=n_ens, pert_max=pert_max,
                                               pert_min=pert_min, pert_steps=pert_steps)
             # df = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_pred_previous, time_steps=2000, n_ens=30, pert_max=2, pert_min=0.01, pert_steps=20)
             # # fig = px.line(df, x="pert_scale", y="diff_median", error_y="diff_std")
             # fig = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
-            st.plotly_chart(fig)
+            st.plotly_chart(fig1)
+            st.plotly_chart(fig2)
             st.table(df)
