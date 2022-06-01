@@ -258,6 +258,41 @@ if option is not None:
             fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
                                                   error_threshhold=error_threshhold, figsize=(800, 500))
             st.plotly_chart(fig)
-            # print(params_to_show)
-            # print(params_dict)
-            # print(multiselect_dict)
+
+    with st.expander("Attractor Likeness vs. Parameter"):
+        plot_attr_likeness_vs_param = st.checkbox("plot Attractor Likeness vs. Params")
+        if plot_attr_likeness_vs_param:
+            st.header("Plot Attractor Likeness vs. Params:")
+
+            multiselect_dict_only_multiples = {key: val for key, val in multiselect_dict.items() if len(val)>1}
+
+            sweep_variable = st.selectbox("sweep variable", multiselect_dict_only_multiples.keys(), key="al1")
+
+            #####
+            ensemble_along = st.selectbox("Ensemble along ...", ["Combined", "Network Realizations", "Time Periods"], key="al2")
+            i_ens_disabled = True
+            i_time_period_disabled = True
+            if ensemble_along == "Network Realizations":
+                i_time_period_disabled = False
+            elif ensemble_along == "Time Periods":
+                i_ens_disabled = False
+            left, right = st.columns(2)
+            with left:
+                i_ens = st.number_input("i_ens", min_value=0, max_value=N_ens - 1, disabled=i_ens_disabled, key="al3")
+            with right:
+                i_time_period = st.number_input("i_time_period", min_value=0, max_value=N_time_periods - 1,
+                                                disabled=i_time_period_disabled, key="al4")
+            if ensemble_along == "Network Realizations":
+                i_ens = None
+            elif ensemble_along == "Time Periods":
+                i_time_period = None
+            elif ensemble_along == "Combined":
+                i_ens, i_time_period = None, None
+
+            fig = plot.plot_attr_likeness_sweep(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
+                                                  bins=100, figsize=(800, 500))
+            st.plotly_chart(fig)
+
+            # fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
+            #                                       error_threshhold=error_threshhold, figsize=(800, 500))
+            # st.plotly_chart(fig)
