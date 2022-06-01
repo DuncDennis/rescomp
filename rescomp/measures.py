@@ -1183,7 +1183,7 @@ def model_likeness(y_pred, iterator, steps=10, debug=False):
     return error
 
 
-def attractor_likeness(r_true, r_to_test):
+def attractor_likeness(r_true, r_to_test, bins=100):
     """
     return a number between 1 and 0 if the attractor is similar or not
     """
@@ -1193,8 +1193,8 @@ def attractor_likeness(r_true, r_to_test):
     min_val = np.min((np.min(data_true), np.min(data_to_test)))
     max_val = np.max((np.max(data_true), np.max(data_to_test)))
 
-    hist_true = np.histogram(data_true, bins=100, range=(min_val, max_val), density=True)[0]
-    hist_to_test = np.histogram(data_to_test, bins=100, range=(min_val, max_val), density=True)[0]
+    hist_true = np.histogram(data_true, bins=bins, range=(min_val, max_val), density=True)[0]
+    hist_to_test = np.histogram(data_to_test, bins=bins, range=(min_val, max_val), density=True)[0]
 
     difference = np.linalg.norm(hist_true - hist_to_test)
     return difference
