@@ -752,6 +752,9 @@ def plot_valid_times_histogram(trajs, params_to_show, f, i_ens=None, i_time_peri
 
 def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
                                error_threshhold=0.4):
+    """
+    For hdf5 viewer: plot valid times vs a sweep variable
+    """
     df = pd.DataFrame()
 
     for i_traj, traj in enumerate(trajs):
@@ -791,6 +794,9 @@ def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None,
 
 def plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
                                error_threshhold=0.4):
+    """
+    Same as plot_valid_times_sweep but the mean error is calculated first, and then the "mean" valid time
+    """
     df = pd.DataFrame()
 
     for i_traj, traj in enumerate(trajs):
@@ -854,3 +860,106 @@ def show_res_state_scatter(res_states, figsize=(15, 8), sort=True, s=0.1, alpha=
 
     return fig
 
+
+def get_attractor_likeness(data, bins=100):
+    n_ens = data.shape[0]
+    n_interval = data.shape[1]
+    n_pred_steps = data.shape[3]
+
+    attr_likeness = np.zeros((n_ens, n_interval, n_pred_steps))
+    for i_ens in range(n_ens):
+        for i_interval in range(n_interval):
+            y_pred = data[i_ens, i_interval, 0, :, :]
+            y_test = data[i_ens, i_interval, 1, :, :]
+
+            attr_likeness[i_ens, i_interval, :] = measures.attractor_likeness(y_test, y_pred, bins=bins)
+
+    return attr_likeness
+
+
+def plot_attr_likeness_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
+                               bins=100):
+    """
+    For hdf5 viewer: plot valid times vs a sweep variable
+    """
+    df = pd.DataFrame()
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:]
+        params = params_to_show[i_traj]
+
+        attr_likeness = get_attractor_likeness(data, bins=bins)
+
+        if i_ens is None and i_time_period is None:
+            attr_likeness = attr_likeness.flatten()
+        elif i_ens is None and i_time_period is not None:
+            attr_likeness = attr_likeness[:, i_time_period]
+        elif i_ens is not None and i_time_period is None:
+            attr_likeness = attr_likeness[i_ens, :]
+
+        attr_likeness_mean = np.mean(attr_likeness)
+        attr_likeness_std = np.std(attr_likeness)
+        # print(attr_likeness_mean)
+        df_to_add = pd.DataFrame()
+        df_to_add["attr likeness mean"] = [attr_likeness_mean]
+        df_to_add["attr likeness std"] = [attr_likeness_std]
+        df_to_add[sweep_variable] = [params[sweep_variable]]
+        print(df_to_add)
+        # del params[sweep_variable]
+        # params_str = str(params)
+        params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
+        df_to_add["Other Parameters"] = [params_str]
+
+        df = pd.concat([df, df_to_add])
+
+    print(df)
+    df.sort_values(["Other Parameters", sweep_variable], inplace=True)
+    fig = px.line(df, x=sweep_variable, y="attr likeness mean", error_y="attr likeness std", color="Other Parameters", width=figsize[0],
+                  height=figsize[1],)
+    return fig
+
+
+def plot_wout_magnitudes(w_out, figsize=(150, 150)):
+    x_dim, r_gen_dim = w_out.shape
+
+    data_dict = {"index": [], "magnitude": [], "out_channel": []}
+
+    for i_x in range(x_dim):
+        for i_n in range(r_gen_dim):
+            w_mag = np.abs(w_out[i_x, i_n])
+
+            data_dict["index"].append(i_n)
+            data_dict["magnitude"].append(w_mag)
+            data_dict["out_channel"].append(i_x)
+
+    df = pd.DataFrame.from_dict(data_dict)
+    fig = px.bar(df, x="index", y="magnitude", color="out_channel", title="W_out magnitudes", width=figsize[0],
+                 height=figsize[1])
+    return fig
+
+
+def plot_state_std(data, figsize=(150, 150), title=""):
+    fig = make_subplots(rows=1, cols=1, subplot_titles=[title])
+
+    for name, vals in data.items():
+        std = np.std(vals, axis=0)
+        fig.add_trace(
+            go.Bar(y=std, name=f"std of {name}")
+        )
+
+    fig.update_layout(height=figsize[1], width=figsize[0])
+    return fig
+
+
+def plot_valid_times_vs_pred_error(y_pred, y_true, error_thresh_min=0.1, error_thresh_max=1., steps=10):
+    error_over_time = measures.error_over_time(y_pred, y_true, distance_measure="L2",
+                                               normalization="root_of_avg_of_spacedist_squared")
+    error_thresh_list = np.linspace(error_thresh_min, error_thresh_max, steps, endpoint=True)
+    valid_times = np.zeros(steps)
+    for i, thresh in enumerate(error_thresh_list):
+        valid_time = measures.valid_time_index(error_over_time, thresh)
+        valid_times[i] = valid_time
+
+    df = pd.DataFrame({"threshhold": error_thresh_list, "valid_times": valid_times})
+    fig = px.line(df, x="threshhold", y="valid_times", title="valid_times vs error_threshhold")
+    return fig
