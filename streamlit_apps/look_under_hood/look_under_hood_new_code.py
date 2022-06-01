@@ -14,7 +14,7 @@ import rescomp.statistical_tests as stat_test
 plt.style.use('dark_background')
 
 
-esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "input_to_rgen"]
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "input_to_rgen", "pca_drop"]
 systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen", "Lorenz_plus_Roessler"]
 w_in_types = ["ordered_sparse", "random_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
@@ -25,11 +25,14 @@ dyn_sys_types = ["L96", "KS"]
 
 
 esn_hash_funcs = {rescomp.esn_new_update_code.ESN_normal: hash,
-                      rescomp.esn_new_update_code.ESN_dynsys: hash,
-                      rescomp.esn_new_update_code.ESN_difference: hash,
-                      rescomp.esn_new_update_code.ESN_output_hybrid: hash,
-                      rescomp.esn_new_update_code.ESN_no_res: hash,
-                      rescomp.esn_new_update_code.ESN_pca_adv: hash}
+                  rescomp.esn_new_update_code.ESN_dynsys: hash,
+                  rescomp.esn_new_update_code.ESN_difference: hash,
+                  rescomp.esn_new_update_code.ESN_output_hybrid: hash,
+                  rescomp.esn_new_update_code.ESN_no_res: hash,
+                  rescomp.esn_new_update_code.ESN_pca_adv: hash,
+                  rescomp.esn_new_update_code.ESN_pca: hash,
+                  rescomp.esn_new_update_code.ESN_dynsys_pca: hash,
+                  }
 
 
 def save_to_yaml(parameter_dict):
@@ -83,10 +86,14 @@ def build(esntype, seed, **kwargs):
         esn = esn_new.ESN_difference()
     elif esntype == "no_res":
         esn = esn_new.ESN_no_res()
-    elif esntype == "pca":
+    elif esntype == "pca_drop":
         esn = esn_new.ESN_pca_adv()
     elif esntype == "input_to_rgen":
         esn = esn_new.ESN_output_hybrid()  # but dont give a model -> i.e. its just the identiy: f:x -> x
+    elif esntype == "pca":
+        esn = esn_new.ESN_pca()
+    elif esntype == "dynsys_pca":
+        esn = esn_new.ESN_dynsys_pca()
 
     x_dim = 3
     np.random.seed(seed)
@@ -107,21 +114,23 @@ def train(esn, x_train, t_train_sync):
     r_input_train = esn.get_res_inp()
     r_train = esn.get_r()
     x_train_true = esn.get_y_train()
-    # r_gen_train = esn.get_r_gen()
+    r_gen_train = esn.get_r_gen()
     x_train_pred = esn.get_out()
     print("shapes: ", x_train_true.shape, x_train_pred.shape)
-    return esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train
+    return esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train
 
 
 @st.cache(hash_funcs=esn_hash_funcs)
 def predict(esn, x_pred, t_pred_sync):
     print("predict rc")
-    y_pred, y_true = esn.predict(x_pred, sync_steps=t_pred_sync, save_res_inp=True, save_r_internal=True, save_r=True)
+    y_pred, y_true = esn.predict(x_pred, sync_steps=t_pred_sync, save_res_inp=True, save_r_internal=True, save_r=True,
+                                 save_r_gen=True)
     r_pred = esn.get_r()
     act_fct_inp_pred = esn.get_act_fct_inp()
     r_internal_pred = esn.get_r_internal()
     r_input_pred = esn.get_res_inp()
-    return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred
+    r_gen_pred = esn.get_r_gen()
+    return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_gen_pred
 
 
 @st.cache(hash_funcs=esn_hash_funcs)
@@ -139,15 +148,16 @@ def predict_2(esn, x_pred, t_pred_sync):
     r_drive = esn.get_r()
 
     steps = true_data.shape[0]
-    y_pred, y_true = esn.loop(steps, save_res_inp=True, save_r_internal=True, save_r=True), \
+    y_pred, y_true = esn.loop(steps, save_res_inp=True, save_r_internal=True, save_r=True, save_r_gen=True), \
                      true_data
 
     r_pred = esn.get_r()
+    r_gen_pred = esn.get_r_gen()
     act_fct_inp_pred = esn.get_act_fct_inp()
     r_internal_pred = esn.get_r_internal()
     r_input_pred = esn.get_res_inp()
 
-    return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_drive
+    return y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_gen_pred, r_drive
 
 
 @st.cache(hash_funcs=esn_hash_funcs)
@@ -350,6 +360,15 @@ def plot_closest_distance_to_attractor(y_pred, y_true):
     return fig
 
 
+@st.experimental_memo
+def plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred):
+
+    fig1 = plot.plot_wout_magnitudes(w_out, figsize=(650, 500))
+    fig2 = plot.plot_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, figsize=(650, 500),
+                          title="std of r_gen during train and pred")
+    return fig1, fig2
+
+
 with st.sidebar:
     # System to predict:
     st.header("System: ")
@@ -360,7 +379,7 @@ with st.sidebar:
     with st.expander("Time Steps"):
         t_train_disc = int(st.number_input('t_train_disc', value=1000, step=1))
         t_train_sync = int(st.number_input('t_train_sync', value=300, step=1))
-        t_train = int(st.number_input('t_train', value=1000, step=1))
+        t_train = int(st.number_input('t_train', value=5000, step=1))
         t_pred_disc = int(st.number_input('t_pred_disc', value=1000, step=1))
         t_pred_sync = int(st.number_input('t_pred_sync', value=300, step=1))
         t_pred = int(st.number_input('t_pred', value=5000, step=1))
@@ -396,29 +415,44 @@ with st.sidebar:
 
     # settings depending on esn_type:
     with st.expander("ESN type specific settings:"):
-        if esn_type in ["normal", "difference", "input_to_rgen"]:
+        if esn_type in ["normal", "difference", "input_to_rgen", "pca"]:
             # network:
             build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1)
             build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1)
             build_args["n_type_opt"] = st.selectbox('n_type_opt', network_types)
             if esn_type == "difference":
                 build_args["dt_difference"] = st.number_input('dt_difference', value=0.1, step=0.01)
-        elif esn_type == "dynsys":
+            elif esn_type == "pca":
+                build_args["pca_components"] = int(st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
+                                                                   max_value=int(build_args["r_dim"]), key="pca2"))
+                build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
+                                                                   max_value=int(build_args["r_dim"])-1))
+        elif esn_type in ["dynsys", "dynsys_pca"]:
             build_args["dyn_sys_opt"] = st.selectbox('dyn_sys_opt', dyn_sys_types)
             build_args["dyn_sys_dt"] = st.number_input('dyn_sys_dt', value=0.1, step=0.01)
             build_args["scale_factor"] = st.number_input('scale_factor', value=1.0, step=0.1)
             if build_args["dyn_sys_opt"] == "L96":
-                build_args["L96_force"] = st.number_input('L96_force', value=5.0, step=0.1)
+                build_args["L96_force"] = st.number_input('L96_force', value=0.0, step=0.1)
             elif build_args["dyn_sys_opt"] == "KS":
                 build_args["KS_system_size"] = st.number_input('KS_system_size', value=5.0, step=0.1)
-            # custom_dyn_sys_parameter = st.number_input('custom dyn_sys parameter', value=5.0, step=0.1)  # make dependent on case
-            # build_args["dyn_sys_other_params"] = (custom_dyn_sys_parameter, )
+            if esn_type == "dynsys_pca":
+                build_args["pca_components"] = int(st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
+                                                                   max_value=int(build_args["r_dim"]), key="dynsys_pca1"))
+                build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
+                                                                   max_value=int(build_args["r_dim"])-1, key="dynsys_pca2"))
         elif esn_type == "no_res":
             pass
-        elif esn_type == "pca":
+        elif esn_type == "pca_drop":
             build_args["dims_to_drop"] = st.number_input('dims_to_drop', value=0, step=1)
             if build_args["dims_to_drop"] == 0:
                 build_args["dims_to_drop"] = None
+
+        # elif esn_type == "pca_basic":
+        #     del build_args["r_to_r_gen_opt"]
+        #     build_args["pca_components"] = int(st.number_input('pca_components', value=50, step=1, min_value=1,
+        #                                                    max_value=int(build_args["r_dim"])))
+        #     build_args["pca_offset"] = st.checkbox("pca_offset", value=1)
+
     st.markdown("""---""")
 
     if st.checkbox("custom seed"):
@@ -498,12 +532,12 @@ with st.expander("Train RC"):
         if train_noise:
             x_train = x_train + np.random.randn(*(x_train.shape)) * noise_scale
 
-        esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train = train(esn,
+        esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train = train(esn,
                                                                                                              x_train,
                                                                                                  t_train_sync)
         perform_pca_bool = st.checkbox("PCA:")
         if perform_pca_bool:
-            pca = perform_pca(r_train)
+            pca = perform_pca(r_train, n_components=3)
 
         show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not(perform_pca_bool))
         if show_pca_states_bool:
@@ -565,7 +599,7 @@ with st.expander("Prediction"):
     if predict_bool:
         x_pred = x_pred_list[0]
         # y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred = predict(esn, x_pred, t_pred_sync)
-        y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_drive = predict_2(esn, x_pred, t_pred_sync)
+        y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_gen_pred, r_drive = predict_2(esn, x_pred, t_pred_sync)
         show_x_pred = st.checkbox("Show predicted and real trajectory:")
         if show_x_pred:
             figs = plot_prediction_pred_vs_true_trajectories(y_true, y_pred)
@@ -582,6 +616,10 @@ with st.expander("Prediction"):
         show_pred_error = st.checkbox("Show predicted error:")
         if show_pred_error:
             fig = plot_pred_error(y_pred, y_true)
+            st.plotly_chart(fig)
+
+        if st.checkbox("Show valid_time vs error_threshhold: "):
+            fig = plot.plot_valid_times_vs_pred_error(y_pred, y_true)
             st.plotly_chart(fig)
 
         # show_r_pred = st.checkbox("Show reservoir states for Prediction:")
@@ -733,3 +771,45 @@ with st.expander("Free looping of Reservoir Dynamics: "):
             st.plotly_chart(fig1)
             st.plotly_chart(fig2)
             st.table(df)
+
+with st.expander("Visualization of arbitrary PCA components: "):
+
+    if st.checkbox("perform pca for all components"):
+
+        train_predict = st.selectbox("train or predict", ["train", "predict"])
+        if train_predict == "train":
+            r_use = r_train
+        elif train_predict == "predict":
+            r_use = r_pred
+
+        r_dim = int(build_args["r_dim"])
+
+        pca_all = perform_pca(r_use, n_components=r_dim)
+        l, m, r = st.columns(3)
+        with l:
+            i_x = st.number_input("pca-comp for x-dim", min_value=0, max_value=r_dim-1, value=0)
+        with m:
+            i_y = st.number_input("pca-comp for y-dim", min_value=0, max_value=r_dim-1, value=1)
+        with r:
+            i_z = st.number_input("pca-comp for z-dim", min_value=0, max_value=r_dim-1, value=2)
+
+        r_use_transform = pca_all.transform(r_use)[:, [i_x, i_y, i_z]]
+        fig = plot_pca(r_use_transform)
+        st.plotly_chart(fig)
+
+        explained_var = pca_all.explained_variance_ratio_
+        st.write("Explained variance of pca components: ")
+        st.line_chart(explained_var)
+
+
+with st.expander("Visualization of W_out magnitudes: "):
+    if st.checkbox("Plot W_out magnitudes and r_gen std"):
+        w_out = esn._w_out
+
+        fig1, fig2 = plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred)
+
+        fig = plot.plot_wout_magnitudes(w_out, figsize=(650, 500))
+        st.plotly_chart(fig)
+        fig = plot.plot_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, figsize=(650, 500),
+                                  title="std of r_gen during train and pred")
+        st.plotly_chart(fig)
