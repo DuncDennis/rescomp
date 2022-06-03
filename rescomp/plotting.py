@@ -920,6 +920,7 @@ def plot_attr_likeness_sweep(trajs, params_to_show, f, sweep_variable, i_ens=Non
 
 
 def plot_wout_magnitudes(w_out, figsize=(150, 150)):
+    # not needed anymore
     x_dim, r_gen_dim = w_out.shape
 
     data_dict = {"index": [], "magnitude": [], "out_channel": []}
@@ -939,6 +940,7 @@ def plot_wout_magnitudes(w_out, figsize=(150, 150)):
 
 
 def plot_state_std(data, figsize=(150, 150), title=""):
+    # not needed anymore
     fig = make_subplots(rows=1, cols=1, subplot_titles=[title])
 
     for name, vals in data.items():
@@ -949,6 +951,59 @@ def plot_state_std(data, figsize=(150, 150), title=""):
 
     fig.update_layout(height=figsize[1], width=figsize[0])
     return fig
+
+
+def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, figsize=(650, 500)):
+    """
+    Ultimate w_out and r_gen value plotting func. This includes also the functionality of "plot_state_std" and "plot_wout_magnitudes"
+    """
+    figs = []
+
+    x_dim, r_gen_dim = w_out.shape
+    data_dict = {"r_gen_index": [], "w_out": [], "out_channel": [],  "std_r_gen": [], "type": []} #"mean_r_gen": [],
+
+    for t, r_gen in r_gen_data.items():
+        # mean_r_gen = np.mean(r_gen, axis=0)
+        std_r_gen = np.std(r_gen, axis=0)
+        for i_x in range(x_dim):
+            for i_n in range(r_gen_dim):
+                w = w_out[i_x, i_n]
+                data_dict["r_gen_index"].append(i_n)
+                data_dict["w_out"].append(w)
+                data_dict["out_channel"].append(i_x)
+
+                # data_dict["mean_r_gen"].append(mean_r_gen[i_n])
+                data_dict["std_r_gen"].append(std_r_gen[i_n])
+
+                data_dict["type"].append(t)
+
+    df = pd.DataFrame.from_dict(data_dict)
+
+    df["w_out_magnitude"] = np.abs(df["w_out"])
+    df["r_gen_std_times_w_out"] = np.abs(df["std_r_gen"] * df["w_out"])
+
+    r_gen_data_types = list(r_gen_data.keys())
+
+    # w_out figure:
+    df_w_out = df[df["type"] == r_gen_data_types[0]]
+    fig = px.bar(df_w_out, x="r_gen_index", y="w_out_magnitude", color="out_channel",
+                 title="W_out magnitudes per out-channel", width=figsize[0],
+                 height=figsize[1])
+    figs.append(fig)
+
+    # r_gen_std figure:
+    df_r_gen_std = df[df["out_channel"] == df["out_channel"].unique()[0]]
+    fig = px.bar(df_r_gen_std, x="r_gen_index", y="std_r_gen", color="type", title="STD of r_gen", width=figsize[0],
+                 height=figsize[1], barmode="group")
+    figs.append(fig)
+
+    # r_gen times w_out figure
+    for t in r_gen_data_types:
+        df_temp = df[df["type"] == t]
+        fig = px.bar(df_temp, x="r_gen_index", y="r_gen_std_times_w_out", color="out_channel", title=f"{t}: STD of r_gen times w_out", width=figsize[0],
+                     height=figsize[1], barmode="group")
+        figs.append(fig)
+    return figs
 
 
 def plot_valid_times_vs_pred_error(y_pred, y_true, error_thresh_min=0.1, error_thresh_max=1., steps=10):

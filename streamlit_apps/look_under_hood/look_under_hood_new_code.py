@@ -353,6 +353,7 @@ def plot_pde_difference_vs_pert(esn, r_init, time_steps=2000, n_ens=30, pert_max
     fig2 = px.line(df, x="pert_scale", y="diff_mean")
     return df, fig1, fig2
 
+
 @st.experimental_memo
 def plot_closest_distance_to_attractor(y_pred, y_true):
     closest_dist = rescomp.measures.distances_to_closest_point(y_to_test=y_pred, y_true=y_true)
@@ -367,6 +368,12 @@ def plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred):
     fig2 = plot.plot_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, figsize=(650, 500),
                           title="std of r_gen during train and pred")
     return fig1, fig2
+
+
+@st.experimental_memo
+def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out):
+    figs = plot.plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out)
+    return figs
 
 
 with st.sidebar:
@@ -417,7 +424,7 @@ with st.sidebar:
     with st.expander("ESN type specific settings:"):
         if esn_type in ["normal", "difference", "input_to_rgen", "pca"]:
             # network:
-            build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1)
+            build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1, format="%f")
             build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1)
             build_args["n_type_opt"] = st.selectbox('n_type_opt', network_types)
             if esn_type == "difference":
@@ -806,10 +813,22 @@ with st.expander("Visualization of W_out magnitudes: "):
     if st.checkbox("Plot W_out magnitudes and r_gen std"):
         w_out = esn._w_out
 
-        fig1, fig2 = plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred)
+        r_gen_data = {"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}
 
-        fig = plot.plot_wout_magnitudes(w_out, figsize=(650, 500))
-        st.plotly_chart(fig)
-        fig = plot.plot_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, figsize=(650, 500),
-                                  title="std of r_gen during train and pred")
-        st.plotly_chart(fig)
+        figs = plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out)
+        for fig in figs:
+            st.plotly_chart(fig)
+        #
+        # fig1, fig2 = plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred)
+        #
+        # fig = plot.plot_wout_magnitudes(w_out, figsize=(650, 500))
+        # st.plotly_chart(fig)
+        # fig = plot.plot_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, figsize=(650, 500),
+        #                           title="std of r_gen during train and pred")
+        # st.plotly_chart(fig)
+        #
+        # df, figs = plot.plot_w_out_times_r_gen_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, w_out)
+        # st.dataframe(df)
+
+
+
