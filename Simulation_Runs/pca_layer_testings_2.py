@@ -21,9 +21,8 @@ simulation_args = {
 }
 
 parameters = {
-    "type": ["higher_res_dim", "same_res_dim"],
-    "r_dim": [200],
-    "pca_components": [25, 50, 75, 100, 125, 150, 175, 200],
+    "type": ["normal_esn", "pca_layer"],
+    "r_dim": [50, 100, 150, 200],
     "r_to_r_gen_opt": "output_bias",
     "act_fct_opt": "tanh",
     "node_bias_opt": "constant_bias",
@@ -42,8 +41,10 @@ def model_creation_function(**kwargs):
     x_dim = 3
 
     esn = ESN.ESN_pca()
-    if kwargs["type"] == "same_res_dim":
-        kwargs["r_dim"] = kwargs["pca_components"]
+    if kwargs["type"] == "normal_esn":
+        esn = ESN.ESN_normal()
+    elif kwargs["type"] == "pca_layer":
+        esn = ESN.ESN_pca()
 
     build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, kwargs)
 
@@ -67,7 +68,7 @@ def save_to_yaml(parameter_dict, name=""):
 
 if __name__ == "__main__":
     # DEFINE EXPERIMENT PARAMETERS:
-    name = "03_06_2022_pcalayer"
+    name = "06_06_2022_pcalayer"
     seed = 106
     N_ens = 10
     print("Simulating Data")

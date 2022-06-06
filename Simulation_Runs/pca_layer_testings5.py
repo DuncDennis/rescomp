@@ -17,18 +17,19 @@ simulation_args = {
     "t_train": 2000,
     "t_pred_disc": 1000,
     "t_pred_sync": 300,
-    "t_pred": 1500,
+    "t_pred": 700,
 }
 
 parameters = {
-    "type": ["higher_res_dim", "same_res_dim"],
-    "r_dim": [200],
-    "pca_components": [25, 50, 75, 100, 125, 150, 175, 200],
+    "type": ["pca_esn", "normal_esn"],
+    # "r_dim": [300, 600, 900, 1200, 1500],
+    # "r_dim": [300, 900, 1500],
+    "r_dim": [1500],
     "r_to_r_gen_opt": "output_bias",
     "act_fct_opt": "tanh",
     "node_bias_opt": "constant_bias",
     "bias_scale": 0.1,
-    "reg_param": 1e-7,
+    "reg_param": 1e-12,
     "w_in_opt": "ordered_sparse",
     "w_in_scale": [1.0],
     "n_rad": 0.1,
@@ -41,9 +42,10 @@ def model_creation_function(**kwargs):
 
     x_dim = 3
 
-    esn = ESN.ESN_pca()
-    if kwargs["type"] == "same_res_dim":
-        kwargs["r_dim"] = kwargs["pca_components"]
+    if kwargs["type"] == "normal_esn":
+        esn = ESN.ESN_normal()
+    elif kwargs["type"] == "pca_esn":
+        esn = ESN.ESN_pca()
 
     build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, kwargs)
 
@@ -67,8 +69,8 @@ def save_to_yaml(parameter_dict, name=""):
 
 if __name__ == "__main__":
     # DEFINE EXPERIMENT PARAMETERS:
-    name = "03_06_2022_pcalayer"
-    seed = 106
+    name = "06_06_2022_pca_vs_normal_large_res"
+    seed = 112
     N_ens = 10
     print("Simulating Data")
     x_train, x_pred_list = st.data_simulation_new(**simulation_args, sim_data_return=False)
