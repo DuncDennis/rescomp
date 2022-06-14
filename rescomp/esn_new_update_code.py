@@ -607,10 +607,12 @@ class _add_pca_r_to_rgen():
         self._pca = None
         self._pca_components = None
         self._pca_comps_to_skip = None
+        self._norm_with_expl_var = None
 
-    def set_pca_components(self, pca_components, pca_comps_to_skip=0):
+    def set_pca_components(self, pca_components, pca_comps_to_skip=0, norm_with_expl_var=False):
         self._pca_components = pca_components
         self._pca_comps_to_skip = pca_comps_to_skip
+        self._norm_with_expl_var = norm_with_expl_var
 
     def fit_pca(self, r_train):
         self._pca = decomposition.PCA(n_components=self._pca_components)
@@ -638,7 +640,11 @@ class _add_pca_r_to_rgen():
             self._r_to_r_gen_opt = "CUSTOM"
             _r_to_r_gen_fct_no_model = r_to_r_gen_opt
 
-        self._r_to_r_gen_fct = lambda r, x: (_r_to_r_gen_fct_no_model(self._pca.transform(r[np.newaxis, :])[0, self._pca_comps_to_skip:], x))
+        if self._norm_with_expl_var:
+            self._r_to_r_gen_fct = lambda r, x: (
+                _r_to_r_gen_fct_no_model((self._pca.transform(r[np.newaxis, :])/np.sqrt(self._pca.explained_variance_))[0, self._pca_comps_to_skip:], x))
+        else:
+            self._r_to_r_gen_fct = lambda r, x: (_r_to_r_gen_fct_no_model(self._pca.transform(r[np.newaxis, :])[0, self._pca_comps_to_skip:], x))
 
         self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[0]
 
@@ -1106,13 +1112,17 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
             self._saved_out = (self._w_out @ self._saved_r_gen.T).T
 
     def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
-              pca_components=5, pca_comps_to_skip=0, r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              pca_components=None, pca_comps_to_skip=0, norm_with_expl_var=False, r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
         self.logger.debug("Building ESN Archtecture")
 
-        self.set_pca_components(pca_components, pca_comps_to_skip=pca_comps_to_skip)
+        if pca_components is None:
+            pca_components = r_dim
+
+        self.set_pca_components(pca_components, pca_comps_to_skip=pca_comps_to_skip,
+                                norm_with_expl_var=norm_with_expl_var)
         self._r_to_r_gen_opt = r_to_r_gen_opt
 
         self._x_dim = x_dim
