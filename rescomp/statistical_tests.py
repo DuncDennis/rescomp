@@ -31,7 +31,7 @@ class StatisticalModelTester():
         self._output_flag_synonyms.add_synonyms(3, ["error"])
         self._output_flag = None
 
-        self.results = None
+        self.results = None  # trajectories
 
     def set_error_function(self, error_function):
         self.error_function = error_function
@@ -197,7 +197,9 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
 
         return list_of_params
 
-    def do_ens_experiment_sweep(self, nr_model_realizations, x_pred_list, **parameters):
+    def do_ens_experiment_sweep(self, nr_model_realizations, x_pred_list, results_type="trajectory", error_threshhold=0.4,
+                                **parameters):
+        # saves the whole trajectories or valid times (hopefully less memory consuming)
         self.input_parameters = parameters
         self.nr_model_realizations = nr_model_realizations
         self.nr_of_time_intervals = x_pred_list.shape[0]
@@ -207,12 +209,18 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
             print(params)
             self.do_ens_experiment_internal(nr_model_realizations, x_pred_list, **params)
 
-            self.results_sweep.append((params, self.results.copy()))
+            if results_type == "trajectory":
+                self.results_sweep.append((params, self.results.copy()))
+            elif results_type == "validtimes":
+                self.error_threshhold = error_threshhold
+                vt = self.get_valid_times(results=self.results, error_threshhold=error_threshhold)
+                self.valid_times_sweep.append((params, vt))
 
     def get_results_sweep(self):
         return self.results_sweep
 
     def get_error_sweep(self):
+        # works if self.results_sweep is already populated
         error_sweep = []
         for params, results in self.results_sweep:
             error_sweep.append((params, self.get_error(results)))
@@ -221,6 +229,7 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
         return error_sweep
 
     def get_valid_times_sweep(self, error_threshhold=None):
+        # works if self.results_sweep is already populated
         if error_threshhold is None:
             error_threshhold = self.error_threshhold
 
@@ -235,22 +244,27 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
         self.valid_times_sweep = valid_times_sweep
         return valid_times_sweep
 
-    def save_sweep_results(self, name="default_name", path=None, type="trajectory"):
+    def save_sweep_results(self, name="default_name", path=None, results_type="trajectory"):
         if path is None:
             repo_path = pathlib.Path(__file__).parent.resolve().parents[0]
             path = pathlib.Path.joinpath(repo_path, "results")
             print(path)
 
-        if type == "trajectory":
+        if results_type == "trajectory":
             if len(self.results_sweep) == 0:
                 raise Exception("no trajectory results yet")
             else:
                 data = self.results_sweep
-        elif type == "error":
+        elif results_type == "error":
             if len(self.error_sweep) == 0:
                 raise Exception("no error results yet")
             else:
                 data = self.error_sweep
+        elif results_type == "validtimes":
+            if len(self.valid_times_sweep) == 0:
+                raise Exception("no valid_times results yet")
+            else:
+                data = self.valid_times_sweep
 
         # check if there is a file with that name already:
         if f"{name}.hdf5" in os.listdir(path):
@@ -280,7 +294,6 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
             # sweep_info_group = f.create_group("sweep_info")
             # for key, val in self._dict_of_vals_to_dict_of_list(self.input_parameters).items():
             #     sweep_info_group.create_dataset(key, data=val)
-
 
     def get_valid_times_df(self, **kwargs):
         if len(self.valid_times_sweep) == 0 or "error_threshhold" in kwargs.keys():
@@ -324,6 +337,7 @@ class StatisticalModelTesterSweep(StatisticalModelTester):
 
 class ST_sweeper():
     '''
+    Older, new version is: StatisticalModelTesterSweep
     '''
 
     def __init__(self, sweeped_variable_dict, ST_creator_function, model_name="default_model_name",
@@ -526,7 +540,7 @@ def data_simulation(simulation_function_or_sim_data, t_train_disc, t_train_sync,
 
 def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_train=2000, t_pred_disc=1000,
                         t_pred_sync=300, t_pred=2000, nr_of_time_intervals=1, dt=0.05, normalize=False, train_noise=0.0,
-                        sim_data_return=False, v=1):
+                        sim_data_return=False, v=1, starting_point=None, t_settings_as_real_time=False):
     """
 
     """
@@ -542,16 +556,30 @@ def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_
     # normalize = simulation_args["normalize"]
     # train_noise = simulation_args["train_noise"]
 
-    train_disc_steps = int(t_train_disc / dt)
-    train_sync_steps = int(t_train_sync / dt)
-    train_steps = int(t_train / dt)
-    pred_disc_steps = int(t_pred_disc / dt)
-    pred_sync_steps = int(t_pred_sync / dt)
-    pred_steps = int(t_pred / dt)
+    if t_settings_as_real_time:
+        train_disc_steps = int(t_train_disc / dt)
+        train_sync_steps = int(t_train_sync / dt)
+        train_steps = int(t_train / dt)
+        pred_disc_steps = int(t_pred_disc / dt)
+        pred_sync_steps = int(t_pred_sync / dt)
+        pred_steps = int(t_pred / dt)
+
+    else:
+        train_disc_steps = int(t_train_disc)
+        train_sync_steps = int(t_train_sync)
+        train_steps = int(t_train)
+        pred_disc_steps = int(t_pred_disc)
+        pred_sync_steps = int(t_pred_sync)
+        pred_steps = int(t_pred)
+
     total_time_steps = train_disc_steps + train_sync_steps + train_steps + (
             pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
 
-    sim_data = simulations.simulate_trajectory(system, dt, total_time_steps)
+    if starting_point is None:
+        sim_data = simulations.simulate_trajectory(system, dt, total_time_steps)
+    else:
+        sim_data = simulations.simulate_trajectory(system, dt, total_time_steps, starting_point)
+
 
     x_train = sim_data[train_disc_steps: train_disc_steps + train_sync_steps + train_steps]
 
@@ -587,3 +615,28 @@ def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_
         return x_train, x_pred_list, sim_data
 
     return x_train, x_pred_list
+
+
+# CUSTOM OVERWRITING OF CLASS FOR SPECIFIC TESTS:
+class PCAWoutMeasurement(StatisticalModelTesterSweep):
+    # Use with PCA esn to discover the mean of the w out distribution
+    def __init__(self):
+        super(PCAWoutMeasurement, self).__init__()
+
+    def do_ens_experiment_internal(self, nr_model_realizations, x_pred_list, **kwargs):
+        # nr_of_time_intervals = len(x_pred_list)
+
+        for i in range(nr_model_realizations):
+            print(f"Realization: {i + 1}/{nr_model_realizations} ...")
+            model = self.model_creation_function(**kwargs)
+            w_out = model._w_out
+
+            w_out_abs = np.abs(w_out)
+            w_out_summed = np.sum(w_out_abs, axis=0)
+            w_out_summed = w_out_summed/np.sum(w_out_summed)
+            mean_index = np.sum(w_out_summed*np.arange(1, len(w_out_summed)+1))
+            if i == 0:
+                results = np.zeros((nr_model_realizations))
+            results[i] = mean_index
+
+        self.results = results
