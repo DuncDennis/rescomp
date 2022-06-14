@@ -249,15 +249,18 @@ if option is not None:
                 i_ens, i_time_period = None, None
 
             error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4, key="error2", step=0.1)
+            log_x = st.checkbox("log_x")
+            average_type = st.selectbox("average_type", ["mean", "median"])
             #####
 
             fig = plot.plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
-                                                  error_threshhold=error_threshhold, figsize=(800, 500))
+                                                  error_threshhold=error_threshhold, figsize=(800, 500), log_x=log_x,
+                                              average_type=average_type)
             st.plotly_chart(fig)
 
-            fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
-                                                  error_threshhold=error_threshhold, figsize=(800, 500))
-            st.plotly_chart(fig)
+            # fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
+            #                                       error_threshhold=error_threshhold, figsize=(800, 500))
+            # st.plotly_chart(fig)
 
     with st.expander("Attractor Likeness vs. Parameter"):
         plot_attr_likeness_vs_param = st.checkbox("plot Attractor Likeness vs. Params")
