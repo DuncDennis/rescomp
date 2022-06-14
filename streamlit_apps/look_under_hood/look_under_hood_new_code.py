@@ -13,10 +13,11 @@ import rescomp.plotting as plot
 import rescomp.statistical_tests as stat_test
 plt.style.use('dark_background')
 
+lyapunov_exponents = {"Lorenz": 0.9056, "Roessler": 0.0714, "Chua": 0.3271, "Chen": 2.027}
 
 esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "input_to_rgen", "pca_drop"]
-systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen", "Lorenz_plus_Roessler"]
-w_in_types = ["ordered_sparse", "random_sparse", "random_dense_uniform", "random_dense_gaussian"]
+systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen", "Lorenz_plus_Roessler", "Logistic"]
+w_in_types = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
 network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
 activation_functions = ["tanh", "sigmoid", "relu", "linear"]
@@ -52,10 +53,10 @@ def get_random_int():
 def simulate_data(system_option, dt, all_time_steps, normalize):
     print("simulate data")
     if system_option == "Lorenz":
-        starting_point = np.array([0, 1, 0])
+        starting_point = np.array([0, -0.01, 9])
         time_series = rescomp.simulations.simulate_trajectory("lorenz", dt, all_time_steps, starting_point)
     elif system_option == "Roessler":
-        starting_point = np.array([0, 1, 0])
+        starting_point = np.array([-9, 0, 0])
         time_series = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps,
                                                               starting_point)
     elif system_option == "Chua":
@@ -71,13 +72,21 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
         time_series_2 = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps, starting_point)
         time_series = time_series_1 + time_series_2
 
+    elif system_option == "Logistic":
+        starting_point = np.array([0.3])
+        r = 4
+        time_series = rescomp.simulations.simulate_trajectory(sys_flag="logistic", time_steps=all_time_steps,
+                                                              starting_point=starting_point, r=r)
+        time_series = time_series - 0.5
+        # time_series = time_series[:, np.newaxis]
+
     if normalize:
         time_series = rescomp.utilities.normalize_timeseries(time_series)
     return time_series
 
 
 @st.experimental_singleton
-def build(esntype, seed, **kwargs):
+def build(esntype, seed, x_dim=3, **kwargs):
     if esntype == "normal":
         esn = esn_new.ESN_normal()
     elif esntype == "dynsys":
@@ -95,7 +104,6 @@ def build(esntype, seed, **kwargs):
     elif esntype == "dynsys_pca":
         esn = esn_new.ESN_dynsys_pca()
 
-    x_dim = 3
     np.random.seed(seed)
     esn.build(x_dim, **kwargs)
     return esn
@@ -318,9 +326,9 @@ def perform_pca(r_train, n_components=3):
 
 
 @st.experimental_memo
-def plot_pca(r_pca):
+def plot_pca(r_pca, mode="line"):
     data = {"r_pca": r_pca}
-    fig = plot.plot_3d_time_series_multiple(data)
+    fig = plot.plot_3d_time_series_multiple(data, mode=mode, size=1)
     return fig
 
 
@@ -371,10 +379,13 @@ def plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred):
 
 
 @st.experimental_memo
-def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out):
-    figs = plot.plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out)
+def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, log_y=False):
+    figs = plot.plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, log_y=log_y)
     return figs
 
+@st.experimental_memo
+def plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=None):
+    return plot.plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=in_lyapunov_times)
 
 with st.sidebar:
     # System to predict:
@@ -393,7 +404,11 @@ with st.sidebar:
         all_time_steps = int(t_train_disc + t_train_sync + t_train + t_pred_disc + t_pred_sync + t_pred)
         time_boundaries = (0, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred)
         st.write(f"Total Timessteps: {all_time_steps}, Maximal Time: {np.round(dt*all_time_steps, 1)}")
-    normalize = st.checkbox('normalize')
+        try:
+            st.write(f"Lyapunov times: {np.round(dt * all_time_steps * lyapunov_exponents[system_option], 1)}")
+        except:
+            pass
+    normalize = st.checkbox('normalize', value=True)
     train_noise = st.checkbox("train noise")
     noise_scale = st.number_input("noise scale", value=0.1, step=0.1, disabled=not(train_noise))
 
@@ -417,7 +432,7 @@ with st.sidebar:
     build_args["leak_factor"] = st.number_input('leak_factor', value=0.0, step=0.01, min_value=0.0, max_value=1.0)
     build_args["w_in_opt"] = st.selectbox('w_in_opt', w_in_types)
     build_args["w_in_scale"] = st.number_input('w_in_scale', value=1.0, step=0.1)
-    log_reg_param = st.number_input('Log regulation parameter', value=-5, step=1)
+    log_reg_param = st.number_input('Log regulation parameter', value=-7, step=1)
     build_args["reg_param"] = 10**(log_reg_param)
 
     # settings depending on esn_type:
@@ -434,6 +449,8 @@ with st.sidebar:
                                                                    max_value=int(build_args["r_dim"]), key="pca2"))
                 build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
                                                                    max_value=int(build_args["r_dim"])-1))
+                build_args["norm_with_expl_var"] = st.checkbox("norm with explained var", value=False)
+
         elif esn_type in ["dynsys", "dynsys_pca"]:
             build_args["dyn_sys_opt"] = st.selectbox('dyn_sys_opt', dyn_sys_types)
             build_args["dyn_sys_dt"] = st.number_input('dyn_sys_dt', value=0.1, step=0.01)
@@ -512,7 +529,7 @@ with st.expander("RC architecture"):
         #
         # seed = get_random_int()  # lets see what to do with that
 
-        esn = build(esn_type, seed, **build_args)
+        esn = build(esn_type, seed, x_dim=x_dim, **build_args)
 
         w_in_properties_bool = st.checkbox("Show W_in properties:")
         if w_in_properties_bool:
@@ -542,6 +559,9 @@ with st.expander("Train RC"):
         esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train = train(esn,
                                                                                                              x_train,
                                                                                                  t_train_sync)
+
+        r_gen_dim = r_gen_train.shape[1]
+
         perform_pca_bool = st.checkbox("PCA:")
         if perform_pca_bool:
             pca = perform_pca(r_train, n_components=3)
@@ -625,8 +645,21 @@ with st.expander("Prediction"):
             fig = plot_pred_error(y_pred, y_true)
             st.plotly_chart(fig)
 
-        if st.checkbox("Show valid_time vs error_threshhold: "):
-            fig = plot.plot_valid_times_vs_pred_error(y_pred, y_true)
+        left, right = st.columns(2)
+        with left:
+            valid_times_show = st.checkbox("Show valid_time vs error_threshhold: ")
+
+            if valid_times_show:
+                disabled = False
+            else:
+                disabled = True
+        with right:
+            if st.checkbox("In lyapunov times", disabled=disabled):
+                in_lyapunov_times = {"dt": dt, "LE": lyapunov_exponents[system_option]}
+            else:
+                in_lyapunov_times = None
+        if valid_times_show:
+            fig = plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=in_lyapunov_times)
             st.plotly_chart(fig)
 
         # show_r_pred = st.checkbox("Show reservoir states for Prediction:")
@@ -800,8 +833,10 @@ with st.expander("Visualization of arbitrary PCA components: "):
         with r:
             i_z = st.number_input("pca-comp for z-dim", min_value=0, max_value=r_dim-1, value=2)
 
+        mode = st.selectbox("plot mode", ["line", "scatter"])
+
         r_use_transform = pca_all.transform(r_use)[:, [i_x, i_y, i_z]]
-        fig = plot_pca(r_use_transform)
+        fig = plot_pca(r_use_transform, mode=mode)
         st.plotly_chart(fig)
 
         explained_var = pca_all.explained_variance_ratio_
@@ -815,7 +850,9 @@ with st.expander("Visualization of W_out magnitudes: "):
 
         r_gen_data = {"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}
 
-        figs = plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out)
+        log_y = st.checkbox("log_y")
+
+        figs = plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, log_y)
         for fig in figs:
             st.plotly_chart(fig)
         #
@@ -830,5 +867,44 @@ with st.expander("Visualization of W_out magnitudes: "):
         # df, figs = plot.plot_w_out_times_r_gen_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, w_out)
         # st.dataframe(df)
 
+        if st.checkbox("R_gen value histograms"):
+            steps = st.number_input("time_steps for hist", value=100)
+            fig = plot.plot_histogram(r_gen_data, steps=steps, log_y=log_y)
+            st.plotly_chart(fig)
 
+        if st.checkbox("Meaning of r_gen components for prediction"):
+            left, right = st.columns(2)
+            with left:
+                train_predict = st.selectbox("train or predict", ["train", "predict"], key="tp2")
+            with right:
+                mode = st.selectbox("plotting mode", ["line", "scatter"])
+            st.write("r_gen components to keep exclude/include x to y")
 
+            left, mid, right = st.columns(3)
+            with left:
+                x = st.number_input("x", value=int(r_gen_dim/2), min_value=0,
+                                max_value=r_gen_dim-1, key="x1")
+            with mid:
+                y = st.number_input("y", value=r_gen_dim-2, min_value=0,
+                                max_value=r_gen_dim-1, key="y1")
+            with right:
+                exclude_or_include = st.selectbox("exclude or include", ["exclude", "include"])
+
+            if train_predict == "train":
+                r_gen = r_gen_data["r_gen_train"]
+                out_real = x_train_pred
+            elif train_predict == "predict":
+                r_gen = r_gen_data["r_gen_pred"]
+                out_real = y_pred
+
+            if exclude_or_include == "include":
+                out = w_out[:, x:y+1] @ (r_gen[:, x:y+1]).T
+            elif exclude_or_include == "exclude":
+                w_out = np.delete(w_out, np.s_[x:y+1], axis=1)
+                r_gen = np.delete(r_gen, np.s_[x:y+1], axis=1)
+                out = w_out @ r_gen.T
+            # print(w_out.shape, r_gen.shape)
+            data = {"components removed": out.T, "real": out_real}
+
+            fig = plot.plot_3d_time_series_multiple(data, mode=mode, size=1)
+            st.plotly_chart(fig)
