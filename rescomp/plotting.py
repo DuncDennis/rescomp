@@ -383,11 +383,14 @@ def plot_w_out(w_out, figsize=(10, 5)):
 
 
 ## plotly:
-def plot_3d_time_series(time_series):
+def plot_3d_time_series(time_series, line=True):
     x = time_series[:, 0]
     y = time_series[:, 1]
     z = time_series[:, 2]
-    fig = px.line_3d(x=x, y=y, z=z)
+    if line:
+        fig = px.line_3d(x=x, y=y, z=z)
+    else:
+        fig = px.scatter_3d(x=x, y=y, z=z)
     return fig
 
 
@@ -751,7 +754,7 @@ def plot_valid_times_histogram(trajs, params_to_show, f, i_ens=None, i_time_peri
 
 
 def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
-                               error_threshhold=0.4):
+                               error_threshhold=0.4, log_x=False, average_type="mean"):
     """
     For hdf5 viewer: plot valid times vs a sweep variable
     """
@@ -770,16 +773,22 @@ def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None,
         elif i_ens is not None and i_time_period is None:
             valid_times = valid_times[i_ens, :]
 
-        valid_times_mean = np.mean(valid_times)
-        valid_times_std = np.std(valid_times)
-        print(valid_times_mean)
+        if average_type == "mean":
+            valid_times_avg = np.mean(valid_times)
+            valid_times_error_lower = np.std(valid_times)
+            valid_times_error_upper = valid_times_error_lower
+
+        elif average_type == "median":
+            valid_times_avg = np.median(valid_times)
+            valid_times_error_lower = valid_times_avg - np.quantile(valid_times, q=0.25)
+            valid_times_error_upper = np.quantile(valid_times, q=0.75) - valid_times_avg
+
         df_to_add = pd.DataFrame()
-        df_to_add["valid times"] = [valid_times_mean]
-        df_to_add["valid times std"] = [valid_times_std]
+        df_to_add["valid times"] = [valid_times_avg]
+        df_to_add["valid times error lower"] = [valid_times_error_lower]
+        df_to_add["valid times error upper"] = [valid_times_error_upper]
         df_to_add[sweep_variable] = [params[sweep_variable]]
-        print(df_to_add)
-        # del params[sweep_variable]
-        # params_str = str(params)
+
         params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
         df_to_add["Other Parameters"] = [params_str]
 
@@ -787,8 +796,15 @@ def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None,
 
     print(df)
     df.sort_values(["Other Parameters", sweep_variable], inplace=True)
-    fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times std", color="Other Parameters", width=figsize[0],
-                  height=figsize[1],)
+    fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times error upper",
+                  error_y_minus="valid times error lower", color="Other Parameters", width=figsize[0],
+                  height=figsize[1], log_x=log_x)
+
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
     return fig
 
 
@@ -953,7 +969,7 @@ def plot_state_std(data, figsize=(150, 150), title=""):
     return fig
 
 
-def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, figsize=(650, 500)):
+def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, figsize=(650, 500), log_y=False):
     """
     Ultimate w_out and r_gen value plotting func. This includes also the functionality of "plot_state_std" and "plot_wout_magnitudes"
     """
@@ -988,25 +1004,62 @@ def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, figsize=(650, 500)):
     df_w_out = df[df["type"] == r_gen_data_types[0]]
     fig = px.bar(df_w_out, x="r_gen_index", y="w_out_magnitude", color="out_channel",
                  title="W_out magnitudes per out-channel", width=figsize[0],
-                 height=figsize[1])
+                 height=figsize[1], log_y=log_y)
+    if log_y:
+        fig.update_layout(
+            yaxis={
+                'exponentformat': 'E'}
+        )
     figs.append(fig)
 
     # r_gen_std figure:
     df_r_gen_std = df[df["out_channel"] == df["out_channel"].unique()[0]]
     fig = px.bar(df_r_gen_std, x="r_gen_index", y="std_r_gen", color="type", title="STD of r_gen", width=figsize[0],
-                 height=figsize[1], barmode="group")
+                 height=figsize[1], barmode="group", log_y=log_y)
+    if log_y:
+        fig.update_layout(
+            yaxis={
+                'exponentformat': 'E'}
+        )
     figs.append(fig)
 
     # r_gen times w_out figure
     for t in r_gen_data_types:
         df_temp = df[df["type"] == t]
         fig = px.bar(df_temp, x="r_gen_index", y="r_gen_std_times_w_out", color="out_channel", title=f"{t}: STD of r_gen times w_out", width=figsize[0],
-                     height=figsize[1], barmode="group")
+                     height=figsize[1], barmode="group", log_y=log_y)
+        if log_y:
+            fig.update_layout(
+                yaxis={
+                    'exponentformat': 'E'}
+            )
         figs.append(fig)
     return figs
 
+def plot_histogram(hist_data, figsize=(650, 500), steps=-1, log_y=False):
+    hist_data = {key: val[:steps, :].flatten() for key, val in hist_data.items()}
+    df = pd.DataFrame()
 
-def plot_valid_times_vs_pred_error(y_pred, y_true, error_thresh_min=0.1, error_thresh_max=1., steps=10):
+    for key, val in hist_data.items():
+        df_to_add = pd.DataFrame()
+        df_to_add["data"] = val
+        df_to_add["name"] = key
+        df = pd.concat([df, df_to_add])
+
+    # print(df.head())
+    # print(df.shape)
+    # print(df.describe())
+    fig = px.histogram(df, x="data", color="name", histnorm='probability density', log_y=log_y)
+    if log_y:
+        fig.update_layout(
+            yaxis={
+                'exponentformat': 'E'}
+        )
+    fig.update_layout(height=figsize[1], width=figsize[0])
+    return fig
+
+
+def plot_valid_times_vs_pred_error(y_pred, y_true, error_thresh_min=0.1, error_thresh_max=1., steps=10, in_lyapunov_times=None):
     error_over_time = measures.error_over_time(y_pred, y_true, distance_measure="L2",
                                                normalization="root_of_avg_of_spacedist_squared")
     error_thresh_list = np.linspace(error_thresh_min, error_thresh_max, steps, endpoint=True)
@@ -1015,6 +1068,58 @@ def plot_valid_times_vs_pred_error(y_pred, y_true, error_thresh_min=0.1, error_t
         valid_time = measures.valid_time_index(error_over_time, thresh)
         valid_times[i] = valid_time
 
+    if in_lyapunov_times is not None:
+        dt = in_lyapunov_times["dt"]
+        le = in_lyapunov_times["LE"]
+        valid_times = dt*le*valid_times
+
     df = pd.DataFrame({"threshhold": error_thresh_list, "valid_times": valid_times})
     fig = px.line(df, x="threshhold", y="valid_times", title="valid_times vs error_threshhold")
+    return fig
+
+
+def plot_w_out_index_sweep(trajs, params_to_show, f, sweep_variable, figsize=(150, 150),
+                           log_x=False, average_type="mean"):
+    """
+    for hdf5_viewer_wout.py
+    """
+    df = pd.DataFrame()
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:].flatten()
+        params = params_to_show[i_traj]
+
+        if average_type == "mean":
+            w_out_index_avg = np.mean(data)
+            w_out_index_error_lower = np.std(data)
+            w_out_index_error_upper = w_out_index_error_lower
+
+        elif average_type == "median":
+            w_out_index_avg = np.median(data)
+            w_out_index_error_lower = w_out_index_avg - np.quantile(data, q=0.25)
+            w_out_index_error_upper = np.quantile(data, q=0.75) - w_out_index_avg
+
+        df_to_add = pd.DataFrame()
+        df_to_add["w_out index"] = [w_out_index_avg]
+        df_to_add["w_out index lower"] = [w_out_index_error_lower]
+        df_to_add["w_out index upper"] = [w_out_index_error_upper]
+
+        df_to_add[sweep_variable] = [params[sweep_variable]]
+
+        params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
+        df_to_add["Other Parameters"] = [params_str]
+
+        df = pd.concat([df, df_to_add])
+
+    print(df)
+    df.sort_values(["Other Parameters", sweep_variable], inplace=True)
+    fig = px.line(df, x=sweep_variable, y="w_out index", error_y="w_out index upper",
+                  error_y_minus="w_out index lower", color="Other Parameters", width=figsize[0],
+                  height=figsize[1], log_x=log_x)
+
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
     return fig
