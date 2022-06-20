@@ -578,8 +578,10 @@ def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_
     if starting_point is None:
         sim_data = simulations.simulate_trajectory(system, dt, total_time_steps)
     else:
-        sim_data = simulations.simulate_trajectory(system, dt, total_time_steps, starting_point)
+        if starting_point == "standard":
+            starting_point = simulations.standard_starting_points[system]
 
+        sim_data = simulations.simulate_trajectory(system, dt, total_time_steps, starting_point)
 
     x_train = sim_data[train_disc_steps: train_disc_steps + train_sync_steps + train_steps]
 

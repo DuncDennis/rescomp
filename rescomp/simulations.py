@@ -10,6 +10,25 @@ from rkstiff.derivatives import dx_rfft
 from rkstiff.if34 import IF34
 
 
+# standard parameters from "Sprott: Chaos and Time-Series Analysis" (not complete) Only 3D:
+standard_lyapunov_exponents = {"lorenz": 0.9056, "roessler": 0.0714, "chua": 0.3271, "chen": 2.027,
+                               "complex_butterfly": 0.1690,
+                              "rucklidge": 0.0643, "thomas": 0.0349, "windmi": 0.0755,
+                              "simplest_quadratic": 0.0551, "simplest_cubic": 0.0837,
+                              "simplest_piecewise": 0.0362
+                              }
+
+standard_starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.array([-9, 0, 0]),
+                           "chua": np.array([0, 0, 0.6]), "chen": np.array([-10, 0, 37]),
+                           "complex_butterfly": np.array([0.2, 0.0, 0.0]),
+                           "rucklidge": np.array([1.0, 0.0, 4.5]), "thomas": np.array([0.1, 0.0, 0.0]),
+                           "windmi": np.array([0.0, 0.8, 0.0]),
+                           "simplest_quadratic": np.array([-0.9, 0, 0.5]),
+                           "simplest_cubic": np.array([0.0, 0.96, 0.0]),
+                           "simplest_piecewise": np.array([0.0, -0.7, 0.0]),
+                           }
+
+
 def _roessler(x, a=0.5, b=2, c=4):
     """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
 
