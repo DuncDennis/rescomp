@@ -13,25 +13,36 @@ import rescomp.plotting as plot
 import rescomp.statistical_tests as stat_test
 plt.style.use('dark_background')
 
-lyapunov_exponents = {"lorenz": 0.9056, "roessler": 0.0714, "chua": 0.3271, "chen": 2.027, "complex_butterfly": 0.1690,
-                      "rucklidge": 0.0643, "thomas": 0.0349, "windmi": 0.0755, "lorenz_plus_roessler": None,
-                      "logistic": None, "lorenz96": None, "simplest_quadratic": 0.0551, "simplest_cubic": 0.0837,
-                      "simplest_piecewise": 0.0362,
-                      }
+lyapunov_exponents = rescomp.simulations.standard_lyapunov_exponents
+lyapunov_exponents_extra = {"lorenz_plus_roessler": None,
+                      "logistic": None, "lorenz96": None, "periodic": None}
+lyapunov_exponents.update(lyapunov_exponents_extra)
 
-starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.array([-9, 0, 0]),
-                   "chua": np.array([0, 0, 0.6]), "chen": np.array([-10, 0, 37]),
-                   "complex_butterfly": np.array([0.2, 0.0, 0.0]),
-                   "rucklidge": np.array([1.0, 0.0, 4.5]), "thomas": np.array([0.1, 0.0, 0.0]),
-                   "windmi": np.array([0.0, 0.8, 0.0]), "lorenz_plus_roessler": None, "logistic": None,
-                   "lorenz96": None, "simplest_quadratic": np.array([-0.9, 0, 0.5]),
-                   "simplest_cubic": np.array([0.0, 0.96, 0.0]),
-                   "simplest_piecewise": np.array([0.0, -0.7, 0.0]),
-                   }
+starting_points = rescomp.simulations.standard_starting_points
+starting_points_extra = {"lorenz_plus_roessler": None, "logistic": None,
+                         "lorenz96": None, "periodic": None}
+starting_points.update(starting_points_extra)
 
-esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "normal_centered", "input_to_rgen", "pca_drop"]
+# lyapunov_exponents = {"lorenz": 0.9056, "roessler": 0.0714, "chua": 0.3271, "chen": 2.027, "complex_butterfly": 0.1690,
+#                       "rucklidge": 0.0643, "thomas": 0.0349, "windmi": 0.0755, "lorenz_plus_roessler": None,
+#                       "logistic": None, "lorenz96": None, "simplest_quadratic": 0.0551, "simplest_cubic": 0.0837,
+#                       "simplest_piecewise": 0.0362,
+#                       }
+#
+# starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.array([-9, 0, 0]),
+#                    "chua": np.array([0, 0, 0.6]), "chen": np.array([-10, 0, 37]),
+#                    "complex_butterfly": np.array([0.2, 0.0, 0.0]),
+#                    "rucklidge": np.array([1.0, 0.0, 4.5]), "thomas": np.array([0.1, 0.0, 0.0]),
+#                    "windmi": np.array([0.0, 0.8, 0.0]), "lorenz_plus_roessler": None, "logistic": None,
+#                    "lorenz96": None, "simplest_quadratic": np.array([-0.9, 0, 0.5]),
+#                    "simplest_cubic": np.array([0.0, 0.96, 0.0]),
+#                    "simplest_piecewise": np.array([0.0, -0.7, 0.0]),
+#                    }
+
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "normal_centered", "pca_noise", "input_to_rgen", "pca_drop"]
 systems_to_predict = ["lorenz", "roessler", "chua", "chen", "complex_butterfly", "rucklidge", "thomas", "windmi",
-                      "lorenz_plus_roessler", "logistic", "lorenz96", "simplest_quadratic", "simplest_cubic", "simplest_piecewise"]
+                      "lorenz_plus_roessler", "logistic", "lorenz96", "simplest_quadratic", "simplest_cubic", "simplest_piecewise",
+                      "periodic"]
 w_in_types = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
 network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
@@ -50,6 +61,7 @@ esn_hash_funcs = {rescomp.esn_new_update_code.ESN_normal: hash,
                   rescomp.esn_new_update_code.ESN_pca: hash,
                   rescomp.esn_new_update_code.ESN_dynsys_pca: hash,
                   rescomp.esn_new_update_code.ESN_normal_centered: hash,
+                  rescomp.esn_new_update_code.ESN_pca_noise: hash,
                   }
 
 
@@ -117,6 +129,16 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
     elif system_option == "simplest_piecewise":
         time_series = rescomp.simulations.simulate_trajectory("simplest_piecewise", dt, all_time_steps, starting_point)
 
+    elif system_option == "periodic":
+        t = np.arange(0, all_time_steps) * dt
+        w_1, w_2, w_3 = 0.1, 0.2, 0.3
+        a_1, a_2, a_3 = 0.1, 0.5, 0.8
+        b_1, b_2, b_3 = 0.1, 0.5, 0.6
+        time_series = np.zeros((all_time_steps, 3))
+        time_series[:, 0] = a_1 * np.sin(w_1*t + b_1)
+        time_series[:, 1] = a_2 * np.sin(w_2*t + b_2)
+        time_series[:, 2] = a_3 * np.sin(w_3*t + b_3)
+
     if normalize:
         time_series = rescomp.utilities.normalize_timeseries(time_series)
     return time_series
@@ -142,6 +164,8 @@ def build(esntype, seed, x_dim=3, **kwargs):
         esn = esn_new.ESN_dynsys_pca()
     elif esntype == "normal_centered":
         esn = esn_new.ESN_normal_centered()
+    elif esntype == "pca_noise":
+        esn = esn_new.ESN_pca_noise()
 
     np.random.seed(seed)
     esn.build(x_dim, **kwargs)
@@ -426,6 +450,13 @@ def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, log_y=False):
 def plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=None):
     return plot.plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=in_lyapunov_times)
 
+
+@st.experimental_memo
+def show_reservoir_states(r):
+    fig = plot.show_reservoir_states(r)
+    return fig
+
+
 with st.sidebar:
     # System to predict:
     st.header("System: ")
@@ -476,14 +507,14 @@ with st.sidebar:
 
     # settings depending on esn_type:
     with st.expander("ESN type specific settings:"):
-        if esn_type in ["normal", "difference", "input_to_rgen", "pca", "normal_centered"]:
+        if esn_type in ["normal", "difference", "input_to_rgen", "pca", "normal_centered", "pca_noise"]:
             # network:
             build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1, format="%f")
             build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1)
             build_args["n_type_opt"] = st.selectbox('n_type_opt', network_types)
             if esn_type == "difference":
                 build_args["dt_difference"] = st.number_input('dt_difference', value=0.1, step=0.01)
-            elif esn_type == "pca":
+            elif esn_type == "pca" or esn_type == "pca_noise":
                 build_args["pca_components"] = int(st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
                                                                    max_value=int(build_args["r_dim"]), key="pca2"))
                 build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
@@ -493,6 +524,9 @@ with st.sidebar:
                     build_args["norm_with_expl_var"] = st.checkbox("norm with explained var", value=False)
                 with right:
                     build_args["centering_pre_trans"] = st.checkbox("center data before transformation", value=True)
+                if esn_type == "pca_noise":
+                    build_args["train_noise_scale"] = st.number_input('train noise scale', value=0.1, step=0.1,
+                                                                      min_value=0.0, format="%f")
 
         elif esn_type in ["dynsys", "dynsys_pca"]:
             build_args["dyn_sys_opt"] = st.selectbox('dyn_sys_opt', dyn_sys_types)
@@ -639,7 +673,7 @@ with st.expander("Train RC"):
 
         show_reservoir = st.checkbox("Show Reservoir states: ")
         if show_reservoir:
-            fig = plot.show_reservoir_states(r_train)
+            fig = show_reservoir_states(r_train)
             st.plotly_chart(fig)
 
         show_reservoir_histograms_train = st.checkbox("Show Reservoir node value histograms - TRAIN: ")
@@ -957,4 +991,20 @@ with st.expander("Visualization of W_out magnitudes: "):
             data = {"components removed": out.T, "real": out_real}
 
             fig = plot.plot_3d_time_series_multiple(data, mode=mode, size=1)
+            st.plotly_chart(fig)
+
+        if st.checkbox("show r_gen reservoir states: "):
+            left, right = st.columns(2)
+            with left:
+                train_predict = st.selectbox("train or predict", ["train", "predict"], key="tp3")
+            with right:
+                log_y = st.checkbox("log_y", key="log_y2")
+            if train_predict == "train":
+                r_gen = r_gen_data["r_gen_train"]
+            elif train_predict == "predict":
+                r_gen = r_gen_data["r_gen_pred"]
+
+            if log_y:
+                r_gen = np.log(r_gen)
+            fig = show_reservoir_states(r_gen)
             st.plotly_chart(fig)
