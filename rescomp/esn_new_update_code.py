@@ -511,6 +511,8 @@ class _add_basic_r_to_rgen():
         self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
         self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
         self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
 
     def set_r_to_r_gen_fct(self, r_to_r_gen_opt="linear"):
         if type(r_to_r_gen_opt) == str:
@@ -530,6 +532,10 @@ class _add_basic_r_to_rgen():
                     r_gen[::2] = r.T[::2] ** 2
                     return r_gen.T
                 self._r_to_r_gen_fct = temp
+            elif r_to_r_gen_flag == 5:
+                self._r_to_r_gen_fct = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                self._r_to_r_gen_fct = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
         else:
             self._r_to_r_gen_opt = "CUSTOM"
             self._r_to_r_gen_fct = r_to_r_gen_opt
@@ -555,6 +561,8 @@ class _add_model_r_to_rgen():
         self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
         self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
         self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
 
         self.model = None
 
@@ -579,6 +587,12 @@ class _add_model_r_to_rgen():
                     r_gen[::2] = r.T[::2] ** 2
                     return r_gen.T
                 _r_to_r_gen_fct_no_model = temp
+
+            elif r_to_r_gen_flag == 5:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
+
         else:
             self._r_to_r_gen_opt = "CUSTOM"
             _r_to_r_gen_fct_no_model = r_to_r_gen_opt
@@ -603,20 +617,35 @@ class _add_pca_r_to_rgen():
         self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
         self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
         self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
 
         self._pca = None
         self._pca_components = None
         self._pca_comps_to_skip = None
-        self._norm_with_expl_var = None
+        self._norm_with_expl_var = None  # see "whitening" in sklearn.decomposition.PCA.
+        self._centering_pre_fit = None
 
-    def set_pca_components(self, pca_components, pca_comps_to_skip=0, norm_with_expl_var=False):
+        self._input_data_mean = None
+        self._matrix = None
+
+    def set_pca_components(self, pca_components, pca_comps_to_skip=0, norm_with_expl_var=False, centering_pre_trans=True):
         self._pca_components = pca_components
         self._pca_comps_to_skip = pca_comps_to_skip
         self._norm_with_expl_var = norm_with_expl_var
+        self._centering_pre_trans = centering_pre_trans
 
     def fit_pca(self, r_train):
         self._pca = decomposition.PCA(n_components=self._pca_components)
         self._pca.fit(r_train)
+
+        if self._centering_pre_trans:
+            self._input_data_mean = np.mean(r_train, axis=0)
+
+        self._matrix = self._pca.components_.T
+
+        if self._norm_with_expl_var:
+            self._matrix = self._matrix / np.sqrt(self._pca.explained_variance_)
 
     def set_r_to_r_gen_fct(self, r_to_r_gen_opt="linear"):
         if type(r_to_r_gen_opt) == str:
@@ -636,18 +665,112 @@ class _add_pca_r_to_rgen():
                     r_gen[::2] = r.T[::2] ** 2
                     return r_gen.T
                 _r_to_r_gen_fct_no_model = temp
+            elif r_to_r_gen_flag == 5:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
         else:
             self._r_to_r_gen_opt = "CUSTOM"
             _r_to_r_gen_fct_no_model = r_to_r_gen_opt
 
-        if self._norm_with_expl_var:
-            self._r_to_r_gen_fct = lambda r, x: (
-                _r_to_r_gen_fct_no_model((self._pca.transform(r[np.newaxis, :])/np.sqrt(self._pca.explained_variance_))[0, self._pca_comps_to_skip:], x))
+        # NOTE: the [np.newaxis, :] essentially transforms the input r to r.T (and adds an axis). Thats why the matrix
+        # is multiplied on the right side.
+
+        if self._centering_pre_trans:
+            self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+                ((r - self._input_data_mean)[np.newaxis, :] @ self._matrix)[0, self._pca_comps_to_skip:],
+                x)
         else:
-            self._r_to_r_gen_fct = lambda r, x: (_r_to_r_gen_fct_no_model(self._pca.transform(r[np.newaxis, :])[0, self._pca_comps_to_skip:], x))
+            self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+                (r[np.newaxis, :] @ self._matrix)[0, self._pca_comps_to_skip:],
+                x)
+
+        # if self._norm_with_expl_var and self._centering_pre_trans:
+        #     self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+        #         (((r - self._input_data_mean)[np.newaxis, :]) @ (self._pca.components_.T) / np.sqrt(self._pca.explained_variance_))[0, self._pca_comps_to_skip:],
+        #         x)
+        #
+        # elif not self._norm_with_expl_var and self._centering_pre_trans:
+        #     self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+        #         (((r - self._input_data_mean)[np.newaxis, :]) @ (
+        #             self._pca.components_).T)[0, self._pca_comps_to_skip:],
+        #         x)
+        #
+        # elif not self._norm_with_expl_var and not self._centering_pre_trans:
+        #     self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+        #         ((r[np.newaxis, :]) @ (
+        #             self._pca.components_).T)[0, self._pca_comps_to_skip:],
+        #         x)
+        #
+        # if self._norm_with_expl_var and not self._centering_pre_trans:
+        #     self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+        #         ((r[np.newaxis, :] / np.sqrt(self._pca.explained_variance_)) @ (
+        #             self._pca.components_).T)[0, self._pca_comps_to_skip:],
+        #         x)
+
+        # if self._norm_with_expl_var:
+        #     self._r_to_r_gen_fct = lambda r, x: (
+        #         _r_to_r_gen_fct_no_model((self._pca.transform(r[np.newaxis, :])/np.sqrt(self._pca.explained_variance_))[0, self._pca_comps_to_skip:], x))
+        # else:
+        #     self._r_to_r_gen_fct = lambda r, x: (_r_to_r_gen_fct_no_model(self._pca.transform(r[np.newaxis, :])[0, self._pca_comps_to_skip:], x))
 
         self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[0]
 
+
+class _add_centered_r_to_rgen():
+    """
+    add r to r_gen behvaiour, where r_gen = standard_RGEN_SETTINGS(r - mean_train_r)
+    SETS:
+    - self._r_to_r_gen_fct: r -> r_gen (any dimension)
+    """
+    def __init__(self):
+
+        self._r_to_r_gen_opt = None
+        self._r_to_r_gen_synonyms = utilities._SynonymDict()
+        self._r_to_r_gen_synonyms.add_synonyms(0, ["linear_r", "simple", "linear"])
+        self._r_to_r_gen_synonyms.add_synonyms(1, "linear_and_square_r")
+        self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
+        self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
+
+        self._input_data_mean = None
+
+    def calc_mean(self, r_train):
+        self._input_data_mean = np.mean(r_train, axis=0)
+
+    def set_r_to_r_gen_fct(self, r_to_r_gen_opt="linear"):
+        if type(r_to_r_gen_opt) == str:
+            self._r_to_r_gen_opt = r_to_r_gen_opt
+            r_to_r_gen_flag = self._r_to_r_gen_synonyms.get_flag(r_to_r_gen_opt)
+            if r_to_r_gen_flag == 0:
+                _r_to_r_gen_fct_no_model = lambda r, x: r
+            elif r_to_r_gen_flag == 1:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, r ** 2))
+            elif r_to_r_gen_flag == 2:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, 1))
+            elif r_to_r_gen_flag == 3:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((np.hstack((r, r ** 2)), 1))
+            elif r_to_r_gen_flag == 4:
+                def temp(r, x):
+                    r_gen = np.copy(r).T
+                    r_gen[::2] = r.T[::2] ** 2
+                    return r_gen.T
+                _r_to_r_gen_fct_no_model = temp
+            elif r_to_r_gen_flag == 5:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
+        else:
+            self._r_to_r_gen_opt = "CUSTOM"
+            _r_to_r_gen_fct_no_model = r_to_r_gen_opt
+
+        self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
+                r - self._input_data_mean,
+                x)
+
+        self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[0]
 
 
 class _add_w_in():
@@ -1105,6 +1228,24 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
         for i in range(train_steps):
             r_gen[i, :] = self._r_to_r_gen_fct(r_train[i, :], None)
 
+        # DEBUGGING:
+
+        # print("A.T @ A: ", self._matrix.T @ self._matrix)
+        # mean_r = np.mean(r_train, axis=0)
+        # A = self._pca.components_
+        # is_unitary = np.allclose(np.eye(len(A)), A.dot(A.T.conj()))
+        # print("IS UNITARY: ", is_unitary)
+        # # pca_manual = np.dot(r_train - mean_r, A.T)
+        # pca_manual = (r_train - mean_r) @ (A.T)
+        #
+        # mean_r @ (A.T)
+        #
+        # print("PCA MANUAL - PCA REAL: ", pca_manual - r_gen)
+        #
+        # print("R TRAIN MEAN PRE: ", np.mean(r_train, axis=0))
+        # print("R GEN TRAIN MEAN: ", np.mean(r_gen, axis=0))
+        # END DEBUG
+
         self._saved_r_gen = r_gen
         self._fit_w_out(y_train, self._saved_r_gen)
 
@@ -1112,7 +1253,8 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
             self._saved_out = (self._w_out @ self._saved_r_gen.T).T
 
     def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
-              pca_components=None, pca_comps_to_skip=0, norm_with_expl_var=False, r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              pca_components=None, pca_comps_to_skip=0, norm_with_expl_var=False, centering_pre_trans=True,
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
@@ -1122,7 +1264,8 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
             pca_components = r_dim
 
         self.set_pca_components(pca_components, pca_comps_to_skip=pca_comps_to_skip,
-                                norm_with_expl_var=norm_with_expl_var)
+                                norm_with_expl_var=norm_with_expl_var, centering_pre_trans=centering_pre_trans)
+
         self._r_to_r_gen_opt = r_to_r_gen_opt
 
         self._x_dim = x_dim
@@ -1229,6 +1372,105 @@ class ESN_dynsys_pca(_ResCompCore, _add_basic_defaults, _add_dyn_sys_update_fct,
         self._r_to_r_gen_opt = r_to_r_gen_opt
 
         self.set_activation_function(act_fct_opt=act_fct_opt)
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_normal_centered(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_centered_r_to_rgen,
+                 _add_w_in, _add_standard_input_coupling, _add_standard_y_to_x):
+    """
+    Pretty standard ESN class
+    """
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        _add_centered_r_to_rgen.__init__(self)
+        _add_w_in.__init__(self)
+        _add_standard_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+    def train(self, use_for_train, sync_steps=0, reset_res_state=True, save_y_train=False, **kwargs):
+        # very similar to ESN_pca
+
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+
+        if save_y_train:
+            self._saved_y_train = y_train
+
+        # r to r_gen with pca
+        if reset_res_state:
+            self.reset_r()
+
+        self.drive(sync)
+
+        kwargs["save_r"] = True
+        kwargs["save_r_gen"] = False
+
+        save_out = False
+        if "save_out" in kwargs.keys():
+            if kwargs["save_out"]:  # can not save out during training before w_out is calculated
+                save_out = True
+                kwargs["save_out"] = False
+
+        self.drive(x_train, **kwargs)
+        r_train = self.get_r()
+
+        self.calc_mean(r_train)
+        self.set_r_to_r_gen_fct(r_to_r_gen_opt=self._r_to_r_gen_opt)
+
+        train_steps = r_train.shape[0]
+        r_gen = np.zeros((train_steps, self._r_gen_dim))
+        for i in range(train_steps):
+            r_gen[i, :] = self._r_to_r_gen_fct(r_train[i, :], None)
+
+        self._saved_r_gen = r_gen
+        self._fit_w_out(y_train, self._saved_r_gen)
+
+        if save_out:
+            self._saved_out = (self._w_out @ self._saved_r_gen.T).T
+
+    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
+              bias_seed=None, w_in_seed=None):
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        self._r_to_r_gen_opt = r_to_r_gen_opt
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
+        # self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
         if bias_seed is not None:
             with utilities.temp_seed(bias_seed):
                 self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
