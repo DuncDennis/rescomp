@@ -13,15 +13,31 @@ import rescomp.plotting as plot
 import rescomp.statistical_tests as stat_test
 plt.style.use('dark_background')
 
-lyapunov_exponents = {"Lorenz": 0.9056, "Roessler": 0.0714, "Chua": 0.3271, "Chen": 2.027}
+lyapunov_exponents = {"lorenz": 0.9056, "roessler": 0.0714, "chua": 0.3271, "chen": 2.027, "complex_butterfly": 0.1690,
+                      "rucklidge": 0.0643, "thomas": 0.0349, "windmi": 0.0755, "lorenz_plus_roessler": None,
+                      "logistic": None, "lorenz96": None, "simplest_quadratic": 0.0551, "simplest_cubic": 0.0837,
+                      "simplest_piecewise": 0.0362,
+                      }
 
-esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "input_to_rgen", "pca_drop"]
-systems_to_predict = ["Lorenz", "Roessler", "Chua", "Chen", "Lorenz_plus_Roessler", "Logistic"]
+starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.array([-9, 0, 0]),
+                   "chua": np.array([0, 0, 0.6]), "chen": np.array([-10, 0, 37]),
+                   "complex_butterfly": np.array([0.2, 0.0, 0.0]),
+                   "rucklidge": np.array([1.0, 0.0, 4.5]), "thomas": np.array([0.1, 0.0, 0.0]),
+                   "windmi": np.array([0.0, 0.8, 0.0]), "lorenz_plus_roessler": None, "logistic": None,
+                   "lorenz96": None, "simplest_quadratic": np.array([-0.9, 0, 0.5]),
+                   "simplest_cubic": np.array([0.0, 0.96, 0.0]),
+                   "simplest_piecewise": np.array([0.0, -0.7, 0.0]),
+                   }
+
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "normal_centered", "input_to_rgen", "pca_drop"]
+systems_to_predict = ["lorenz", "roessler", "chua", "chen", "complex_butterfly", "rucklidge", "thomas", "windmi",
+                      "lorenz_plus_roessler", "logistic", "lorenz96", "simplest_quadratic", "simplest_cubic", "simplest_piecewise"]
 w_in_types = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
 network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
 activation_functions = ["tanh", "sigmoid", "relu", "linear"]
-r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt"]
+r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt",
+                    "exponential_r", "bias_and_exponential_r"]
 dyn_sys_types = ["L96", "KS"]
 
 
@@ -33,6 +49,7 @@ esn_hash_funcs = {rescomp.esn_new_update_code.ESN_normal: hash,
                   rescomp.esn_new_update_code.ESN_pca_adv: hash,
                   rescomp.esn_new_update_code.ESN_pca: hash,
                   rescomp.esn_new_update_code.ESN_dynsys_pca: hash,
+                  rescomp.esn_new_update_code.ESN_normal_centered: hash,
                   }
 
 
@@ -52,33 +69,53 @@ def get_random_int():
 @st.experimental_memo
 def simulate_data(system_option, dt, all_time_steps, normalize):
     print("simulate data")
-    if system_option == "Lorenz":
-        starting_point = np.array([0, -0.01, 9])
+    starting_point = starting_points[system_option]
+    if system_option == "lorenz":
         time_series = rescomp.simulations.simulate_trajectory("lorenz", dt, all_time_steps, starting_point)
-    elif system_option == "Roessler":
-        starting_point = np.array([-9, 0, 0])
+    elif system_option == "roessler":
         time_series = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps,
                                                               starting_point)
-    elif system_option == "Chua":
-        starting_point = np.array([0, 0, 0.6])
+    elif system_option == "chua":
         time_series = rescomp.simulations.simulate_trajectory("chua", dt, all_time_steps, starting_point)
-    elif system_option == "Chen":
-        starting_point = np.array([-10, 0, 37])
+    elif system_option == "chen":
         time_series = rescomp.simulations.simulate_trajectory("chen", dt, all_time_steps, starting_point)
 
-    elif system_option == "Lorenz_plus_Roessler":
+    elif system_option == "lorenz_plus_roessler":
         starting_point = np.array([0, 1, 0])
         time_series_1 = rescomp.simulations.simulate_trajectory("lorenz", dt, all_time_steps, starting_point)
         time_series_2 = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps, starting_point)
         time_series = time_series_1 + time_series_2
 
-    elif system_option == "Logistic":
+    elif system_option == "logistic":
         starting_point = np.array([0.3])
         r = 4
         time_series = rescomp.simulations.simulate_trajectory(sys_flag="logistic", time_steps=all_time_steps,
                                                               starting_point=starting_point, r=r)
         time_series = time_series - 0.5
         # time_series = time_series[:, np.newaxis]
+
+    elif system_option == "lorenz96":
+        starting_point = np.random.randn(30)
+        time_series = rescomp.simulations.simulate_trajectory("lorenz_96", dt, all_time_steps,
+                                                              starting_point=starting_point)
+    elif system_option == "complex_butterfly":
+        time_series = rescomp.simulations.simulate_trajectory("complex_butterfly", dt, all_time_steps, starting_point)
+
+    elif system_option == "rucklidge":
+        time_series = rescomp.simulations.simulate_trajectory("rucklidge", dt, all_time_steps, starting_point)
+
+    elif system_option == "thomas":
+        time_series = rescomp.simulations.simulate_trajectory("thomas", dt, all_time_steps, starting_point)
+
+    elif system_option == "windmi":
+        time_series = rescomp.simulations.simulate_trajectory("windmi", dt, all_time_steps, starting_point)
+
+    elif system_option == "simplest_quadratic":
+        time_series = rescomp.simulations.simulate_trajectory("simplest_quadratic", dt, all_time_steps, starting_point)
+    elif system_option == "simplest_cubic":
+        time_series = rescomp.simulations.simulate_trajectory("simplest_cubic", dt, all_time_steps, starting_point)
+    elif system_option == "simplest_piecewise":
+        time_series = rescomp.simulations.simulate_trajectory("simplest_piecewise", dt, all_time_steps, starting_point)
 
     if normalize:
         time_series = rescomp.utilities.normalize_timeseries(time_series)
@@ -103,6 +140,8 @@ def build(esntype, seed, x_dim=3, **kwargs):
         esn = esn_new.ESN_pca()
     elif esntype == "dynsys_pca":
         esn = esn_new.ESN_dynsys_pca()
+    elif esntype == "normal_centered":
+        esn = esn_new.ESN_normal_centered()
 
     np.random.seed(seed)
     esn.build(x_dim, **kwargs)
@@ -393,7 +432,7 @@ with st.sidebar:
 
     system_option = st.sidebar.selectbox(
         'System to Predict', systems_to_predict)
-    dt = st.number_input('dt', value=0.05, step=0.01)
+    dt = st.number_input('dt', value=0.05, step=0.01, format="%f")
     with st.expander("Time Steps"):
         t_train_disc = int(st.number_input('t_train_disc', value=1000, step=1))
         t_train_sync = int(st.number_input('t_train_sync', value=300, step=1))
@@ -437,7 +476,7 @@ with st.sidebar:
 
     # settings depending on esn_type:
     with st.expander("ESN type specific settings:"):
-        if esn_type in ["normal", "difference", "input_to_rgen", "pca"]:
+        if esn_type in ["normal", "difference", "input_to_rgen", "pca", "normal_centered"]:
             # network:
             build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1, format="%f")
             build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1)
@@ -449,7 +488,11 @@ with st.sidebar:
                                                                    max_value=int(build_args["r_dim"]), key="pca2"))
                 build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
                                                                    max_value=int(build_args["r_dim"])-1))
-                build_args["norm_with_expl_var"] = st.checkbox("norm with explained var", value=False)
+                left, right = st.columns(2)
+                with left:
+                    build_args["norm_with_expl_var"] = st.checkbox("norm with explained var", value=False)
+                with right:
+                    build_args["centering_pre_trans"] = st.checkbox("center data before transformation", value=True)
 
         elif esn_type in ["dynsys", "dynsys_pca"]:
             build_args["dyn_sys_opt"] = st.selectbox('dyn_sys_opt', dyn_sys_types)
@@ -732,9 +775,9 @@ with st.expander("Advanced Measures on Prediction: "):
     # show_model_likeness = st.checkbox("Show Model Likeness:", disabled=disabled)
     # if show_model_likeness:
     #     # PROTOTYPE:
-    #     if system_option == "Lorenz":
+    #     if system_option == "lorenz":
     #         iterator = lambda x: rescomp.simulations.simulate_trajectory("lorenz", dt, 2, x)[-1]
-    #     elif system_option == "Roessler":
+    #     elif system_option == "roessler":
     #         iterator = lambda x: rescomp.simulations.simulate_trajectory("roessler_sprott", dt, 2, x)[-1]
     #     nr_steps_model_likeness = st.slider("steps", 2, 200, 10)
     #     fig = plot.plot_model_likeness(y_pred, iterator, steps=nr_steps_model_likeness, figsize=(15, 4))
@@ -843,10 +886,17 @@ with st.expander("Visualization of arbitrary PCA components: "):
         st.write("Explained variance of pca components: ")
         st.line_chart(explained_var)
 
+        explained_var_cumulative = np.cumsum(explained_var)
+        st.write("Explained variance cumulative of pca components: ")
+        st.line_chart(explained_var_cumulative)
+
 
 with st.expander("Visualization of W_out magnitudes: "):
     if st.checkbox("Plot W_out magnitudes and r_gen std"):
         w_out = esn._w_out
+
+        w_out_norm = w_out.flatten().dot(w_out.flatten())
+        st.write(f"|W|^2 = {np.round(w_out_norm, 1)}")
 
         r_gen_data = {"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}
 

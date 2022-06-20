@@ -65,8 +65,11 @@ hdf5_files = [x.name.split(".")[0] for x in hdf5_files if x.name.endswith(".hdf5
 with st.sidebar:
     option = st.sidebar.selectbox(
         'Select experiment', hdf5_files)
+
     st.markdown("""---""")
 
+st.subheader(f"{option}")
+st.markdown("""---""")
 # option_best = st.sidebar.button("Get best Parameters")
 # TODO: Add this functionality
 
