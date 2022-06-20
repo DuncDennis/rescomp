@@ -9,6 +9,7 @@ from rkstiff.grids import construct_x_kx_rfft
 from rkstiff.derivatives import dx_rfft
 from rkstiff.if34 import IF34
 
+
 def _roessler(x, a=0.5, b=2, c=4):
     """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
 
@@ -315,6 +316,76 @@ def _thomas(x):
         raise Exception('check shape of x, should have 3 components')
 
 
+def _windmi(x):
+    """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
+
+    Args:
+        x (np.ndarray): (x,y,z) coordinates
+
+    Returns:
+        (np.ndarray): (dx/dt, dy/dt, dz/dt) corresponding to input x
+
+    """
+    a = 0.7
+    b = 2.5
+    np.array(x)
+    if x.shape == (3,):
+        return np.array([x[1], x[2], -a*x[2] - x[1] + b - np.exp(x[0])])
+    else:
+        raise Exception('check shape of x, should have 3 components')
+
+
+def _simplest_quadratic(x, a=2.017):
+    """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
+
+    Args:
+        x (np.ndarray): (x,y,z) coordinates
+
+    Returns:
+        (np.ndarray): (dx/dt, dy/dt, dz/dt) corresponding to input x
+
+    """
+    np.array(x)
+    if x.shape == (3,):
+        return np.array([x[1], x[2], -a*x[2] + x[1]**2 - x[0]])
+    else:
+        raise Exception('check shape of x, should have 3 components')
+
+
+def _simplest_cubic(x, a=2.028):
+    """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
+
+    Args:
+        x (np.ndarray): (x,y,z) coordinates
+
+    Returns:
+        (np.ndarray): (dx/dt, dy/dt, dz/dt) corresponding to input x
+
+    """
+    np.array(x)
+    if x.shape == (3,):
+        return np.array([x[1], x[2], -a*x[2] + x[1]**2 * x[0] - x[0]])
+    else:
+        raise Exception('check shape of x, should have 3 components')
+
+
+def _simplest_piecewise(x, a=0.6):
+    """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
+
+    Args:
+        x (np.ndarray): (x,y,z) coordinates
+
+    Returns:
+        (np.ndarray): (dx/dt, dy/dt, dz/dt) corresponding to input x
+
+    """
+    np.array(x)
+    if x.shape == (3,):
+        return np.array([x[1], x[2], -a*x[2] - x[1] + np.abs(x[0]) - 1])
+    else:
+        raise Exception('check shape of x, should have 3 components')
+
+
 # TODO: Rewrite using numpy vectorization to make faster
 def _lorenz_96(x, force=8):
     """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
@@ -391,7 +462,10 @@ _sys_flag_synonyms.add_synonyms(15, "kuramoto_sivashinsky_custom")
 _sys_flag_synonyms.add_synonyms(16, "logistic")
 _sys_flag_synonyms.add_synonyms(17, "henon")
 _sys_flag_synonyms.add_synonyms(18, "lorenz_4D")
-
+_sys_flag_synonyms.add_synonyms(19, "windmi")
+_sys_flag_synonyms.add_synonyms(20, "simplest_quadratic")
+_sys_flag_synonyms.add_synonyms(21, "simplest_cubic")
+_sys_flag_synonyms.add_synonyms(22, "simplest_piecewise")
 
 
 def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
@@ -520,6 +594,14 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
         discrete_map = True
     elif sys_flag_syn == 18:
         f = lambda x: _lorenz_4D(x, **kwargs)
+    elif sys_flag_syn == 19:
+        f = lambda x: _windmi(x, **kwargs)
+    elif sys_flag_syn == 20:
+        f = lambda x: _simplest_quadratic(x, **kwargs)
+    elif sys_flag_syn == 21:
+        f = lambda x: _simplest_cubic(x, **kwargs)
+    elif sys_flag_syn == 22:
+        f = lambda x: _simplest_piecewise(x, **kwargs)
     else:
         raise Exception('sys_flag not recoginized')
 
