@@ -10,27 +10,29 @@ simulation_args = {
     "system": "lorenz",
     "dt": 0.05,
     "normalize": True,
-    "nr_of_time_intervals": 1,
+    "nr_of_time_intervals": 10,
     "train_noise": 0.0,
     "t_train_disc": 1000,
     "t_train_sync": 300,
-    "t_train": 5000,
+    "t_train": 2000,
     "t_pred_disc": 1000,
     "t_pred_sync": 300,
-    "t_pred": 700,
+    "t_pred": 800,
 }
 
 parameters = {
-    "type": ["pca_layer"],
-    "r_dim": [3000],
+    "type": ["pca_layer", "normal"],
+    "r_dim": [500],
+    "norm_with_expl_var": [True],
+    "centering_pre_trans": [True],
     "r_to_r_gen_opt": "output_bias",
     "act_fct_opt": "tanh",
     "node_bias_opt": "constant_bias",
     "bias_scale": 0.1,
-    "reg_param": 1e-7,
-    "w_in_opt": "random_sparse",
+    "reg_param": [1e-16, 1e-14, 1e-12, 1e-10, 1e-8, 1e-6],
+    "w_in_opt": "ordered_sparse",
     "w_in_scale": [1.0],
-    "n_rad": [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5],
+    "n_rad": 0.1,
     "n_avg_deg": 5.0,
 }
 
@@ -39,8 +41,10 @@ parameters = {
 def model_creation_function(**kwargs):
 
     x_dim = 3
-
-    esn = ESN.ESN_pca()
+    if kwargs["type"] == "normal":
+        esn = ESN.ESN_normal()
+    elif kwargs["type"] == "pca_layer":
+        esn = ESN.ESN_pca()
 
     build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, kwargs)
 
@@ -64,21 +68,17 @@ def save_to_yaml(parameter_dict, name=""):
 
 if __name__ == "__main__":
     # DEFINE EXPERIMENT PARAMETERS:
-    name = "13_06_2022_lorenz_w_out"
+    name = "14_06_2022_Lorenz_reg_param_sweep"
     seed = 110
-    N_ens = 3
+    N_ens = 20
     print("Simulating Data")
-
-    starting_point = np.array([0, -0.01, 9])
-
-    x_train, x_pred_list = st.data_simulation_new(**simulation_args, sim_data_return=False, starting_point=starting_point,
-                                                  t_settings_as_real_time=False)
+    x_train, x_pred_list = st.data_simulation_new(**simulation_args, sim_data_return=False, t_settings_as_real_time=False)
 
     parameter_dict = {"sim_opts": simulation_args, "build_parameters": parameters, "seed": seed, "N_ens": N_ens}
 
     print("Running Experiment")
     np.random.seed(seed)
-    sweep_tester = st.PCAWoutMeasurement_mid_point()
+    sweep_tester = st.StatisticalModelTesterSweep()
     sweep_tester.set_model_creation_function(model_creation_function)
     sweep_tester.set_model_prediction_function(model_prediction_function)
     sweep_tester.do_ens_experiment_sweep(N_ens, x_pred_list, **{**parameters, **simulation_args})
