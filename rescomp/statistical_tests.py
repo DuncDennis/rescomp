@@ -620,10 +620,10 @@ def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_
 
 
 # CUSTOM OVERWRITING OF CLASS FOR SPECIFIC TESTS:
-class PCAWoutMeasurement(StatisticalModelTesterSweep):
+class PCAWoutMeasurement_mid_point(StatisticalModelTesterSweep):
     # Use with PCA esn to discover the mean of the w out distribution
     def __init__(self):
-        super(PCAWoutMeasurement, self).__init__()
+        super(PCAWoutMeasurement_mid_point, self).__init__()
 
     def do_ens_experiment_internal(self, nr_model_realizations, x_pred_list, **kwargs):
         # nr_of_time_intervals = len(x_pred_list)
@@ -640,5 +640,30 @@ class PCAWoutMeasurement(StatisticalModelTesterSweep):
             if i == 0:
                 results = np.zeros((nr_model_realizations))
             results[i] = mean_index
+
+        self.results = results
+
+class PCAWoutMeasurement_summed(StatisticalModelTesterSweep):
+    # Use with PCA esn to discover the mean of the w out distribution
+    # Here save the summed abs w_out for each component
+    def __init__(self):
+        super(PCAWoutMeasurement_summed, self).__init__()
+
+    def do_ens_experiment_internal(self, nr_model_realizations, x_pred_list, **kwargs):
+        # nr_of_time_intervals = len(x_pred_list)
+
+        for i in range(nr_model_realizations):
+            print(f"Realization: {i + 1}/{nr_model_realizations} ...")
+            model = self.model_creation_function(**kwargs)
+            w_out = model._w_out
+
+            w_out_abs = np.abs(w_out)
+            w_out_summed = np.sum(w_out_abs, axis=0)
+
+            size = w_out_summed.size
+
+            if i == 0:
+                results = np.zeros((nr_model_realizations, size))
+            results[i, :] = w_out_summed
 
         self.results = results
