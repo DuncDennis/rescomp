@@ -88,8 +88,8 @@ if option is not None:
     trajs, params_to_show = get_trajectories(multiselect_dict, f)
 
     with st.expander("W_out_mean_index vs. Parameter"):
-        plot_valid_times_vs_param = st.checkbox("W_out_mean_index vs. Params")
-        if plot_valid_times_vs_param:
+        w_out_mean_index_vs_parameter = st.checkbox("W_out_mean_index vs. Params")
+        if w_out_mean_index_vs_parameter:
             st.header("W_out_mean_index vs. Parameter:")
 
             multiselect_dict_only_multiples = {key: val for key, val in multiselect_dict.items() if len(val)>1}
@@ -102,3 +102,25 @@ if option is not None:
             fig = plot.plot_w_out_index_sweep(trajs, params_to_show, f, sweep_variable, figsize=(800, 500), log_x=log_x,
                                               average_type=average_type)
             st.plotly_chart(fig)
+
+    with st.expander("W_out_mean_distribution vs. Parameter"):
+        w_out_mean_distribution = st.checkbox("W_out_mean_distribution vs. Params")
+        if w_out_mean_distribution:
+            st.header("W_out_mean_distribution vs. Parameter:")
+            print(trajs)
+            for i_traj, traj in enumerate(trajs):
+                data = f["runs"][traj][:]
+                figs = plot.plot_w_out_mean_distribution(data)
+                for fig in figs:
+                    st.plotly_chart(fig)
+                print(data.shape)
+            # multiselect_dict_only_multiples = {key: val for key, val in multiselect_dict.items() if len(val)>1}
+
+            # sweep_variable = st.selectbox("sweep variable", multiselect_dict_only_multiples.keys())
+            #
+            # log_x = st.checkbox("log_x")
+            # average_type = st.selectbox("average_type", ["mean", "median"])
+            #
+            # fig = plot.plot_w_out_index_sweep(trajs, params_to_show, f, sweep_variable, figsize=(800, 500), log_x=log_x,
+            #                                   average_type=average_type)
+            # st.plotly_chart(fig)
