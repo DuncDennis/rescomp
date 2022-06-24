@@ -1123,3 +1123,35 @@ def plot_w_out_index_sweep(trajs, params_to_show, f, sweep_variable, figsize=(15
                 'exponentformat': 'E'}
         )
     return fig
+
+
+def plot_w_out_mean_distribution(data):
+    """
+    UNDER CONSTRUCTION and ugly coding (quick)
+    """
+    data = data[:, :-1]
+    index = np.arange(data.shape[1])
+    df = pd.DataFrame()
+    df["avg_w_out_abs"] = np.mean(data, axis=0)
+    df["std_w_out_abs"] = np.std(data, axis=0)
+    df["mean_by_std_w_out_abs"] = df["avg_w_out_abs"]/df["std_w_out_abs"]
+    df["median_w_out_abs"] = np.median(data, axis=0)
+    df["index"] = index
+
+    fig1 = px.bar(df, x="index", y="avg_w_out_abs")
+    fig2 = px.bar(df, x="index", y="std_w_out_abs")
+    fig3 = px.bar(df, x="index", y="median_w_out_abs")
+    fig4 = px.bar(df, x="index", y="mean_by_std_w_out_abs")
+    return fig1, fig2, fig3, fig4
+
+
+
+
+
+def plot_1d_time_delay(time_series, i_dim=0, time_delay=1, line=True):
+    time_steps = time_series.shape[0]
+    time_series_new = np.zeros((time_steps - time_delay*3, 3))
+    time_series_new[:, 0] = time_series[:-time_delay*3, i_dim]
+    time_series_new[:, 1] = time_series[1:-time_delay*3+1, i_dim]
+    time_series_new[:, 2] = time_series[2:-time_delay*3+2, i_dim]
+    return plot_3d_time_series(time_series_new, line=line)
