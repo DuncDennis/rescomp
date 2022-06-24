@@ -11,14 +11,14 @@ from rkstiff.if34 import IF34
 
 
 # standard parameters from "Sprott: Chaos and Time-Series Analysis" (not complete) Only 3D:
-standard_lyapunov_exponents = {"lorenz": 0.9056, "roessler": 0.0714, "chua": 0.3271, "chen": 2.027,
+standard_lyapunov_exponents = {"lorenz": 0.9056, "roessler_sprott": 0.0714, "chua": 0.3271, "chen": 2.027,
                                "complex_butterfly": 0.1690,
                               "rucklidge": 0.0643, "thomas": 0.0349, "windmi": 0.0755,
                               "simplest_quadratic": 0.0551, "simplest_cubic": 0.0837,
-                              "simplest_piecewise": 0.0362
+                              "simplest_piecewise": 0.0362, "simplest_driven_chaotic": 0.1633
                               }
 
-standard_starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.array([-9, 0, 0]),
+standard_starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler_sprott": np.array([-9, 0, 0]),
                            "chua": np.array([0, 0, 0.6]), "chen": np.array([-10, 0, 37]),
                            "complex_butterfly": np.array([0.2, 0.0, 0.0]),
                            "rucklidge": np.array([1.0, 0.0, 4.5]), "thomas": np.array([0.1, 0.0, 0.0]),
@@ -26,7 +26,22 @@ standard_starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.ar
                            "simplest_quadratic": np.array([-0.9, 0, 0.5]),
                            "simplest_cubic": np.array([0.0, 0.96, 0.0]),
                            "simplest_piecewise": np.array([0.0, -0.7, 0.0]),
+                           "simplest_driven_chaotic": np.array([0.0, 0.0, 0.0])
                            }
+
+
+def _simplest_driven_chaotic(x, omega=1.88):
+    """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
+        the z coordinate is the time, since it's a driven chaotic system
+
+    Returns:
+        (np.ndarray): (dx/dt, dy/dt, dz/dt) corresponding to input x
+    """
+    np.array(x)
+    if x.shape == (3,):
+        return np.array([x[1], -(x[0]**3) + np.sin(omega * x[2]), 1])
+    else:
+        raise Exception('check shape of x, should have 3 components')
 
 
 def _roessler(x, a=0.5, b=2, c=4):
@@ -485,6 +500,7 @@ _sys_flag_synonyms.add_synonyms(19, "windmi")
 _sys_flag_synonyms.add_synonyms(20, "simplest_quadratic")
 _sys_flag_synonyms.add_synonyms(21, "simplest_cubic")
 _sys_flag_synonyms.add_synonyms(22, "simplest_piecewise")
+_sys_flag_synonyms.add_synonyms(23, "simplest_driven_chaotic")
 
 
 def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
@@ -621,6 +637,8 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
         f = lambda x: _simplest_cubic(x, **kwargs)
     elif sys_flag_syn == 22:
         f = lambda x: _simplest_piecewise(x, **kwargs)
+    elif sys_flag_syn == 23:
+        f = lambda x: _simplest_driven_chaotic(x, **kwargs)
     else:
         raise Exception('sys_flag not recoginized')
 
