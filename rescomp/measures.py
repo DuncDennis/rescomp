@@ -1249,6 +1249,50 @@ def distances_to_closest_point(y_to_test, y_true):
         closest_distance[i] = np.min(diff_len)
     return closest_distance
 
+
+def power_spectrum_componentwise(data, period=False, dt=1):
+    """
+    Calculates the fourier spectrum of the n-dimensional time_series.
+    For every dimension, calculate the FFT and then take the L2 norm over the dimensions.
+    Return the results over the preiod (time-domain) or frequency (frequency-domain)
+    Args:
+        data (np.ndarray): time series to transform, shape (T, d)
+        period (bool): if True return time as xout
+        dt: if the timeincrement of the time_series is known
+
+    Returns:
+        xout (np.ndarray): the x axis
+        yout (np.ndarray): (T/2, d). for every dimension the powerspectrum
+    """
+    # fourier transform:
+    fourier = np.fft.fft(data, axis=0)
+
+    time_steps, dimension = data.shape
+
+    freq = np.fft.fftfreq(time_steps)
+
+    half_fourier = fourier[1:int(time_steps/2), :]
+    half_freq = freq[1:int(time_steps/2)]/dt
+
+    yout = np.abs(half_fourier)**2
+    if period:
+        half_period = 1/half_freq
+        xout = half_period
+    else:
+        xout = half_freq
+
+    return xout, yout
+
+def mean_frequency_by_power_spectrum(data, period=False, dt=1):
+    xout, yout = power_spectrum_componentwise(data, period=period, dt=dt)
+
+    freqs, dimension = yout.shape
+    mean_freq = np.zeros(dimension)
+    for i in range(dimension):
+        mean_freq[i] = np.sum(xout * yout[:, i]) / np.sum(yout[:, i])
+    return mean_freq
+
+
 pass  # TODO: Generalize Joschka's Lyap. Exp. Sprectrum from Reservoir code
 # def reservoir_lyapunov_spectrum(esn, nr_steps=2500, return_convergence=False,
 #                                 dt=1., starting_point=None):
