@@ -11,11 +11,12 @@ import rescomp
 import rescomp.esn_new_update_code as esn_new
 import rescomp.plotting as plot
 import rescomp.statistical_tests as stat_test
+
 plt.style.use('dark_background')
 
 lyapunov_exponents = rescomp.simulations.standard_lyapunov_exponents
 lyapunov_exponents_extra = {"lorenz_plus_roessler": None,
-                      "logistic": None, "lorenz96": None, "periodic": None, "lorenz1D": None}
+                            "logistic": None, "lorenz96": None, "periodic": None, "lorenz1D": None}
 lyapunov_exponents.update(lyapunov_exponents_extra)
 
 starting_points = rescomp.simulations.standard_starting_points
@@ -23,25 +24,12 @@ starting_points_extra = {"lorenz_plus_roessler": None, "logistic": None,
                          "lorenz96": None, "periodic": None, "lorenz1D": None}
 starting_points.update(starting_points_extra)
 
-# lyapunov_exponents = {"lorenz": 0.9056, "roessler": 0.0714, "chua": 0.3271, "chen": 2.027, "complex_butterfly": 0.1690,
-#                       "rucklidge": 0.0643, "thomas": 0.0349, "windmi": 0.0755, "lorenz_plus_roessler": None,
-#                       "logistic": None, "lorenz96": None, "simplest_quadratic": 0.0551, "simplest_cubic": 0.0837,
-#                       "simplest_piecewise": 0.0362,
-#                       }
-#
-# starting_points = {"lorenz": np.array([0, -0.01, 9]), "roessler": np.array([-9, 0, 0]),
-#                    "chua": np.array([0, 0, 0.6]), "chen": np.array([-10, 0, 37]),
-#                    "complex_butterfly": np.array([0.2, 0.0, 0.0]),
-#                    "rucklidge": np.array([1.0, 0.0, 4.5]), "thomas": np.array([0.1, 0.0, 0.0]),
-#                    "windmi": np.array([0.0, 0.8, 0.0]), "lorenz_plus_roessler": None, "logistic": None,
-#                    "lorenz96": None, "simplest_quadratic": np.array([-0.9, 0, 0.5]),
-#                    "simplest_cubic": np.array([0.0, 0.96, 0.0]),
-#                    "simplest_piecewise": np.array([0.0, -0.7, 0.0]),
-#                    }
-
-esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "normal_centered", "model_and_pca", "pca_noise", "input_to_rgen", "pca_drop"]
+esn_types = ["normal", "dynsys", "difference", "no_res", "pca", "dynsys_pca", "normal_centered", "model_and_pca",
+             "pca_noise", "input_to_rgen", "pca_drop", "output_hybrid", "output_hybrid_pca", "input_hybrid", "input_hybrid_pca",
+             "full_hybrid", "full_hybrid_pca"]
 systems_to_predict = ["lorenz", "roessler_sprott", "chua", "chen", "complex_butterfly", "rucklidge", "thomas", "windmi",
-                      "lorenz_plus_roessler", "logistic", "lorenz96", "simplest_quadratic", "simplest_cubic", "simplest_piecewise", "simplest_driven_chaotic",
+                      "lorenz_plus_roessler", "logistic", "lorenz96", "simplest_quadratic", "simplest_cubic",
+                      "simplest_piecewise", "simplest_driven_chaotic",
                       "periodic", "lorenz1D"]
 w_in_types = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
@@ -50,7 +38,6 @@ activation_functions = ["tanh", "sigmoid", "relu", "linear"]
 r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt",
                     "exponential_r", "bias_and_exponential_r"]
 dyn_sys_types = ["L96", "KS"]
-
 
 esn_hash_funcs = {rescomp.esn_new_update_code.ESN_normal: hash,
                   rescomp.esn_new_update_code.ESN_dynsys: hash,
@@ -62,7 +49,11 @@ esn_hash_funcs = {rescomp.esn_new_update_code.ESN_normal: hash,
                   rescomp.esn_new_update_code.ESN_dynsys_pca: hash,
                   rescomp.esn_new_update_code.ESN_normal_centered: hash,
                   rescomp.esn_new_update_code.ESN_pca_noise: hash,
-                  rescomp.esn_new_update_code.ESN_model_and_pca: hash,
+                  rescomp.esn_new_update_code.ESN_output_hybrid_pca: hash,
+                  rescomp.esn_new_update_code.ESN_input_hybrid: hash,
+                  rescomp.esn_new_update_code.ESN_input_hybrid_pca: hash,
+                  rescomp.esn_new_update_code.ESN_full_hybrid: hash,
+                  rescomp.esn_new_update_code.ESN_full_hybrid_pca: hash,
                   }
 
 
@@ -80,11 +71,12 @@ def get_random_int():
 
 
 @st.experimental_memo
-def simulate_data(system_option, dt, all_time_steps, normalize):
+def simulate_data(system_option, dt, all_time_steps, normalize, **kwargs):
     print("simulate data")
     starting_point = starting_points[system_option]
     if system_option == "lorenz":
-        time_series = rescomp.simulations.simulate_trajectory("lorenz", dt, all_time_steps, starting_point)
+        time_series = rescomp.simulations.simulate_trajectory("lorenz", dt, all_time_steps, starting_point,
+                                                              **kwargs)
     elif system_option == "roessler_sprott":
         time_series = rescomp.simulations.simulate_trajectory("roessler_sprott", dt, all_time_steps,
                                                               starting_point)
@@ -105,10 +97,10 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
         time_series = rescomp.simulations.simulate_trajectory(sys_flag="logistic", time_steps=all_time_steps,
                                                               starting_point=starting_point, r=r)
         time_series = time_series - 0.5
-        # time_series = time_series[:, np.newaxis]
 
     elif system_option == "lorenz96":
-        starting_point = np.random.randn(30)
+        L96_dimensions = kwargs["l96_dimension"]
+        starting_point = np.random.randn(L96_dimensions)
         time_series = rescomp.simulations.simulate_trajectory("lorenz_96", dt, all_time_steps,
                                                               starting_point=starting_point)
     elif system_option == "complex_butterfly":
@@ -130,18 +122,21 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
     elif system_option == "simplest_piecewise":
         time_series = rescomp.simulations.simulate_trajectory("simplest_piecewise", dt, all_time_steps, starting_point)
     elif system_option == "simplest_driven_chaotic":
-        time_series = rescomp.simulations.simulate_trajectory("simplest_driven_chaotic", dt, all_time_steps, starting_point)[:, :-1] # ignore time
+        time_series = rescomp.simulations.simulate_trajectory("simplest_driven_chaotic", dt, all_time_steps,
+                                                              starting_point)[:, :-1]  # ignore time
 
     elif system_option == "periodic":
         t = np.arange(0, all_time_steps) * dt
-        w_1, w_2, w_3 = 0.1, 0.2, 0.3
+
+        w_1, w_2, w_3 = kwargs["w_1"], kwargs["w_2"], kwargs["w_3"]
+        # w_1, w_2, w_3 = 0.1, 0.2, 0.3
         # w_1, w_2, w_3 = 0.1, 0.1, 0.1
-        a_1, a_2, a_3 = 0.1, 0.5, 0.8
+        a_1, a_2, a_3 = 0.4, 0.7, 0.2
         b_1, b_2, b_3 = 0.1, 0.5, 0.6
         time_series = np.zeros((all_time_steps, 3))
-        time_series[:, 0] = a_1 * np.sin(w_1*t + b_1)
-        time_series[:, 1] = a_2 * np.sin(w_2*t + b_2)
-        time_series[:, 2] = a_3 * np.sin(w_3*t + b_3)
+        time_series[:, 0] = a_1 * np.sin(w_1 * t + b_1)
+        time_series[:, 1] = a_2 * np.sin(w_2 * t + b_2)
+        time_series[:, 2] = a_3 * np.sin(w_3 * t + b_3)
 
     elif system_option == "lorenz1D":
         starting_point = starting_points["lorenz"]
@@ -153,7 +148,7 @@ def simulate_data(system_option, dt, all_time_steps, normalize):
     return time_series
 
 
-@st.experimental_singleton
+# @st.experimental_singleton
 def build(esntype, seed, x_dim=3, **kwargs):
     if esntype == "normal":
         esn = esn_new.ESN_normal()
@@ -176,8 +171,21 @@ def build(esntype, seed, x_dim=3, **kwargs):
     elif esntype == "pca_noise":
         esn = esn_new.ESN_pca_noise()
     elif esntype == "model_and_pca":
-        esn = esn_new.ESN_model_and_pca()
-
+        esn = esn_new.ESN_output_hybrid_pca()
+    elif esntype == "output_hybrid":
+        esn = esn_new.ESN_output_hybrid()
+    elif esntype == "output_hybrid_pca":
+        esn = esn_new.ESN_output_hybrid_pca()
+    elif esntype == "input_hybrid":
+        esn = esn_new.ESN_input_hybrid()
+    elif esntype == "input_hybrid_pca":
+        esn = esn_new.ESN_input_hybrid_pca()
+    elif esntype == "full_hybrid":
+        esn = esn_new.ESN_full_hybrid()
+    elif esntype == "full_hybrid_pca":
+        esn = esn_new.ESN_full_hybrid_pca()
+    else:
+        raise Exception("This esntype is not accounted for")
     np.random.seed(seed)
     esn.build(x_dim, **kwargs)
     return esn
@@ -217,7 +225,6 @@ def predict(esn, x_pred, t_pred_sync):
 
 @st.cache(hash_funcs=esn_hash_funcs)
 def predict_2(esn, x_pred, t_pred_sync):
-
     esn.reset_r()
 
     if t_pred_sync > 0:
@@ -260,12 +267,31 @@ def loop_with_perturbation(esn, perturbation, r_pred_previous, time_steps_loop=1
     r_loop_perturbed = esn.get_r()
     return r_loop_perturbed
 
-# CASHING PLOT FUNCTIONS:
+# NEW plotting functions (multipurpose):
 @st.experimental_memo
-def plot_original_attractor(time_series):
-    print("replotting 1")
-    fig = plot.plot_3d_time_series(time_series)
+def plot_3d_timeseries(time_series_dict, mode="line", size=None):
+    fig = plot.plot_3d_time_series_multiple(time_series_dict, mode=mode, size=size)
     return fig
+
+
+@st.experimental_memo
+def plot_multiple_1D_trajectories(time_series_dict):
+    x_dim = list(time_series_dict.values())[0].shape[1]
+    figs = []
+    for i in range(x_dim):
+        title = f"Axis {i}:"
+        data = {key: val[:, i] for key, val in time_series_dict.items()}
+        fig = plot.plot_multiple_1d_time_series(data, title=title)
+        figs.append(fig)
+    return figs
+
+
+# CASHING PLOT FUNCTIONS:
+# @st.experimental_memo
+# def plot_original_attractor(time_series):
+#     print("replotting 1")
+#     fig = plot.plot_3d_time_series(time_series)
+#     return fig
 
 
 @st.experimental_memo
@@ -288,24 +314,24 @@ def plot_w_out(w_out):
     return fig
 
 
-@st.experimental_memo
-def plot_train_pred_vs_true_trajectories(x_train_true, x_train_pred):
-    print("replotting 4")
-    figs = []
-    for i in range(x_dim):
-        title = f"Axis {i}:"
-        data = {"Train True": x_train_true[:, i], "Train Fit": x_train_pred[:, i]}
-        fig = plot.plot_multiple_1d_time_series(data, title=title)
-        figs.append(fig)
-    return figs
+# @st.experimental_memo
+# def plot_train_pred_vs_true_trajectories(x_train_true, x_train_pred):
+#     print("replotting 4")
+#     figs = []
+#     for i in range(x_dim):
+#         title = f"Axis {i}:"
+#         data = {"Train True": x_train_true[:, i], "Train Fit": x_train_pred[:, i]}
+#         fig = plot.plot_multiple_1d_time_series(data, title=title)
+#         figs.append(fig)
+#     return figs
 
 
-@st.experimental_memo
-def plot_train_pred_vs_true_attractor(x_train_true, x_train_pred):
-    print("replotting 5")
-    time_series_dict = {"Train True": x_train_true, "Train Fit": x_train_pred}
-    fig = plot.plot_3d_time_series_multiple(time_series_dict)
-    return fig
+# @st.experimental_memo
+# def plot_train_pred_vs_true_attractor(x_train_true, x_train_pred):
+#     print("replotting 5")
+#     time_series_dict = {"Train True": x_train_true, "Train Fit": x_train_pred}
+#     fig = plot.plot_3d_time_series_multiple(time_series_dict)
+#     return fig
 
 
 @st.experimental_memo
@@ -325,16 +351,16 @@ def plot_reservoir_histograms_train(r_input_train, r_internal_train,
     return fig
 
 
-@st.experimental_memo
-def plot_prediction_pred_vs_true_trajectories(y_true, y_pred):
-    print("replotting 8")
-    figs = []
-    for i in range(x_dim):
-        title = f"Axis {i}:"
-        data = {"True": y_true[:, i], "Predicted": y_pred[:, i]}
-        fig = plot.plot_multiple_1d_time_series(data, title=title)
-        figs.append(fig)
-    return figs
+# @st.experimental_memo
+# def plot_prediction_pred_vs_true_trajectories(y_true, y_pred):
+#     print("replotting 8")
+#     figs = []
+#     for i in range(x_dim):
+#         title = f"Axis {i}:"
+#         data = {"True": y_true[:, i], "Predicted": y_pred[:, i]}
+#         fig = plot.plot_multiple_1d_time_series(data, title=title)
+#         figs.append(fig)
+#     return figs
 
 
 @st.experimental_memo
@@ -354,7 +380,7 @@ def plot_pred_error(y_pred, y_true):
 
 @st.experimental_memo
 def plot_reservoir_histograms_pred(r_input_pred, r_internal_pred,
-                                    act_fct_inp_pred, r_pred, _act_fct):
+                                   act_fct_inp_pred, r_pred, _act_fct):
     print("replotting 11")
     states_data_dict = {"r_input": r_input_pred, "r_internal_update": r_internal_pred,
                         "act_fct_inp": act_fct_inp_pred, "r_states": r_pred}
@@ -406,11 +432,12 @@ def plot_pca(r_pca, mode="line"):
     return fig
 
 
-@st.experimental_memo
-def plot_pca_with_drive(r_pca_drive, r_pca):
-    data = {"r_pca_pred": r_pca, "r_pca_drive": r_pca_drive}
-    fig = plot.plot_3d_time_series_multiple(data)
-    return fig
+# @st.experimental_memo
+# def plot_pca_with_drive(r_pca_drive, r_pca):
+#     data = {"r_pca_pred": r_pca, "r_pca_drive": r_pca_drive}
+#     fig = plot.plot_3d_time_series_multiple(data)
+#     return fig
+
 
 @st.experimental_memo
 def plot_pca_with_perturbed_pca(r_loop_perturbed_pca, r_pred_pca):
@@ -426,12 +453,14 @@ def show_lypunov_from_data(y_pred, y_true, dt, freq_cut=True, steps=100):
                                                figsize=(13, 5))
     return fig
 
+
 @st.cache(hash_funcs=esn_hash_funcs)
 def plot_pde_difference_vs_pert(esn, r_init, time_steps=2000, n_ens=30, pert_max=2,
-                                              pert_min=0.01, pert_steps=20):
+                                pert_min=0.01, pert_steps=20):
     df = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_init, time_steps=time_steps, n_ens=n_ens,
                                                        pert_max=pert_max, pert_min=pert_min, pert_steps=pert_steps)
-    fig1 = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
+    fig1 = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile",
+                   error_y="diff_upper_quartile")
     fig2 = px.line(df, x="pert_scale", y="diff_mean")
     return df, fig1, fig2
 
@@ -445,10 +474,9 @@ def plot_closest_distance_to_attractor(y_pred, y_true):
 
 @st.experimental_memo
 def plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred):
-
     fig1 = plot.plot_wout_magnitudes(w_out, figsize=(650, 500))
     fig2 = plot.plot_state_std({"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}, figsize=(650, 500),
-                          title="std of r_gen during train and pred")
+                               title="std of r_gen during train and pred")
     return fig1, fig2
 
 
@@ -456,6 +484,7 @@ def plot_w_out_and_r_gen_std(w_out, r_gen_train, r_gen_pred):
 def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, log_y=False):
     figs = plot.plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, log_y=log_y)
     return figs
+
 
 @st.experimental_memo
 def plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=None):
@@ -466,6 +495,7 @@ def plot_valid_times_vs_pred_error(y_pred, y_true, in_lyapunov_times=None):
 def show_reservoir_states(r):
     fig = plot.show_reservoir_states(r)
     return fig
+
 
 @st.experimental_memo
 def plot_1D_trajectories(data):
@@ -487,7 +517,7 @@ with st.sidebar:
     system_option = st.sidebar.selectbox(
         'System to Predict', systems_to_predict)
     dt = st.number_input('dt', value=0.05, step=0.01, format="%f")
-    with st.expander("Time Steps"):
+    with st.expander("Time Steps: "):
         t_train_disc = int(st.number_input('t_train_disc', value=1000, step=1))
         t_train_sync = int(st.number_input('t_train_sync', value=300, step=1))
         t_train = int(st.number_input('t_train', value=5000, step=1))
@@ -496,20 +526,33 @@ with st.sidebar:
         t_pred = int(st.number_input('t_pred', value=5000, step=1))
         all_time_steps = int(t_train_disc + t_train_sync + t_train + t_pred_disc + t_pred_sync + t_pred)
         time_boundaries = (0, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred)
-        st.write(f"Total Timessteps: {all_time_steps}, Maximal Time: {np.round(dt*all_time_steps, 1)}")
+        st.write(f"Total Timessteps: {all_time_steps}, Maximal Time: {np.round(dt * all_time_steps, 1)}")
         try:
             st.write(f"Lyapunov times: {np.round(dt * all_time_steps * lyapunov_exponents[system_option], 1)}")
-        except:
-            pass
+        except Exception as e:
+            print(f"Lyapunov Error: {e}")
+
+    with st.expander("System Specific Options: "):
+        sim_kwargs = {}
+        if system_option == "lorenz96":
+            sim_kwargs["l96_dimension"] = int(st.number_input("l96_dimension", min_value=3, max_value=100, value=15))
+        elif system_option == "periodic":
+            sim_kwargs["w_1"] = st.number_input("w_1", value=0.1, min_value=0.0, max_value=10.0)
+            sim_kwargs["w_2"] = st.number_input("w_2", value=0.2, min_value=0.0, max_value=10.0)
+            sim_kwargs["w_3"] = st.number_input("w_3", value=0.3, min_value=0.0, max_value=10.0)
+        elif system_option == "lorenz":
+            sim_kwargs["sigma"] = st.number_input("sigma", value=10.0)
+            sim_kwargs["rho"] = st.number_input("rho", value=28.0)
+
     normalize = st.checkbox('normalize', value=True)
     train_noise = st.checkbox("train noise")
-    noise_scale = st.number_input("noise scale", value=0.1, step=0.1, disabled=not(train_noise), format="%f")
+    noise_scale = st.number_input("noise scale", value=0.1, step=0.1, disabled=not (train_noise), format="%f")
 
     sim_opts = {"system": system_option, "dt": dt, "t_train_disc": t_train_disc, "t_train_sync": t_train_sync,
                 "t_train": t_train, "t_pred_disc": t_pred_disc, "t_pred_sync": t_pred_sync, "t_pred": t_pred,
                 "train_noise": train_noise, "noise_scale": noise_scale}
 
-    with st.expander("experimental: "):
+    with st.expander("Experimental Settings: "):
         only_one_d = st.checkbox("only 1D timeseries")
         i_dim_one_d = st.number_input("i_dim", min_value=0)
     st.markdown("""---""")
@@ -524,38 +567,55 @@ with st.sidebar:
     build_args["act_fct_opt"] = st.selectbox('act_fct_opt', activation_functions)
     build_args["node_bias_opt"] = st.selectbox('node_bias_opt', bias_types)
     disabled = True if build_args["node_bias_opt"] == "no_bias" else False
-    build_args["bias_scale"] = st.number_input('bias_scale', value=0.1, step=0.1, disabled=disabled)  # disable if needed
+    build_args["bias_scale"] = st.number_input('bias_scale', value=0.1, step=0.1,
+                                               disabled=disabled)  # disable if needed
     build_args["leak_factor"] = st.number_input('leak_factor', value=0.0, step=0.01, min_value=0.0, max_value=1.0)
     build_args["w_in_opt"] = st.selectbox('w_in_opt', w_in_types)
     build_args["w_in_scale"] = st.number_input('w_in_scale', value=1.0, step=0.1)
     log_reg_param = st.number_input('Log regulation parameter', value=-7., step=1., format="%f")
-    build_args["reg_param"] = 10**(log_reg_param)
+    build_args["reg_param"] = 10 ** (log_reg_param)
 
     # settings depending on esn_type:
     with st.expander("ESN type specific settings:"):
-        if esn_type in ["normal", "difference", "input_to_rgen", "pca", "normal_centered", "pca_noise", "model_and_pca"]:
+        if esn_type in ["normal", "difference", "input_to_rgen", "pca", "normal_centered", "pca_noise",
+                        "model_and_pca", "output_hybrid", "output_hybrid_pca", "input_hybrid", "input_hybrid_pca",
+                            "full_hybrid", "full_hybrid_pca"]:
             # network:
             build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1, format="%f")
             build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1)
             build_args["n_type_opt"] = st.selectbox('n_type_opt', network_types)
             if esn_type == "difference":
                 build_args["dt_difference"] = st.number_input('dt_difference', value=0.1, step=0.01)
-            elif esn_type == "pca" or esn_type == "pca_noise" or esn_type == "model_and_pca":
-                build_args["pca_components"] = int(st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
-                                                                   max_value=int(build_args["r_dim"]), key="pca2"))
+            if esn_type in ["pca", "pca_noise", "model_and_pca", "output_hybrid_pca", "input_hybrid_pca", "full_hybrid_pca"]:
+                build_args["pca_components"] = int(
+                    st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
+                                    max_value=int(build_args["r_dim"]), key="pca2"))
                 build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
-                                                                   max_value=int(build_args["r_dim"])-1))
+                                                                      max_value=int(build_args["r_dim"]) - 1))
                 left, right = st.columns(2)
                 with left:
                     build_args["norm_with_expl_var"] = st.checkbox("norm with explained var", value=False)
                 with right:
                     build_args["centering_pre_trans"] = st.checkbox("center data before transformation", value=True)
                 if esn_type == "pca_noise":
-
                     build_args["train_noise_scale"] = st.number_input('train noise scale', value=0.01, step=0.1,
                                                                       min_value=0.0, format="%f")
 
                     build_args["noise_option"] = st.selectbox('noise option', ["pre_r_gen", "post_r_gen"])
+            if esn_type in ["output_hybrid", "output_hybrid_pca", "input_hybrid", "input_hybrid_pca",
+                            "full_hybrid", "full_hybrid_pca"]:
+                st.warning("Works only for lorenz system for now")
+                eps = st.number_input("(1 + eps) * rho", value=0.01, min_value=0.0)
+                modified_parameters = {"sigma": 10, "rho": 28 * (1 + eps), "beta": 8/3}
+                model_fct = lambda x: rescomp.simulations.simulate_trajectory(sys_flag=system_option, dt=dt,
+                                                                                        time_steps=2, starting_point=x,
+                                                              **modified_parameters)[-1, :]
+                if esn_type in ["output_hybrid", "output_hybrid_pca", "full_hybrid", "full_hybrid_pca"]:
+                    build_args["output_model"] = model_fct
+                if esn_type in ["input_hybrid", "input_hybrid_pca", "full_hybrid", "full_hybrid_pca"]:
+                    build_args["input_model"] = model_fct
+                    build_args["model_to_network_factor"] = st.number_input("model_to_network_factor", value=0.5,
+                                                                            min_value=0.0, max_value=1.0)
 
         elif esn_type in ["dynsys", "dynsys_pca"]:
             build_args["dyn_sys_opt"] = st.selectbox('dyn_sys_opt', dyn_sys_types)
@@ -566,22 +626,18 @@ with st.sidebar:
             elif build_args["dyn_sys_opt"] == "KS":
                 build_args["KS_system_size"] = st.number_input('KS_system_size', value=5.0, step=0.1)
             if esn_type == "dynsys_pca":
-                build_args["pca_components"] = int(st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
-                                                                   max_value=int(build_args["r_dim"]), key="dynsys_pca1"))
+                build_args["pca_components"] = int(
+                    st.number_input('pca_components', value=build_args["r_dim"], step=1, min_value=1,
+                                    max_value=int(build_args["r_dim"]), key="dynsys_pca1"))
                 build_args["pca_comps_to_skip"] = int(st.number_input('pca_comps_to_skip', value=0, step=1, min_value=0,
-                                                                   max_value=int(build_args["r_dim"])-1, key="dynsys_pca2"))
+                                                                      max_value=int(build_args["r_dim"]) - 1,
+                                                                      key="dynsys_pca2"))
         elif esn_type == "no_res":
             pass
         elif esn_type == "pca_drop":
             build_args["dims_to_drop"] = st.number_input('dims_to_drop', value=0, step=1)
             if build_args["dims_to_drop"] == 0:
                 build_args["dims_to_drop"] = None
-
-        # elif esn_type == "pca_basic":
-        #     del build_args["r_to_r_gen_opt"]
-        #     build_args["pca_components"] = int(st.number_input('pca_components', value=50, step=1, min_value=1,
-        #                                                    max_value=int(build_args["r_dim"])))
-        #     build_args["pca_offset"] = st.checkbox("pca_offset", value=1)
 
     st.markdown("""---""")
 
@@ -597,7 +653,8 @@ with st.sidebar:
     st.markdown("""---""")
 
     if st.button("Download Parameters"):
-        parameter_dict = {"sim_opts": sim_opts, "esn_type": esn_type, "build_parameters": build_args, "seed": seed}  # add seed?
+        parameter_dict = {"sim_opts": sim_opts, "esn_type": esn_type, "build_parameters": build_args,
+                          "seed": seed}  # add seed?
         save_to_yaml(parameter_dict)
 
 # Timeseries
@@ -605,22 +662,26 @@ with st.expander("Simulate Timeseries"):
     st.header("Time series:")
     simulate_timeseries_bool = st.checkbox("Simulate Timeseries")
     if simulate_timeseries_bool:
-        time_series = simulate_data(system_option, dt, all_time_steps, normalize)
+        time_series = simulate_data(system_option, dt, all_time_steps, normalize, **sim_kwargs)
 
         if only_one_d:
             time_series = time_series[:, i_dim_one_d][:, np.newaxis]
 
         x_dim = time_series.shape[1]
-        plot_attractor_time_series = st.checkbox("Plot Attractor")
+        three_d_disabled = True
+        if x_dim >= 3:
+            three_d_disabled = False
+        plot_attractor_time_series = st.checkbox("Plot Attractor", disabled=three_d_disabled)
         if plot_attractor_time_series:
-            fig = plot_original_attractor(time_series)
+            # fig = plot_original_attractor(time_series)
+            fig = plot_3d_timeseries({"original timeseries": time_series})
             st.plotly_chart(fig, use_container_width=True)
+
         left, right = st.columns(2)
         with left:
             plot_trajectory_time_series = st.checkbox("Plot Trajectory")
         with right:
-            i_dim = st.number_input("i_dim", min_value=0, max_value=x_dim-1)
-
+            i_dim = st.number_input("i_dim", min_value=0, max_value=x_dim - 1)
         if plot_trajectory_time_series:
             fig = plot_original_timeseries(time_series, i_dim, time_boundaries)
             st.plotly_chart(fig, use_container_width=True)
@@ -629,7 +690,7 @@ with st.expander("Simulate Timeseries"):
         if one_d_with_time_delay:
             i_dim = st.number_input("i_dim", min_value=0, max_value=x_dim - 1, key="i_dim2")
             time_delay = st.number_input("time_delay", min_value=1, value=1)
-            fig = plot.plot_1d_time_delay(time_series, i_dim, time_delay)
+            fig = plot.plot_1d_time_delay(time_series, i_dim, time_delay)  # TODO: cash it.
             st.plotly_chart(fig)
     st.markdown("""---""")
 
@@ -640,11 +701,6 @@ with st.expander("RC architecture"):
     build_rc_bool = st.checkbox("Build RC architecture", disabled=disabled)
     if build_rc_bool:
 
-        # if st.button("rebuild with new seed"):
-        #     get_random_int.clear()
-        #
-        # seed = get_random_int()  # lets see what to do with that
-
         esn = build(esn_type, seed, x_dim=x_dim, **build_args)
 
         w_in_properties_bool = st.checkbox("Show W_in properties:")
@@ -653,10 +709,6 @@ with st.expander("RC architecture"):
             fig = plot_esn_architecture(w_in)
             st.pyplot(fig)
 
-        # if custom_update_setting_str == "Normal":
-        #     w_properties_bool = st.checkbox("Show W properties:")
-        #     if w_properties_bool:
-        #         st.write("TODO: Show Network, Histograms of values, some measures?")
         st.markdown("""---""")
 
 # Train RC:
@@ -672,9 +724,10 @@ with st.expander("Train RC"):
         if train_noise:
             x_train = x_train + np.random.randn(*(x_train.shape)) * noise_scale
 
-        esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train = train(esn,
-                                                                                                             x_train,
-                                                                                                 t_train_sync)
+        esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train = train(
+            esn,
+            x_train,
+            t_train_sync)
 
         r_gen_dim = r_gen_train.shape[1]
 
@@ -682,10 +735,11 @@ with st.expander("Train RC"):
         if perform_pca_bool:
             pca = perform_pca(r_train, n_components=3)
 
-        show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not(perform_pca_bool))
+        show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not perform_pca_bool)
         if show_pca_states_bool:
             r_train_pca = pca.transform(r_train)
-            fig = plot_pca(r_train_pca)
+            # fig = plot_pca(r_train_pca)
+            fig = plot_3d_timeseries({"r_train_pca": r_train_pca})
             st.plotly_chart(fig)
 
         w_out_properties_bool = st.checkbox("Show W_out properties:")
@@ -696,13 +750,15 @@ with st.expander("Train RC"):
 
         show_x_train_pred = st.checkbox("Show fitted and real trajectory:")
         if show_x_train_pred:
-            figs = plot_train_pred_vs_true_trajectories(x_train_true, x_train_pred)
+            figs = plot_multiple_1D_trajectories({"x_train_true": x_train_true, "x_train_pred": x_train_pred})
+            # figs = plot_train_pred_vs_true_trajectories(x_train_true, x_train_pred)
             for i in range(x_dim):
                 st.plotly_chart(figs[i])
 
-        show_x_train_attr = st.checkbox("Show fitted and real attractor:")
+        show_x_train_attr = st.checkbox("Show fitted and real attractor:", disabled=three_d_disabled)
         if show_x_train_attr:
-            fig = plot_train_pred_vs_true_attractor(x_train_true, x_train_pred)
+            fig = plot_3d_timeseries({"x_train_true": x_train_true, "x_train_pred": x_train_pred})
+            # fig = plot_train_pred_vs_true_attractor(x_train_true, x_train_pred)
             st.plotly_chart(fig)
 
         show_train_error = st.checkbox("Show train error:")
@@ -717,12 +773,9 @@ with st.expander("Train RC"):
 
         show_reservoir_histograms_train = st.checkbox("Show Reservoir node value histograms - TRAIN: ")
         if show_reservoir_histograms_train:
-
-            # fig = plot.show_res_state_scatter(r_train,  figsize=(15, 8), sort=True, s=0.1, alpha=0.5)
-            # st.pyplot(fig)
             act_fct = esn._act_fct
             fig = plot_reservoir_histograms_train(r_input_train, r_internal_train,
-                                    act_fct_inp_train, r_train, act_fct)
+                                                  act_fct_inp_train, r_train, act_fct)
             st.pyplot(fig)
 
         show_poincare_type_map = st.checkbox("Show Poincare Type Map Train:", disabled=disabled)
@@ -742,18 +795,19 @@ with st.expander("Prediction"):
     if predict_bool:
         x_pred = x_pred_list[0]
         # y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred = predict(esn, x_pred, t_pred_sync)
-        y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_gen_pred, r_drive = predict_2(esn, x_pred, t_pred_sync)
+        y_pred, y_true, r_pred, act_fct_inp_pred, r_internal_pred, r_input_pred, r_gen_pred, r_drive = predict_2(esn,
+                                                                                                                 x_pred,
+                                                                                                                 t_pred_sync)
         show_x_pred = st.checkbox("Show predicted and real trajectory:")
         if show_x_pred:
-            figs = plot_prediction_pred_vs_true_trajectories(y_true, y_pred)
+            figs = plot_multiple_1D_trajectories({"True": y_true, "Pred": y_pred})
+            # figs = plot_prediction_pred_vs_true_trajectories(y_true, y_pred)
             for i in range(x_dim):
                 st.plotly_chart(figs[i])
 
-        show_x_pred_attr = st.checkbox("Show predicted and real attractor:")
+        show_x_pred_attr = st.checkbox("Show predicted and real attractor:", disabled=three_d_disabled)
         if show_x_pred_attr:
-            # time_series_dict = {"True": y_true, "Predicted": y_pred}
-            # fig = plot.plot_3d_time_series_multiple(time_series_dict)
-            fig = plot_prediction_pred_vs_true_attractor(y_true, y_pred)
+            fig = plot_3d_timeseries({"True": y_true, "Predicted": y_pred})
             st.plotly_chart(fig)
 
         show_pred_error = st.checkbox("Show predicted error:")
@@ -783,12 +837,13 @@ with st.expander("Prediction"):
         #     fig = plot.show_reservoir_states(r_pred)
         #     st.plotly_chart(fig)
 
-        show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not(perform_pca_bool), key=1)
+        show_pca_states_bool = st.checkbox("Show 3-dim Res-PCA:", disabled=not (perform_pca_bool), key=1)
         if show_pca_states_bool:
             r_pred_pca = pca.transform(r_pred)
-            # fig = plot_pca(r_pred_pca)
             r_pca_drive = pca.transform(r_drive)
-            fig = plot_pca_with_drive(r_pca_drive, r_pred_pca)
+            data = {"r_pca_pred": r_pred_pca, "r_pca_drive": r_pca_drive}
+            fig = plot_3d_timeseries(data)
+            # fig = plot_pca_with_drive(r_pca_drive, r_pred_pca)
             st.plotly_chart(fig)
 
         show_reservoir_histograms_pred = st.checkbox("Show Reservoir node value histograms - PRED: ")
@@ -805,11 +860,9 @@ with st.expander("Prediction"):
         if st.checkbox("Closest point to attractor"):
             fig = plot_closest_distance_to_attractor(y_pred, y_true)
             st.plotly_chart(fig)
-            # closest_dist = rescomp.measures.distances_to_closest_point(y_to_test=y_pred, y_true=y_true)
-            # st.line_chart(closest_dist)
     st.markdown("""---""")
 
-# Advanced measures:
+# Advanced meassures:
 disabled = False if predict_bool else True
 with st.expander("Advanced Measures on Prediction: "):
     st.header("Advanced Measures: ")
@@ -828,8 +881,6 @@ with st.expander("Advanced Measures on Prediction: "):
             poincare_mode = st.selectbox('Mode', ["maxima", "minima"])
         with right:
             value_or_time = st.selectbox('Value or Time', ["value", "time"])
-        # fig = plot_poincare_type_map(y_pred, y_true, mode=poincare_mode, figsize=(13, 16))
-        # st.pyplot(fig)
 
         fig = plot_poincare_type_map_plotly(y_pred, y_true, mode=poincare_mode, value_or_time=value_or_time)
         st.plotly_chart(fig)
@@ -861,7 +912,8 @@ disabled = False if predict_bool else True
 with st.expander("Free looping of Reservoir Dynamics: "):
     free_loop_with_perturbed_res = st.checkbox("Loop Reservoir with perturbed initial state:")
     if free_loop_with_perturbed_res:
-        perturbation_scale = st.number_input("perturbation scale", min_value=0.0, max_value=1000., value=0.005, step=0.001, format="%f")
+        perturbation_scale = st.number_input("perturbation scale", min_value=0.0, max_value=1000., value=0.005,
+                                             step=0.001, format="%f")
         perturb_only_pca = st.checkbox("Perturb only along PCA dimension:")
         # time_steps_loop = st.number_input("timesteps for loop", min_value=10, max_value=10000, value=1000)
         # r_pred_previous = r_pred[0, :]
@@ -919,8 +971,9 @@ with st.expander("Free looping of Reservoir Dynamics: "):
                 pert_max = st.number_input("pert_scale_max", value=5., key="maxpert", format="%f")
             with r:
                 pert_steps = st.number_input("pert_steps", value=5, key="pertsteps")
-            df, fig1, fig2 = plot_pde_difference_vs_pert(esn, r_init=r_pred_previous, time_steps=time_steps, n_ens=n_ens, pert_max=pert_max,
-                                              pert_min=pert_min, pert_steps=pert_steps)
+            df, fig1, fig2 = plot_pde_difference_vs_pert(esn, r_init=r_pred_previous, time_steps=time_steps,
+                                                         n_ens=n_ens, pert_max=pert_max,
+                                                         pert_min=pert_min, pert_steps=pert_steps)
             # df = rescomp.measures.perturbation_of_res_dynamics(esn, r_init=r_pred_previous, time_steps=2000, n_ens=30, pert_max=2, pert_min=0.01, pert_steps=20)
             # # fig = px.line(df, x="pert_scale", y="diff_median", error_y="diff_std")
             # fig = px.line(df, x="pert_scale", y="diff_median", error_y_minus="diff_lower_quartile", error_y="diff_upper_quartile")
@@ -929,7 +982,6 @@ with st.expander("Free looping of Reservoir Dynamics: "):
             st.table(df)
 
 with st.expander("Visualization of arbitrary PCA components: "):
-
     if st.checkbox("perform pca for all components"):
 
         train_predict = st.selectbox("train or predict", ["train", "predict"])
@@ -943,11 +995,11 @@ with st.expander("Visualization of arbitrary PCA components: "):
         pca_all = perform_pca(r_use, n_components=r_dim)
         l, m, r = st.columns(3)
         with l:
-            i_x = st.number_input("pca-comp for x-dim", min_value=0, max_value=r_dim-1, value=0)
+            i_x = st.number_input("pca-comp for x-dim", min_value=0, max_value=r_dim - 1, value=0)
         with m:
-            i_y = st.number_input("pca-comp for y-dim", min_value=0, max_value=r_dim-1, value=1)
+            i_y = st.number_input("pca-comp for y-dim", min_value=0, max_value=r_dim - 1, value=1)
         with r:
-            i_z = st.number_input("pca-comp for z-dim", min_value=0, max_value=r_dim-1, value=2)
+            i_z = st.number_input("pca-comp for z-dim", min_value=0, max_value=r_dim - 1, value=2)
 
         mode = st.selectbox("plot mode", ["line", "scatter"])
 
@@ -962,7 +1014,6 @@ with st.expander("Visualization of arbitrary PCA components: "):
         explained_var_cumulative = np.cumsum(explained_var)
         st.write("Explained variance cumulative of pca components: ")
         st.line_chart(explained_var_cumulative)
-
 
 with st.expander("Visualization of W_out magnitudes: "):
     if st.checkbox("Plot W_out magnitudes and r_gen std"):
@@ -1005,11 +1056,11 @@ with st.expander("Visualization of W_out magnitudes: "):
 
             left, mid, right = st.columns(3)
             with left:
-                x = st.number_input("x", value=int(r_gen_dim/2), min_value=0,
-                                max_value=r_gen_dim-1, key="x1")
+                x = st.number_input("x", value=int(r_gen_dim / 2), min_value=0,
+                                    max_value=r_gen_dim - 1, key="x1")
             with mid:
-                y = st.number_input("y", value=r_gen_dim-2, min_value=0,
-                                max_value=r_gen_dim-1, key="y1")
+                y = st.number_input("y", value=r_gen_dim - 2, min_value=0,
+                                    max_value=r_gen_dim - 1, key="y1")
             with right:
                 exclude_or_include = st.selectbox("exclude or include", ["exclude", "include"])
 
@@ -1021,10 +1072,10 @@ with st.expander("Visualization of W_out magnitudes: "):
                 out_real = y_pred
 
             if exclude_or_include == "include":
-                out = w_out[:, x:y+1] @ (r_gen[:, x:y+1]).T
+                out = w_out[:, x:y + 1] @ (r_gen[:, x:y + 1]).T
             elif exclude_or_include == "exclude":
-                w_out = np.delete(w_out, np.s_[x:y+1], axis=1)
-                r_gen = np.delete(r_gen, np.s_[x:y+1], axis=1)
+                w_out = np.delete(w_out, np.s_[x:y + 1], axis=1)
+                r_gen = np.delete(r_gen, np.s_[x:y + 1], axis=1)
                 out = w_out @ r_gen.T
 
             data = {"components removed": out.T, "real": out_real}
@@ -1060,14 +1111,16 @@ with st.expander("Visualization of W_out magnitudes: "):
             # st.line_chart(mean_freq)
             # half_fourier, half_freq = rescomp.measures.get_mean_frequency(r_gen_train)
             i_r_gen_dim = st.number_input("r_gen_dim", value=0, min_value=0,
-                                max_value=r_gen_dim - 1, key="rgen_dim")
+                                          max_value=r_gen_dim - 1, key="rgen_dim")
             #
             # fig = plt.figure()
             # plt.plot(half_freq, np.abs(half_fourier[:, i_r_gen_dim])**2)
             # st.pyplot(fig)
 
-            freq_pred, powerspectrum_pred = rescomp.measures.power_spectrum_componentwise(r_gen_pred, period=False, dt=dt)
-            freq_train, powerspectrum_train = rescomp.measures.power_spectrum_componentwise(r_gen_train, period=False, dt=dt)
+            freq_pred, powerspectrum_pred = rescomp.measures.power_spectrum_componentwise(r_gen_pred, period=False,
+                                                                                          dt=dt)
+            freq_train, powerspectrum_train = rescomp.measures.power_spectrum_componentwise(r_gen_train, period=False,
+                                                                                            dt=dt)
             fig = plt.figure()
             plt.plot(freq_pred, powerspectrum_pred[:, i_r_gen_dim], label="pred")
             plt.plot(freq_train, powerspectrum_train[:, i_r_gen_dim], label="train")
@@ -1088,7 +1141,7 @@ with st.expander("Visualization of W_out magnitudes: "):
             # We need a driven and predicted r_gen trajectory for the same data here
             pred_steps = r_gen_pred.shape[0]  # get it from build_args
             i_time_step = st.number_input("time_step", value=0, min_value=0,
-                                max_value=pred_steps)
+                                          max_value=pred_steps)
             to_plot = r_gen_pred[i_time_step, :] - np.mean(r_gen_pred, axis=0)
             st.line_chart(to_plot)
 
@@ -1097,9 +1150,10 @@ with st.expander("Visualization of W_out magnitudes: "):
             if "pca" in esn_type:
                 import networkx as nx
                 import scipy
+
                 st.write("find out which nodes constitute a pca component")
                 i_pca_component = st.number_input("pca_component", value=0, min_value=0,
-                                              max_value=build_args["pca_components"] - 1)
+                                                  max_value=build_args["pca_components"] - 1)
                 data = esn._matrix
                 st.write(str(data.shape))
 
@@ -1120,16 +1174,22 @@ with st.expander("Visualization of W_out magnitudes: "):
                 clustering = np.array(list(clustering.values()))
                 print(clustering.shape)
 
-                to_plot2 = np.abs(data_i)*np.abs(clustering)
+                to_plot2 = np.abs(data_i) * np.abs(clustering)
                 # st.line_chart(to_plot2)
                 st.line_chart(np.sort(to_plot2))
+
+                fig = plt.figure()
+                plt.scatter(np.abs(data_i), np.abs(clustering))
+                st.pyplot(fig)
+                # st.line_chart(np.abs(data_i)np.abs(clustering))
 
                 pca_comps = build_args["pca_components"]
                 res = np.zeros(pca_comps)
                 for i in range(pca_comps):
                     data_i = data[:, i]
-                    res[i] = np.sum(np.abs(data_i) * np.abs(clustering))/np.sum(np.abs(data_i))
+                    res[i] = np.sum(np.abs(data_i) * np.abs(clustering)) / np.sum(np.abs(data_i))
 
+                st.write("avg network_measure vs. pca component")
                 st.line_chart(res)
 
                 # connectivity = nx.node_connectivity(graph)
@@ -1138,4 +1198,3 @@ with st.expander("Visualization of W_out magnitudes: "):
                 #
                 # print(type(esn._network))
                 # print(esn._network.shape)
-
