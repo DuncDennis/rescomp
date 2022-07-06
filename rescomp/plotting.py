@@ -754,10 +754,11 @@ def plot_valid_times_histogram(trajs, params_to_show, f, i_ens=None, i_time_peri
 
 
 def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
-                               error_threshhold=0.4, log_x=False, average_type="mean"):
+                               error_threshhold=0.4, log_x=False, average_type="mean", in_lyapunov_times=None):
     """
     For hdf5 viewer: plot valid times vs a sweep variable
     """
+
     df = pd.DataFrame()
 
     for i_traj, traj in enumerate(trajs):
@@ -765,6 +766,10 @@ def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None,
         params = params_to_show[i_traj]
 
         valid_times = get_valid_times(data, error_threshhold=error_threshhold)
+        if in_lyapunov_times is not None:
+            dt = in_lyapunov_times["dt"]
+            le = in_lyapunov_times["LE"]
+            valid_times = dt * le * valid_times
 
         if i_ens is None and i_time_period is None:
             valid_times = valid_times.flatten()
