@@ -11,6 +11,7 @@ import rescomp
 import rescomp.esn_new_update_code as esn_new
 import rescomp.plotting as plot
 import rescomp.statistical_tests as stat_test
+import rescomp.generalized_plotting.plotly_plots as plotly_plots
 
 plt.style.use('dark_background')
 
@@ -33,7 +34,8 @@ systems_to_predict = ["lorenz", "roessler_sprott", "chua", "chen", "complex_butt
                       "periodic", "lorenz1D"]
 w_in_types = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
 bias_types = ["no_bias", "random_bias", "constant_bias"]
-network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian"]
+network_types = ["erdos_renyi", "scale_free", "small_world", "random_directed", "random_dense_gaussian",
+                 "scipy_sparse"]
 activation_functions = ["tanh", "sigmoid", "relu", "linear"]
 r_to_r_gen_types = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r", "linear_and_square_r_alt",
                     "exponential_r", "bias_and_exponential_r"]
@@ -148,7 +150,7 @@ def simulate_data(system_option, dt, all_time_steps, normalize, **kwargs):
     return time_series
 
 
-# @st.experimental_singleton
+@st.experimental_singleton
 def build(esntype, seed, x_dim=3, **kwargs):
     if esntype == "normal":
         esn = esn_new.ESN_normal()
@@ -597,19 +599,45 @@ with st.sidebar:
                     build_args["norm_with_expl_var"] = st.checkbox("norm with explained var", value=False)
                 with right:
                     build_args["centering_pre_trans"] = st.checkbox("center data before transformation", value=True)
+
+                st.write("EXperimental pca settings: ")
+                if st.checkbox("mix first pca components. (sets r_to_r_gen_opt to CUSTOM)"):
+                    r_gen_custom = lambda r: np.array([r[0]**2, r[1]**2, r[2]**2, r[0]*r[1], r[0]*r[1], r[1]*r[2]])
+                    build_args["r_to_r_gen_opt"] = lambda r, x: np.hstack((np.hstack((r,r_gen_custom(r))), 1))
+
+
                 if esn_type == "pca_noise":
                     build_args["train_noise_scale"] = st.number_input('train noise scale', value=0.01, step=0.1,
                                                                       min_value=0.0, format="%f")
 
                     build_args["noise_option"] = st.selectbox('noise option', ["pre_r_gen", "post_r_gen"])
+
             if esn_type in ["output_hybrid", "output_hybrid_pca", "input_hybrid", "input_hybrid_pca",
                             "full_hybrid", "full_hybrid_pca"]:
-                st.warning("Works only for lorenz system for now")
-                eps = st.number_input("(1 + eps) * rho", value=0.01, min_value=0.0)
-                modified_parameters = {"sigma": 10, "rho": 28 * (1 + eps), "beta": 8/3}
-                model_fct = lambda x: rescomp.simulations.simulate_trajectory(sys_flag=system_option, dt=dt,
-                                                                                        time_steps=2, starting_point=x,
-                                                              **modified_parameters)[-1, :]
+                st.warning("Works only for lorenz and Thomas system for now")
+                if system_option == "lorenz":
+                    eps = st.number_input("change rho", value=0.01, min_value=0.0)
+                    modified_parameters = {"sigma": 10, "rho": 28 * (1 + eps), "beta": 8/3}
+                    model_fct = lambda x: rescomp.simulations.simulate_trajectory(sys_flag=system_option, dt=dt,
+                                                                                            time_steps=2, starting_point=x,
+                                                                  **modified_parameters)[-1, :]
+                elif system_option == "thomas":
+                    eps = st.number_input("change b", value=0.01, min_value=0.0)
+                    modified_parameters = {"b": 0.18* (1 + eps)}
+                    model_fct = lambda x: rescomp.simulations.simulate_trajectory(sys_flag=system_option, dt=dt,
+                                                                                            time_steps=2, starting_point=x,
+                                                                  **modified_parameters)[-1, :]
+
+                elif system_option == "roessler_sprott":
+                    eps = st.number_input("change c", value=0.01, min_value=0.0)
+                    modified_parameters = {"a": 0.2, "b": 0.2, "c": 5.7*(1+eps)}
+                    model_fct = lambda x: rescomp.simulations.simulate_trajectory(sys_flag=system_option, dt=dt,
+                                                                                            time_steps=2, starting_point=x,
+                                                                  **modified_parameters)[-1, :]
+
+                else:
+                    st.warning("This system is not supported!")
+                    model_fct = lambda x: x
                 if esn_type in ["output_hybrid", "output_hybrid_pca", "full_hybrid", "full_hybrid_pca"]:
                     build_args["output_model"] = model_fct
                 if esn_type in ["input_hybrid", "input_hybrid_pca", "full_hybrid", "full_hybrid_pca"]:
@@ -1135,6 +1163,41 @@ with st.expander("Visualization of W_out magnitudes: "):
             plt.plot(mean_freq_train, label="train")
             plt.legend()
             st.pyplot(fig)
+
+        if st.checkbox("Correlation of r_gen to input: "):
+            train_predict = st.selectbox("train or predict", ["train", "predict"], key="tp4")
+            if train_predict == "train":
+                r_gen_use = r_gen_train
+                x_use = x_train_true
+            elif train_predict == "predict":
+                r_gen_use = r_gen_pred
+                x_use = y_pred
+            time_delay = st.number_input("time_delay", value=0)
+            corr_data = plot.get_correlation(r_gen_use, x_use, time_delay=time_delay)
+            l, m, r = st.columns(3)
+            with l:
+                log_y = st.checkbox("log_y", key="log_123")
+            with m:
+                stacked = st.checkbox("stacked")
+            with r:
+                abs = st.checkbox("abs")
+            title = "correlation r_gen vs input"
+            x_axis = "r_gen_dim"
+            y_axis = "input_dim"
+            value_name = "correlation"
+            fig = plotly_plots.as_barchart(corr_data, log_y=log_y, stacked=stacked, abs=abs, title=title,
+                                           x_axis=x_axis, y_axis=y_axis, value_name=value_name)
+            st.plotly_chart(fig)
+
+            # # plt.plot(corr_data)
+            # for i in range(x_dim):
+            #     st.write(str(x_dim) + " correlation and log(abs(correlation))")
+            #     fig = plt.figure()
+            #     plt.plot(corr_data[:, i])
+            #     st.pyplot(fig)
+            #     fig = plt.figure()
+            #     plt.plot(np.log(np.abs(corr_data[:, i])))
+            #     st.pyplot(fig)
 
         if st.checkbox("temp: "):
             # plot r_gen as a "wave" for each timestep. Hope: find which pca components fail first
