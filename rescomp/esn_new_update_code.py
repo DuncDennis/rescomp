@@ -322,6 +322,18 @@ class _add_network_update_fct():
         self._n_type_flag_synonyms.add_synonyms(2, ["small_world", "watts_strogatz"])
         self._n_type_flag_synonyms.add_synonyms(3, ["random_directed", "erdos_renyi_directed"])
         self._n_type_flag_synonyms.add_synonyms(4, ["random_dense_gaussian"])
+        self._n_type_flag_synonyms.add_synonyms(5, ["scipy_sparse"])
+
+    def _create_scipy_sparse(self):
+        # see https://github.com/pvlachas/RNN-RC-Chaos/blob/a403e0e843cf9dde11833f0206f94f91169a4661/Methods/Models/esn/esn.py#L100
+        density = self._n_avg_deg/self._r_dim
+
+        # sparse scipy matrix. It might have non-zero diagonal elements, the random values are uniformly distributed between 0 and 1.
+        self._network = scipy.sparse.random(self._r_dim, self._r_dim, density=density).toarray()
+        self._network = 2*self._network - 1
+
+        self._scale_network()
+
 
     def create_network(self, n_rad=0.1, n_avg_deg=6.0,
                        n_type_opt="erdos_renyi", network_creation_attempts=10):
@@ -332,16 +344,19 @@ class _add_network_update_fct():
             self._n_edge_prob = self._n_avg_deg / (self._r_dim - 1)
             self._n_type_opt = n_type_opt
             n_type_flag = self._n_type_flag_synonyms.get_flag(n_type_opt)
-            for i in range(network_creation_attempts):
-                try:
-                    self._create_network_connections(n_type_flag)
-                    self._vary_network()
-                except _ArpackNoConvergence:
-                    continue
-                break
+            if n_type_flag == 5:  # scipy sparse
+                self._create_scipy_sparse()
             else:
-                raise Exception("Network creation during ESN init failed %d times"
-                                % network_creation_attempts)
+                for i in range(network_creation_attempts):
+                    try:
+                        self._create_network_connections(n_type_flag)
+                        self._vary_network()
+                    except _ArpackNoConvergence:
+                        continue
+                    break
+                else:
+                    raise Exception("Network creation during ESN init failed %d times"
+                                    % network_creation_attempts)
         else:
             self._n_type_opt = "CUSTOM"
             self._network = n_type_opt
@@ -371,7 +386,6 @@ class _add_network_update_fct():
         else:
             raise Exception("the network type %s is not implemented" %
                             str(self._n_type_opt))
-
         self._network = nx.to_numpy_array(network)
 
     def _vary_network(self, network_variation_attempts=10):
@@ -428,6 +442,11 @@ class _add_network_update_fct():
         maximum = np.absolute(eigenvals).max()
         self._network = ((self._n_rad / maximum) * self._network)
 
+    def return_network(self):
+        return self._network.toarray()
+
+    def return_avg_deg(self):
+        return
 
 class _add_dyn_sys_update_fct():
     """
@@ -969,8 +988,8 @@ class _add_model_input_coupling():
             self._w_in_scale = w_in_scale
             self._w_in_opt = w_in_opt
             w_in_flag = self._w_in_flag_synonyms.get_flag(w_in_opt)
-
-            x_dim_gen = self.input_model(np.ones(self._x_dim)).size + self._x_dim
+            x_dim_inp_model = self.input_model(np.ones(self._x_dim)).size
+            x_dim_gen = x_dim_inp_model + self._x_dim
 
             # print("x_dim_gen: ", x_dim_gen)
 
@@ -992,7 +1011,7 @@ class _add_model_input_coupling():
                         high=self._w_in_scale)
                 nodes_connected_to_model = np.delete(np.arange(self._r_dim), nodes_connected_to_raw)
                 for index in nodes_connected_to_model:
-                    random_x_coord = np.random.choice(np.arange(self._x_dim))
+                    random_x_coord = np.random.choice(np.arange(x_dim_inp_model))
                     self._w_in[index, random_x_coord + self._x_dim] = np.random.uniform(
                         low=-self._w_in_scale,
                         high=self._w_in_scale)
