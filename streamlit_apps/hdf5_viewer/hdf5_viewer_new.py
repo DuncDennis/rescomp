@@ -86,10 +86,20 @@ if option is not None:
     params_dict = check_parameter_sweep(f)
 
     multiselect_dict = {}
+    select_all_string = "SELECT ALL"
     with st.sidebar:
-        for key, val in params_dict.items():
+        for i, (key, val) in enumerate(params_dict.items()):
             disabled = True if len(val) == 1 else False
-            multiselect_dict[key] = st.multiselect(key, val, default=val[0], disabled=disabled)
+            if not disabled:
+                container = st.container()
+                all = st.checkbox("Select all", key=str(i))
+                if all:
+                    default = val
+                else:
+                    default = val[0]
+                multiselect_dict[key] = container.multiselect(key, val, default=default, disabled=disabled)
+            else:
+                multiselect_dict[key] = st.multiselect(key, val, default=val[0], disabled=disabled)
 
     trajs, params_to_show = get_trajectories(multiselect_dict, f)
 
@@ -251,6 +261,22 @@ if option is not None:
             elif ensemble_along == "Combined":
                 i_ens, i_time_period = None, None
 
+            # Experimental:
+            # lyapunov_exponents = rescomp.simulations.standard_lyapunov_exponents
+            # if st.checkbox("In lyapunov times", disabled=disabled):
+            #     in_lyapunov_times = {"dt": dt, "LE": lyapunov_exponents[system_option]}
+            # else:
+            #     in_lyapunov_times = None
+
+            if st.checkbox("In lyapunov times"):
+                left, right = st.columns(2)
+                with left:
+                    dt = st.number_input("dt", value=0.1)
+                    lyapunov_exponent = st.number_input("LLE", value=0.9059, format="%f")
+                in_lyapunov_times = {"dt": dt, "LE": lyapunov_exponent}
+            else:
+                in_lyapunov_times = None
+
             error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4, key="error2", step=0.1)
             log_x = st.checkbox("log_x")
             average_type = st.selectbox("average_type", ["mean", "median"])
@@ -258,7 +284,7 @@ if option is not None:
 
             fig = plot.plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
                                                   error_threshhold=error_threshhold, figsize=(800, 500), log_x=log_x,
-                                              average_type=average_type)
+                                              average_type=average_type, in_lyapunov_times=in_lyapunov_times)
             st.plotly_chart(fig)
 
             # fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
