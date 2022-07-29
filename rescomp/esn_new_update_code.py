@@ -1026,7 +1026,135 @@ class _add_model_input_coupling():
         else:
             self._w_in_opt = "CUSTOM"
             self._w_in = w_in_opt
-            
+
+
+class _add_same_model_input_output():
+    """
+    Add model input coupling. Input -> W_in * (Input, model(Input)
+    Add model output coupling. Only calculate the model(Input) once!
+    Used for Input Hybrid Reservoir Computing
+
+    """
+
+    def __init__(self):
+
+        self._w_in_opt = None
+        self._w_in_scale = None
+        self._w_in_flag_synonyms = utilities._SynonymDict()
+        self._w_in_flag_synonyms.add_synonyms(0, ["random_sparse"])
+        self._w_in_flag_synonyms.add_synonyms(1, ["ordered_sparse"])
+        self._w_in_flag_synonyms.add_synonyms(2, ["random_dense_uniform"])
+        self._w_in_flag_synonyms.add_synonyms(3, ["random_dense_gaussian"])
+
+        self.input_model = None
+        self.model_to_network_factor = None
+
+        self.last_input_model_result = None
+
+        self._r_to_r_gen_opt = None
+        self._r_to_r_gen_synonyms = utilities._SynonymDict()
+        self._r_to_r_gen_synonyms.add_synonyms(0, ["linear_r", "simple", "linear"])
+        self._r_to_r_gen_synonyms.add_synonyms(1, "linear_and_square_r")
+        self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
+        self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
+
+    def save_input_model_result(self, func, x):
+        x_new = func(x)
+        self._last_input_model_results = x_new
+        return x_new
+
+    def set_input_model(self, input_model, model_to_network_factor=0.5):
+        self.input_model = input_model
+        self.model_to_network_factor = model_to_network_factor
+
+        self._inp_coupling_fct = lambda x: self._w_in @ np.hstack((x, self.save_input_model_result(self.input_model, x)))
+
+    def create_w_in(self, w_in_opt, w_in_scale=1.0):
+        self.logger.debug("Create w_in")
+
+        if type(w_in_opt) == str:
+            self._w_in_scale = w_in_scale
+            self._w_in_opt = w_in_opt
+            w_in_flag = self._w_in_flag_synonyms.get_flag(w_in_opt)
+            x_dim_inp_model = self.input_model(np.ones(self._x_dim)).size
+            x_dim_gen = x_dim_inp_model + self._x_dim
+
+            # print("x_dim_gen: ", x_dim_gen)
+
+            if w_in_flag == 0:
+
+                self._w_in = np.zeros((self._r_dim, x_dim_gen))
+
+                nr_res_nodes_connected_to_model = int(self.model_to_network_factor * self._r_dim)
+                nr_res_nodes_connected_to_raw = self._r_dim - nr_res_nodes_connected_to_model
+
+                nodes_connected_to_raw = np.random.choice(np.arange(self._r_dim),
+                                                          size=nr_res_nodes_connected_to_raw,
+                                                          replace=False)
+                nodes_connected_to_raw = np.sort(nodes_connected_to_raw)
+
+                for index in nodes_connected_to_raw:
+                    random_x_coord = np.random.choice(np.arange(self._x_dim))
+                    self._w_in[index, random_x_coord] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)
+                nodes_connected_to_model = np.delete(np.arange(self._r_dim),
+                                                     nodes_connected_to_raw)
+                for index in nodes_connected_to_model:
+                    random_x_coord = np.random.choice(np.arange(x_dim_inp_model))
+                    self._w_in[index, random_x_coord + self._x_dim] = np.random.uniform(
+                        low=-self._w_in_scale,
+                        high=self._w_in_scale)
+            elif w_in_flag == 1:
+                raise Exception("Not implemented")
+            elif w_in_flag == 2:
+                self._w_in = np.random.uniform(low=-self._w_in_scale,
+                                               high=self._w_in_scale,
+                                               size=(self._r_dim, x_dim_gen))
+            elif w_in_flag == 3:
+                self._w_in = self._w_in_scale * np.random.randn(self._r_dim, x_dim_gen)
+        else:
+            self._w_in_opt = "CUSTOM"
+            self._w_in = w_in_opt
+
+    def set_r_to_r_gen_fct(self, r_to_r_gen_opt="linear"):
+        if type(r_to_r_gen_opt) == str:
+            self._r_to_r_gen_opt = r_to_r_gen_opt
+            r_to_r_gen_flag = self._r_to_r_gen_synonyms.get_flag(r_to_r_gen_opt)
+            if r_to_r_gen_flag == 0:
+                _r_to_r_gen_fct_no_model = lambda r, x: r
+            elif r_to_r_gen_flag == 1:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, r ** 2))
+            elif r_to_r_gen_flag == 2:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, 1))
+            elif r_to_r_gen_flag == 3:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((np.hstack((r, r ** 2)), 1))
+            elif r_to_r_gen_flag == 4:
+                def temp(r, x):
+                    r_gen = np.copy(r).T
+                    r_gen[::2] = r.T[::2] ** 2
+                    return r_gen.T
+                _r_to_r_gen_fct_no_model = temp
+
+            elif r_to_r_gen_flag == 5:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                _r_to_r_gen_fct_no_model = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
+
+        else:
+            self._r_to_r_gen_opt = "CUSTOM"
+            _r_to_r_gen_fct_no_model = r_to_r_gen_opt
+
+        self._r_to_r_gen_fct = lambda r, x: np.hstack((_r_to_r_gen_fct_no_model(r, x), self._last_input_model_results))
+
+        r_to_r_gen_init = lambda r, x: np.hstack((_r_to_r_gen_fct_no_model(r, x), self.input_model(x)))
+        
+        self._r_gen_dim = r_to_r_gen_init(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[0]
+
+
 
 class _add_standard_y_to_x():
     """
@@ -2239,6 +2367,71 @@ class ESN_full_hybrid_pca(_ResCompCore, _add_basic_defaults, _add_network_update
 
         self.set_default_res_state(default_res_state=default_res_state)
         self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_full_hybrid_same(_ResCompCore, _add_basic_defaults, _add_network_update_fct,
+                           _add_same_model_input_output, _add_standard_y_to_x):
+    """
+    ESN with output hybrid model
+    """
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        _add_same_model_input_output.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+    def train(self, use_for_train, sync_steps=0, reset_res_state=True, **kwargs):
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+        super(ESN_full_hybrid_same, self).train(sync, x_train, y_train,
+                                                reset_res_state=reset_res_state, **kwargs)
+
+    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
+              r_to_r_gen_opt="linear", input_model=lambda x: x, model_to_network_factor=0.5,
+              act_fct_opt="tanh",
+              node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
+              bias_seed=None, w_in_seed=None):
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
+
+        self.set_input_model(input_model, model_to_network_factor=model_to_network_factor)
+        self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
 
 # failed experiments / not working below:
 
