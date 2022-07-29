@@ -1,6 +1,8 @@
 """ A collection of utility plotting functions using plotly"""
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -9,7 +11,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 
 
-DEFAULT_TWO_D_FIGSIZE = (800, 350)
+DEFAULT_TWO_D_FIGSIZE = (650, 350)
 DEFAULT_THREE_D_FIGSIZE = (650, 500)
 
 
@@ -96,15 +98,43 @@ def matrix_as_barchart(data_matrix: np.ndarray, x_axis: str = "x_dim", y_axis: s
     return fig
 
 
+def _plot_2d_line_or_scatter(to_plot_df: pd.DataFrame, x_label: str, y_label: str,
+                             mode: str, color: str, title_i: str,
+                             line_size: float | None = 1,
+                             scatter_size: float | None = 1,
+                             fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE
+                             ) -> go.Figure:
+    """General utility plotting function for 2d plots.
+    TODO: Better docstring.
+    """
+    if mode == "line":
+        fig = px.line(to_plot_df, x=x_label, y=y_label, color=color,
+                      title=title_i)
+        if line_size is not None:
+            fig.update_traces(line={"width": line_size})
+    elif mode == "scatter":
+        fig = px.scatter(to_plot_df, x=x_label, y=y_label, color=color,
+                         title=title_i)
+        if scatter_size is not None:
+            fig.update_traces(marker={'size': scatter_size})
+    else:
+        raise Exception(f"mode = {mode} not accounted for.")  # TODO: proper error
+
+    fig.update_layout(height=fig_size[1], width=fig_size[0])
+    return fig
+
+
 @st.experimental_memo
 def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str = "line",
                             line_size: float | None = 1, scatter_size: float | None = 1,
                             title: str | None = None,
                             fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE,
-                            x_scale: float | None = None, x_label: str = "x",
-                            y_label: str = "y", dimensions: tuple[int, ...] | None = None
+                            x_scale: float | None = None, x_label: str = "steps",
+                            y_label: str = "value", dimensions: tuple[int, ...] | None = None,
+                            subplot_dimensions_bool: bool = True
                             ) -> list[go.Figure, ...]:
     """ Plot multiple 1d time_series as a line or scatter plot.
+    # TODO: add possibility for vertical lines seperators
 
     Args:
         time_series_dict: Dict of the form {"timeseries_name_1": time_series_1, ...}.
@@ -118,12 +148,18 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
         y_label: y_label for yaxis.
         dimensions: If the timeseries is multidimensional specify the dimensions to plot. If None
                     All dimensions are plotted beneath each other.
+        subplot_dimensions_bool: If true: Make a new fig for each dimension. Else: make a new fig
+                                for each entry in the time_series_dict. (Flip the plot).
 
     Returns: plotly figure.
 
     """
     figs = []
-    x_steps, y_dim = list(time_series_dict.values())[0].shape
+    shape = list(time_series_dict.values())[0].shape
+    if len(shape) == 1:
+        x_steps, y_dim = shape[0], 1
+    else:
+        x_steps, y_dim = shape
     print(x_steps, y_dim)
 
     if x_scale is None:
@@ -133,33 +169,86 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
 
     if dimensions is None:
         dimensions = tuple(np.arange(y_dim))
+    # for i in dimensions:
+    #     to_plot_dict = {x_label: [], y_label: [], "label": []}
+    #     for label, time_series in time_series_dict.items():
+    #         if len(shape) == 1:
+    #             time_series = time_series[:, np.newaxis]
+    #         to_plot_dict[x_label].extend(x_array)
+    #         to_plot_dict[y_label].extend(time_series[:, i])
+    #         to_plot_dict["label"].extend([label, ] * time_series.shape[0])
+    #
+    #     if len(dimensions) > 1:
+    #         if title is not None:
+    #             title_i = f"{title}: dimension: {i}"
+    #         else:
+    #             title_i = f"Dimension: {i}"
+    #     else:
+    #         title_i = title
+    #
+    #     if mode == "line":
+    #         fig = px.line(to_plot_dict, x=x_label, y=y_label, color="label", title=title_i)
+    #         if line_size is not None:
+    #             fig.update_traces(line={"width": line_size})
+    #     elif mode == "scatter":
+    #         fig = px.scatter(to_plot_dict, x=x_label, y=y_label, color="label",
+    #                          title=title_i)
+    #         if scatter_size is not None:
+    #             fig.update_traces(marker={'size': scatter_size})
+    #     else:
+    #         raise Exception(f"mode = {mode} not accounted for.")  # TODO: proper error
+    #
+    #     fig.update_layout(height=fig_size[1], width=fig_size[0])
+    #     figs.append(fig)
 
-    for i in dimensions:
-        to_plot_dict = {x_label: [], y_label: [], "label": []}
+    # new:
+    to_plot_dict = {x_label: [], y_label: [], "label": [], "dimension": []}
+    for dim in dimensions:
         for label, time_series in time_series_dict.items():
+            if len(shape) == 1:
+                time_series = time_series[:, np.newaxis]
             to_plot_dict[x_label].extend(x_array)
-            to_plot_dict[y_label].extend(time_series[:, i])
+            to_plot_dict[y_label].extend(time_series[:, dim])
             to_plot_dict["label"].extend([label, ] * time_series.shape[0])
+        to_plot_dict["dimension"].extend([dim, ] * time_series.shape[0] * len(time_series_dict))
 
-        if title is not None:
-            title_i = f"{title}: dimension: {i}"
-        else:
-            title_i = f"Dimension: {i}"
+    df = pd.DataFrame.from_dict(to_plot_dict)
 
-        if mode == "line":
-            fig = px.line(to_plot_dict, x=x_label, y=y_label, color="label", title=title_i)
-            if line_size is not None:
-                fig.update_traces(line={"width": line_size})
-        elif mode == "scatter":
-            fig = px.scatter(to_plot_dict, x=x_label, y=y_label, color="label",
-                             title=title_i)
-            if scatter_size is not None:
-                fig.update_traces(marker={'size': scatter_size})
-        else:
-            raise Exception(f"mode = {mode} not accounted for.")  # TODO: proper error
+    if subplot_dimensions_bool:
+        for dim in dimensions:
+            df_selection = df[df["dimension"] == dim]
+            if len(dimensions) > 1:
+                if title is not None:
+                    title_i = f"{title}: dimension: {dim}"
+                else:
+                    title_i = f"Dimension: {dim}"
+            else:
+                title_i = title
 
-        fig.update_layout(height=fig_size[1], width=fig_size[0])
-        figs.append(fig)
+            color = "label"
+            fig = _plot_2d_line_or_scatter(df_selection, x_label, y_label, mode,
+                                           color, title_i, line_size=line_size,
+                                           scatter_size=scatter_size,
+                                           fig_size=fig_size)
+            figs.append(fig)
+
+    else:
+        labels_list = list(time_series_dict.keys())
+        for label in labels_list:
+            df_selection = df[df["label"] == label]
+
+            if title is not None:
+                title_i = f"{title}: {label}"
+            else:
+                title_i = f"{label}"
+
+            color = "dimension"
+
+            fig = _plot_2d_line_or_scatter(df_selection, x_label, y_label, mode,
+                                           color, title_i, line_size=line_size,
+                                           scatter_size=scatter_size,
+                                           fig_size=fig_size)
+            figs.append(fig)
 
     return figs
 
@@ -261,6 +350,8 @@ def multiple_time_series_image(time_series_dict: dict[str, np.ndarray],
                                y_label: str = "y",
                                x_scale: float | None = None,
                                ) -> list[go.Figure, ...]:
+    # TODO: add docstring
+    # TODO: add possibility for vertical lines seperators
     figs = []
     labels = {"x": x_label, "y": y_label}
 
