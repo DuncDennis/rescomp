@@ -6,13 +6,242 @@ import os
 import rescomp.plotting as plot
 
 import matplotlib.pyplot as plt
-plt.style.use('dark_background')
+# plt.style.use('dark_background')
+import seaborn as sns
+sns.set_theme(style="darkgrid")
+import pandas as pd
+import plotly.express as px
+from PIL import Image
 
+@st.cache
+def convert_df(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv().encode('utf-8')
 
 # @st.cache
 def load_hdf5_file(file_path):
     f = h5py.File(file_path, 'r')
     return f
+
+
+def plot_df_nicely(df, sweep_variable):
+
+    # Parameters:
+    x_size = 500
+    y_size = int(1.4 * x_size)
+    # figsize = (700, 500)
+    log_x = False
+    new_legend = " "
+    legend_order = ["Model only",
+                    "Reservoir only",
+                    "Input hybrid",
+                    "Output hybrid",
+                    "Full hybrid",
+                    ]
+
+    def transform_func(input_str: str) -> str:
+        if "full" in input_str:
+            out = "Full hybrid"
+        elif "input" in input_str:
+            out = "Input hybrid"
+        elif "output" in input_str:
+            out = "Output hybrid"
+        elif "normal" in input_str:
+            out = "Reservoir only"
+        elif "only_model" in input_str:
+            out = "Model only"
+        else:
+            raise Exception(f"Not implemented: {input_str}")
+        return out
+
+    yaxis_title = r'$\text{Valid Time }(\lambda_\mathrm{max} t_v)$'
+    font_size = 15
+    legend_font_size = 11
+
+    # Lorenz 63 r sweep:
+    # xaxis_title = r'$D_r$'
+    # xtick0 = 0.0
+    # xdtick = 500
+    # ytick0 = 0.0
+    # ydtick = 5
+    # xrange = [0, 1250]
+    # yrange = [0, 15]
+
+    ### if add new value (For Lorenz63 model eps=0.05):
+    # uniques_sweep = df[sweep_variable].unique()
+    # valid_times_add = [1.1324, ] * len(uniques_sweep)
+    # valid_times_error_low_add = [0.2038, ] * len(uniques_sweep)
+    # valid_times_error_high_add = [0.6341, ] * len(uniques_sweep)
+    # data_dict = {"valid times": valid_times_add,
+    #              "valid times error lower": valid_times_error_low_add,
+    #              "valid times error upper": valid_times_error_high_add,
+    #              sweep_variable: uniques_sweep,
+    #              "Other Parameters": "type: only_model"}
+    # df_new = pd.DataFrame(data_dict)
+    # df = pd.concat([df, df_new], axis=0, ignore_index=True)
+    ### end
+
+    # Lorenz 63 eps sweep:
+    # xaxis_title = r'$\epsilon$'
+    # xtick0 = 0.0
+    # xdtick = 0.02
+    # ytick0 = 0.0
+    # ydtick = 2
+    # xrange = [0, 0.105]
+    # yrange = [0, 12]
+
+    # Lorenz w_in scale sweep:
+    xaxis_title = r'$W_\text{in} \text{ scale: } \sigma$'
+    xtick0 = 0.15
+    xdtick = 0.1
+    ytick0 = 0
+    ydtick = 2
+    xrange = None  #  [0, 0.105]
+    yrange = None  #  [0, 12]
+
+    # Chua r sweep:
+    # xaxis_title = r'$D_r$'
+    # xtick0 = 0.0
+    # xdtick = 200
+    # ytick0 = 0
+    # ydtick = 2
+    # xrange = None #  [0, 0.105]
+    # yrange = None #  [0, 12]
+
+    # KS eps1  r sweep:
+    # xaxis_title = r'$D_r$'
+    # xtick0 = 0.0
+    # xdtick = 2000
+    # ytick0 = 0.0
+    # ydtick = 1
+    # xrange = [-100, 8200]
+    # yrange = [-0.2, 4.8]
+
+    # ### if add new value (For KS model eps=1):
+    # uniques_sweep = df[sweep_variable].unique()
+    # valid_times_add = [0.0175, ] * len(uniques_sweep)
+    # valid_times_error_low_add = [0, ] * len(uniques_sweep)
+    # valid_times_error_high_add = [0, ] * len(uniques_sweep)
+    # data_dict = {"valid times": valid_times_add,
+    #              "valid times error lower": valid_times_error_low_add,
+    #              "valid times error upper": valid_times_error_high_add,
+    #              sweep_variable: uniques_sweep,
+    #              "Other Parameters": "type: only_model"}
+    # df_new = pd.DataFrame(data_dict)
+    # df = pd.concat([df, df_new], axis=0, ignore_index=True)
+    # ### end
+
+    # # KS eps=0.1  r sweep:
+    # xaxis_title = r'$D_r$'
+    # xtick0 = 0.0
+    # xdtick = 2000
+    # ytick0 = 0.0
+    # ydtick = 1
+    # xrange = [-100, 8200]
+    # yrange = [-0.2, 7.4]
+
+    # ### if add new value (For KS model eps=0.1):
+    # uniques_sweep = df[sweep_variable].unique()
+    # valid_times_add = [0.5775, ] * len(uniques_sweep)
+    # valid_times_error_low_add = [0.0306, ] * len(uniques_sweep)
+    # valid_times_error_high_add = [0.1006, ] * len(uniques_sweep)
+    # data_dict = {"valid times": valid_times_add,
+    #              "valid times error lower": valid_times_error_low_add,
+    #              "valid times error upper": valid_times_error_high_add,
+    #              sweep_variable: uniques_sweep,
+    #              "Other Parameters": "type: only_model"}
+    # df_new = pd.DataFrame(data_dict)
+    # df = pd.concat([df, df_new], axis=0, ignore_index=True)
+    # ### end
+
+    # # KS eps=0.01  r sweep:
+    # xaxis_title = r'$D_r$'
+    # xtick0 = 0.0
+    # xdtick = 2000
+    # ytick0 = 0.0
+    # ydtick = 1
+    # xrange = [-100, 8200]
+    # yrange = [-0.2, 9.7]
+    #
+    # ### if add new value (For KS model eps=0.01):
+    # uniques_sweep = df[sweep_variable].unique()
+    # valid_times_add = [2.7300, ] * len(uniques_sweep)
+    # valid_times_error_low_add = [0.2888, ] * len(uniques_sweep)
+    # valid_times_error_high_add = [0.7962, ] * len(uniques_sweep)
+    # data_dict = {"valid times": valid_times_add,
+    #              "valid times error lower": valid_times_error_low_add,
+    #              "valid times error upper": valid_times_error_high_add,
+    #              sweep_variable: uniques_sweep,
+    #              "Other Parameters": "type: only_model"}
+    # df_new = pd.DataFrame(data_dict)
+    # df = pd.concat([df, df_new], axis=0, ignore_index=True)
+    # ### end
+
+    figsize = (y_size, x_size)
+    df[new_legend] = df["Other Parameters"].apply(transform_func)
+
+    df.sort_values([new_legend, sweep_variable], inplace=True)
+
+    # st.table(df)
+
+    fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times error upper",
+                  error_y_minus="valid times error lower",
+                  color=new_legend,
+                  # line_dash =new_legend,
+                  # line_group=new_legend,
+
+                  width=figsize[0],
+                  height=figsize[1], log_x=log_x,
+                  category_orders={new_legend: legend_order})
+
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
+
+    fig.update_layout(
+        yaxis_title=yaxis_title,
+        xaxis_title=xaxis_title,
+        xaxis=dict(
+            tickmode='linear',
+            tick0=xtick0,
+            dtick=xdtick
+        ),
+        yaxis=dict(
+            tickmode='linear',
+            tick0=ytick0,
+            dtick=ydtick
+        ),
+
+        font=dict(
+            size=font_size,
+            family="Times New Roman"
+        )
+    )
+    fig.update_yaxes(range=yrange)
+    fig.update_xaxes(range=xrange)
+
+    fig.update_layout(legend=dict(
+        orientation="h",
+        yanchor="bottom",
+        y=1.01, # 0.99
+        xanchor="left",
+        # x=0.01,
+        font=dict(size=legend_font_size)
+    ))
+
+    # st.plotly_chart(fig)
+
+    fig.write_image("test_fig.png", scale=3)
+    # fig.write_image("test_fig.pdf")
+    image = Image.open('test_fig.png')
+    st.image(image)
+
+    # df.reset_index(inplace=True)
+    # sns.lineplot(data=df, x=sweep_variable, y="valid times", hue="Other Parameters")
+    # fig = plt.gcf()
+    # st.pyplot(fig)
 
 
 def check_parameter_sweep(f, stripped=True):
@@ -277,19 +506,57 @@ if option is not None:
             else:
                 in_lyapunov_times = None
 
-            error_threshhold = st.number_input("error_threshhold", min_value=0.01, max_value=5., value=0.4, key="error2", step=0.1)
             log_x = st.checkbox("log_x")
             average_type = st.selectbox("average_type", ["mean", "median"])
+
             #####
 
-            fig = plot.plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
-                                                  error_threshhold=error_threshhold, figsize=(800, 500), log_x=log_x,
-                                              average_type=average_type, in_lyapunov_times=in_lyapunov_times)
+            # if len(data_shape) == 2:  # Data is already valid times
+            #     fig = plot.plot_vt(trajs, params_to_show, f, sweep_variable,
+            #                        i_ens=i_ens, i_time_period=i_time_period,
+            #                        figsize=(800, 500), log_x=log_x,
+            #                        average_type=average_type,
+            #                        in_lyapunov_times=in_lyapunov_times)
+            # elif len(data_shape) == 3:  # Data is error.
+            #     pass  # TBD data is error.
+            # else:  # Data is trajectory:
+            #     error_threshhold = st.number_input("error_threshhold", min_value=0.01,
+            #                                        max_value=5.,
+            #                                        value=0.4, key="error2", step=0.1)
+            #     fig = plot.plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable,
+            #                                       i_ens=i_ens, i_time_period=i_time_period,
+            #                                       error_threshhold=error_threshhold,
+            #                                       figsize=(800, 500), log_x=log_x,
+            #                                       average_type=average_type,
+            #                                       in_lyapunov_times=in_lyapunov_times)
+
+            if len(data_shape) == 2:  # Data is already valid times
+                disabled = True
+            else:
+                disabled = False
+
+            error_threshhold = st.number_input("error_threshhold", min_value=0.01,
+                                               max_value=5.,
+                                               value=0.4, key="error2", step=0.1, disabled=disabled)
+
+            df = plot.hdf5_to_pandas_vt(trajs, params_to_show, f, sweep_variable, i_ens=i_ens,
+                                        i_time_period=i_time_period,
+                                        error_threshhold=error_threshhold,
+                                        average_type=average_type,
+                                        in_lyapunov_times=in_lyapunov_times)
+
+            fig = plot.plot_pandas(df, sweep_variable=sweep_variable, figsize=(800, 500),
+                                   log_x=log_x)
             st.plotly_chart(fig)
 
-            # fig = plot.plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=i_ens, i_time_period=i_time_period,
-            #                                       error_threshhold=error_threshhold, figsize=(800, 500))
-            # st.plotly_chart(fig)
+            if st.checkbox("Table: ", value=False):
+                st.table(df)
+
+            if st.checkbox("Plot dataframe nicely"):
+                plot_df_nicely(df, sweep_variable)
+            # csv = convert_df(df)
+            #
+            # st.download_button("Download DataFrame as CSV", data=csv, mime="text/csv")
 
     with st.expander("Attractor Likeness vs. Parameter"):
         plot_attr_likeness_vs_param = st.checkbox("plot Attractor Likeness vs. Params")
