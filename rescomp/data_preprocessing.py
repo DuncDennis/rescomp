@@ -26,7 +26,7 @@ def scale_and_shift(time_series: np.ndarray, scale: float | np.ndarray | None = 
         The scaled and shifted time_series.
     """
 
-    sys_dim = time_series.shape[0]
+    sys_dim = time_series.shape[1]
 
     mean = np.mean(time_series, axis=0)
     std = np.std(time_series, axis=0)
@@ -52,3 +52,24 @@ def scale_and_shift(time_series: np.ndarray, scale: float | np.ndarray | None = 
         shift_vec = np.zeros(sys_dim)
 
     return scaled_and_centered + shift_vec
+
+
+def add_noise(time_series: np.ndarray,
+              noise_scale: float = 0.1,
+              seed: int | None = None
+              ) -> np.ndarray:
+    """Add gaussian noise to a time_series.
+    TODO: different noise kinds.
+    Args:
+        time_series: The input time series of shape (time_steps, sys_dim).
+        noise_scale: The scale of the gaussian white noise.
+        seed: The seed used to calculate the noise.
+
+    Returns:
+        The time series with added noise.
+    """
+
+    shape = time_series.shape
+    rng = np.random.default_rng(seed)
+    noise = rng.normal(size=shape, scale=noise_scale)
+    return time_series + noise
