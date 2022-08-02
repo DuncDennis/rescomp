@@ -4,7 +4,6 @@ from typing import Any, Callable
 
 import streamlit as st
 import numpy as np
-import inspect
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 import rescomp.simulations_new as sims
@@ -24,6 +23,7 @@ SYSTEM_DICT = {
     "SimplestCubicChaotic": sims.SimplestCubicChaotic,
     "SimplestPiecewiseLinearChaotic": sims.SimplestPiecewiseLinearChaotic,
     "DoubleScroll": sims.DoubleScroll,
+    "LotkaVolterra": sims.LotkaVolterra,
     "SimplestDrivenChaotic": sims.SimplestDrivenChaotic,
     "UedaOscillator": sims.UedaOscillator,
     "Henon": sims.Henon,
@@ -36,35 +36,38 @@ SYSTEM_DICT = {
 def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
                      default_parameters: dict[str, dict[str, Any]] | None = None
                      ) -> tuple[str, dict[str, Any]]:
-    """ Select the system to simulate and specify the parameters.
-    # TODO: update docstring
+    """Create streamlit elements to select the system to simulate and specify the parameters.
+
     Args:
         systems_sub_section: If None, take all in SYSTEM_DICT, else take only subsection.
+        default_parameters: Define the default parameters that should be loaded for each
+                            system_name.
+                            If None, take the default parameters for the simulation.
 
-    Returns:
-        tuple with system name and parameters dict
+    Returns: tuple with first element being the system_name, second element being the system
+             parameters.
 
     """
+
     if systems_sub_section is None:
         system_dict = SYSTEM_DICT
     else:
         system_dict = {system_name: system_class for system_name, system_class in SYSTEM_DICT.items()
                        if system_name in systems_sub_section}
-        if len(system_dict) == 0:  # TODO: proper error
-            raise Exception(f"The systems in {systems_sub_section} are not accounted for.")
+        if len(system_dict) == 0:
+            raise ValueError(f"The systems in {systems_sub_section} are not accounted for.")
 
     system_name = st.selectbox('System', system_dict.keys())
 
     sim_class = system_dict[system_name]
 
     if default_parameters is None:
-        fullargspec = inspect.getfullargspec(sim_class.__init__)
-        system_parameters = {x: y for x, y in zip(fullargspec[0][1:], fullargspec[3])}
+        system_parameters = sim_class.default_parameters
     else:
         if system_name in default_parameters.keys():
             system_parameters = default_parameters[system_name]
-        else:  # TODO: proper error
-            raise Exception(f"The system specified in default_parameters is not accounted for.")
+        else:
+            raise ValueError(f"The system specified in default_parameters is not accounted for.")
 
     with st.expander("Parameters: "):
         for key, val in system_parameters.items():
@@ -84,14 +87,15 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
 def st_get_model_system(system_name: str, system_parameters: dict[str, Any],
                         unique_key: str = ""
                         ) -> tuple[Callable[[np.ndarray], np.ndarray], dict[str, Any]]:
-    """Get a app-section to modify the system parameters of the system given by system_name.
+    """Get an app-section to modify the system parameters of the system given by system_name.
 
     Args:
         system_name: The name of the system. has to be in SYSTEM_DICT.
         system_parameters: The original system_parameters to be modified.
 
-    Returns: The iterator function of the modified model.
+    Returns: The iterator function of the modified model and the modified system_parameters.
 
+    # TODO: check for possible errors.
     """
 
     modified_system_parameters = system_parameters.copy()
@@ -145,8 +149,13 @@ def st_get_model_system(system_name: str, system_parameters: dict[str, Any],
 
 
 def st_select_time_steps(default_time_steps: int = 10000) -> int:
-    """
-    Add number input for time steps.
+    """Streamlit element to select timesteps.
+
+    Args:
+        default_time_steps: The default nr of time steps to show.
+
+    Returns:
+        The selected timesteps.
     """
     return int(st.number_input('time_steps', value=default_time_steps, step=1))
 
@@ -158,8 +167,18 @@ def st_select_time_steps_split_up(default_t_train_disc: int = 1000,
                                   default_t_pred_sync: int = 300,
                                   default_t_pred: int = 5000,
                                   ) -> tuple[int, int, int, int, int, int]:
-    """Add number inputs for train discard, train sync, train, pred discard, pred sync and pred t.
+    """Streamlit elements train discard, train sync, train, pred discard, pred sync and pred.
 
+    Args:
+        default_t_train_disc: Default train disc time steps.
+        default_t_train_sync: Default train sync time steps.
+        default_t_train: Defaut train time steps.
+        default_t_pred_disc: Default predict disc time steps.
+        default_t_pred_sync: Default predict sync time steps.
+        default_t_pred: Default predict time steps.
+
+    Returns:
+        The selected time steps.
     """
     with st.expander("Time steps: "):
         t_train_disc = st.number_input('t_train_disc', value=default_t_train_disc, step=1)
@@ -174,17 +193,38 @@ def st_select_time_steps_split_up(default_t_train_disc: int = 1000,
 
 @st.experimental_memo
 def simulate_trajectory(system_name: str, system_parameters: dict[str, Any], time_steps: int) -> np.ndarray:
+    """Function to simulate a trajectory given the system_name and the system_parameters.
+
+    Args:
+        system_name: The system name. Has to be implemented in SYSTEM_DICT.
+        system_parameters: The system parameters. Not every kwarg has to be specified.
+        time_steps: The number of time steps to simulate.
+
+    Returns:
+        The trajectory with the shape (time_steps, sys_dim).
+    """
     return SYSTEM_DICT[system_name](**system_parameters).simulate(time_steps=time_steps)
 
 
 @st.experimental_memo
 def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
-                                  N: int = int(1e3), deviation_scale: float = 1e-10,
-                                  part_time_steps: int = 20, disc_time_steps: int = 1
-                                  ) -> np.ndarray:
+                                  steps: int = int(1e3), deviation_scale: float = 1e-10,
+                                  part_time_steps: int = 15, steps_skip: int = 50) -> np.ndarray:
+    """Measure the largest lyapunov exponent of a given system with specified parameters.
 
+    Args:
+        system_name: The system name. Has to be in SYSTEM_DICT.
+        system_parameters: The system parameters. Not every kwarg has to be specified.
+        steps: The number of renormalization steps.
+        deviation_scale: The initial deviation scale for nearby trajectories.
+        part_time_steps: The nr of time steps between renormalizations.
+        steps_skip: The nr of steps to skip before tracking the divergence.
+
+    Returns:
+        The convergence of the largest lyapunov with shape: (steps, ).
+    """
     sim_instance = SYSTEM_DICT[system_name](**system_parameters)
-    starting_point = sim_instance.simulate(disc_time_steps)[-1, :]
+    starting_point = sim_instance.default_starting_point
 
     if hasattr(sim_instance, "dt"):
         dt = sim_instance.dt
@@ -193,37 +233,58 @@ def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str,
 
     iterator_func = sim_instance.iterate
     lle_conv = meas.largest_lyapunov_exponent(iterator_func, starting_point=starting_point, dt=dt,
-                                              N=N, part_time_steps=part_time_steps,
+                                              steps=steps, part_time_steps=part_time_steps,
                                               deviation_scale=deviation_scale,
+                                              steps_skip=steps_skip,
                                               return_convergence=True)
     return lle_conv
 
 
-def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any]):
-    left, right = st.columns(2)
-    with left:
-        N = int(st.number_input("N", value=int(1e3)))
-    with right:
-        part_time_steps = int(st.number_input("time steps of part", value=20))
-    left, right = st.columns(2)
-    with left:
-        disc_time_steps = int(st.number_input("skipped time steps", value=500, min_value=1))
-    with right:
-        deviation_scale = 10**(float(st.number_input("log (deviation_scale)", value=-10.0)))
+def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any]) -> None:
+    """Streamlit element to calculate the largest lyapunov exponent.
 
-    lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, N=N,
+    Set up the number inputs for steps, part_time_steps, steps_skip and deviation scale.
+    Plot the convergence.
+
+    Args:
+        system_name: The system name. Has to be in SYSTEM_DICT.
+        system_parameters: The system parameters. Not every kwarg has to be specified.
+    """
+    left, right = st.columns(2)
+    with left:
+        steps = int(st.number_input("steps", value=int(1e3)))
+    with right:
+        part_time_steps = int(st.number_input("time steps of each part", value=15))
+    left, right = st.columns(2)
+    with left:
+        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0))
+    with right:
+        deviation_scale = 10 ** (float(st.number_input("log (deviation_scale)", value=-10.0)))
+
+    lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, steps=steps,
                                              part_time_steps=part_time_steps,
                                              deviation_scale=deviation_scale,
-                                             disc_time_steps=disc_time_steps)
-    figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
-                                        y_label="running avg of LLE")
-    plpl.multiple_figs(figs)
+                                             steps_skip=steps_skip)
+    largest_lle = np.round(lle_conv[-1], 5)
 
-    largest_lle = lle_conv[-1]
-    st.write(f"Largest Lyapunov Exponent = {np.round(largest_lle, 5)}")
+    figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
+                                        y_label="running avg of LLE", title=f"Largest Lyapunov "
+                                                                            f"Exponent: "
+                                                                            f"{largest_lle}")
+    plpl.multiple_figs(figs)
 
 
 def st_default_simulation_plot(time_series):
+    """Streamlit element to plot a time series independent of shape.
+
+    If 1d, plot value vs. time.
+    If 2d, plot value_1 vs value_2 as a scatter plot.
+    If 3d, plot value_1 vs value_2 vs value_3 as a line plot.
+    If d>3, plot as a heatmap: values vs time.
+
+    Args:
+        time_series: The timeseries of shape (time_steps, sys_dim)
+    """
 
     x_dim = time_series.shape[1]
     if x_dim == 1:
@@ -263,8 +324,6 @@ def main() -> None:
 
     if st.checkbox("Calculate largest lyapunov exponent: "):
         st_largest_lyapunov_exponent(system_name, system_parameters)
-
-    x_dim = time_series.shape[1]
 
 
 if __name__ == '__main__':
