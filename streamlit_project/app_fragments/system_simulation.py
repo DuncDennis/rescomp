@@ -8,6 +8,7 @@ import numpy as np
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 import rescomp.simulations_new as sims
 import rescomp.measures_new as meas
+import rescomp.data_preprocessing as datapre
 
 
 SYSTEM_DICT = {
@@ -157,7 +158,7 @@ def st_select_time_steps(default_time_steps: int = 10000) -> int:
     Returns:
         The selected timesteps.
     """
-    return int(st.number_input('time_steps', value=default_time_steps, step=1))
+    return int(st.number_input('time steps', value=default_time_steps, step=1))
 
 
 def st_select_time_steps_split_up(default_t_train_disc: int = 1000,
@@ -274,6 +275,75 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
     plpl.multiple_figs(figs)
 
 
+@st.experimental_memo
+def get_scaled_and_shifted_data(time_series: np.ndarray,
+                                scale: float = 1.0,
+                                shift: float = 0.0
+                                ) -> np.ndarray:
+    """
+    Scale and shift a time series.
+
+    First center and normalize the time_series to a std of unity for each axis. Then optionally
+    rescale and/or shift the time series.
+
+    Args:
+        time_series: The time series of shape (time_steps, sys_dim).
+        scale: Scale every axis so that the std is the scale value.
+        shift: Shift every axis so that the mean is the shift value.
+
+    Returns:
+        The scaled and shifted time_series.
+    """
+    return datapre.scale_and_shift(time_series, scale=scale, shift=shift)
+
+
+@st.experimental_memo
+def get_noisy_data(time_series: np.ndarray,
+                   noise_scale: float = 0.1,
+                   seed: int | None = None
+                   ) -> np.ndarray:
+    """Add gaussian noise to a time_series.
+
+    Args:
+        time_series: The input time series of shape (time_steps, sys_dim).
+        noise_scale: The scale of the gaussian white noise.
+        seed: The seed used to calculate the noise.
+
+    Returns:
+        The time series with added noise.
+    """
+    return datapre.add_noise(time_series, noise_scale=noise_scale, seed=seed)
+
+
+def st_preprocess_simulation(time_series: np.ndarray) -> np.ndarray:
+    """Streamlit elements to preprocess the data.
+
+    One can add scale and center the data and add white noise.
+    Args:
+        time_series: The input timeseries.
+
+    Returns:
+        The modified timeseries.
+    """
+    with st.expander("Preprocessing: "):
+        if st.checkbox("Normalize and Center"):
+            left, right = st.columns(2)
+            with left:
+                scale = st.number_input("scale", value=1.0, min_value=0.0, step=0.1, format="%f")
+            with right:
+                shift = st.number_input("shift", value=0.0, step=0.1, format="%f")
+            mod_time_series = get_scaled_and_shifted_data(time_series, shift=shift, scale=scale)
+        else:
+            mod_time_series = time_series
+
+        if st.checkbox("Add white noise"):
+            noise_scale = st.number_input("noise scale", value=0.1, min_value=0.0, step=0.01,
+                                          format="%f")
+            mod_time_series = get_noisy_data(mod_time_series, noise_scale=noise_scale)
+
+    return mod_time_series
+
+
 def st_default_simulation_plot(time_series):
     """Streamlit element to plot a time series independent of shape.
 
@@ -312,12 +382,14 @@ def st_default_simulation_plot(time_series):
 
 
 def main() -> None:
+    st.header("System Simulation")
     with st.sidebar:
         st.header("System: ")
         system_name, system_parameters = st_select_system()
         time_steps = st_select_time_steps(default_time_steps=10000)
 
-    time_series = simulate_trajectory(system_name, system_parameters, time_steps)
+        time_series = simulate_trajectory(system_name, system_parameters, time_steps)
+        time_series = st_preprocess_simulation(time_series)
 
     if st.checkbox("Plot time series: "):
         st_default_simulation_plot(time_series)
