@@ -6,6 +6,7 @@ import streamlit as st
 import numpy as np
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
+from streamlit_project.app_fragments import utils
 import rescomp.simulations_new as sims
 import rescomp.measures_new as meas
 import rescomp.data_preprocessing as datapre
@@ -381,6 +382,18 @@ def st_default_simulation_plot(time_series):
         raise ValueError("x_dim < 1 not supported.")
 
 
+def st_mean_and_std_of_timeseries(time_series: np.ndarray) -> None:
+    """Streamlit plot that shows the mean and std of the timeseries as barplots.
+    TODO: see Todo for plpl.mean_and_std_barplot.
+    Args:
+        time_series: The input timeseries of shape (time_steps, sys_dim)
+    """
+    utils.line()
+    figs = plpl.mean_and_std_barplot(time_series)
+    plpl.multiple_figs(figs)
+    utils.line()
+
+
 def main() -> None:
     st.header("System Simulation")
     with st.sidebar:
@@ -394,8 +407,13 @@ def main() -> None:
     if st.checkbox("Plot time series: "):
         st_default_simulation_plot(time_series)
 
-    if st.checkbox("Calculate largest lyapunov exponent: "):
-        st_largest_lyapunov_exponent(system_name, system_parameters)
+    with st.expander("Measures based on data"):
+        if st.checkbox("Std and mean"):
+            st_mean_and_std_of_timeseries(time_series)
+
+    with st.expander("Measures based on the system"):
+        if st.checkbox("Calculate largest lyapunov exponent: "):
+            st_largest_lyapunov_exponent(system_name, system_parameters)
 
 
 if __name__ == '__main__':

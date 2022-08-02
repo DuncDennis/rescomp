@@ -45,7 +45,7 @@ def matrix_as_barchart(data_matrix: np.ndarray, x_axis: str = "x_dim", y_axis: s
         log_y: If true the y axis of the plot will be displayed logarithmically.
         abs_bool: If true the absolute value of data_matrix entries is used.
         barmode: If "relative" the values corresponding to the different y_axis_indices are plotted
-                in one bar chart and are stacked on top of each other. If "grouped" they are
+                in one bar chart and are stacked on top of each other. If "group" they are
                 plotted next to each other. If "subplot" there is a new subplot for every y_axis
                 index.
 
@@ -72,7 +72,7 @@ def matrix_as_barchart(data_matrix: np.ndarray, x_axis: str = "x_dim", y_axis: s
     else:
         value_col_to_plot = value_name
 
-    if barmode in ["relative", "grouped"]:
+    if barmode in ["relative", "group"]:
         fig = px.bar(df, x=x_axis, y=value_col_to_plot, color=y_axis,
                      title=title, width=fig_size[0],
                      height=fig_size[1], barmode=barmode)
@@ -132,7 +132,7 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
                             x_scale: float | None = None, x_label: str = "steps",
                             y_label: str = "value", dimensions: tuple[int, ...] | None = None,
                             subplot_dimensions_bool: bool = True
-                            ) -> list[go.Figure, ...]:
+                            ) -> list[go.Figure]:
     """ Plot multiple 1d time_series as a line or scatter plot.
     # TODO: add possibility for vertical lines seperators
 
@@ -367,3 +367,40 @@ def multiple_time_series_image(time_series_dict: dict[str, np.ndarray],
                       labels=labels, x=x_array)
         )
     return figs
+
+
+@st.experimental_memo
+def mean_and_std_barplot(time_series: np.ndarray,
+                         fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> list[go.Figure]:
+    """Plot the mean and standard deviation of the time series as a bar plot.
+    TODO: enhance so that one can compare multiple timeseries.
+    Args:
+        time_series: The input time series of shape (time_steps, sys_dim).
+        fig_size: The size of the figure in (width, height).
+
+
+    Returns:
+        List of both plotly figures for mean and std.
+    """
+
+    x_axis_title = "system dimension"
+
+    mean = np.mean(time_series, axis=0)[:, np.newaxis]
+    std = np.std(time_series, axis=0)[:, np.newaxis]
+
+    mean_all = np.round(np.mean(mean), 6)
+    std_all = np.round(np.std(time_series), 6)
+
+    mean_fig = px.bar(mean, width=fig_size[0],
+                     height=fig_size[1], title=f"Mean of time series: {mean_all}")
+    mean_fig.update_yaxes(title="mean")
+    mean_fig.update_xaxes(title=x_axis_title)
+    mean_fig.update_layout(showlegend=False)
+
+    std_fig = px.bar(std, width=fig_size[0],
+                      height=fig_size[1], title=f"Std of time series: {std_all}")
+    std_fig.update_yaxes(title="std")
+    std_fig.update_xaxes(title=x_axis_title)
+    std_fig.update_layout(showlegend=False)
+
+    return [mean_fig, std_fig]
