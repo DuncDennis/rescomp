@@ -4,10 +4,10 @@
 import numpy as np
 from . import utilities
 
-# for _kuramoto_sivashinsky_rkstiff
-from rkstiff.grids import construct_x_kx_rfft
-from rkstiff.derivatives import dx_rfft
-from rkstiff.if34 import IF34
+# # for _kuramoto_sivashinsky_rkstiff
+# from rkstiff.grids import construct_x_kx_rfft
+# from rkstiff.derivatives import dx_rfft
+# from rkstiff.if34 import IF34
 
 
 # standard parameters from "Sprott: Chaos and Time-Series Analysis" (not complete) Only 3D:
@@ -332,7 +332,7 @@ def _rabinovich(x):
         raise Exception('check shape of x, should have 3 components')
 
 
-def _thomas(x):
+def _thomas(x, b=0.18):
     """ Calculates (dx/dt, dy/dt, dz/dt) with given (x,y,z) for RK4
 
     Args:
@@ -342,7 +342,6 @@ def _thomas(x):
         (np.ndarray): (dx/dt, dy/dt, dz/dt) corresponding to input x
 
     """
-    b = 0.18
     np.array(x)
     if x.shape == (3,):
         return np.array([-b * x[0] + np.sin(x[1]), -b * x[1] + np.sin(x[2]), -b * x[2] + np.sin(x[0])])
@@ -645,7 +644,7 @@ def simulate_trajectory(sys_flag='mod_lorenz', dt=2e-2, time_steps=int(2e4),
     traj_size = ((time_steps, starting_point.shape[0]))
     traj = np.zeros(traj_size)
     y = starting_point
-
+    # traj[0, :] = starting_point
     for t in range(traj_size[0]):
         traj[t] = y
         if discrete_map:
