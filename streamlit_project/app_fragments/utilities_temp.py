@@ -21,6 +21,7 @@ def seed_interface():
     st.write(f"Current seed: {seed}")
     return seed
 
+
 def line():
     st.markdown("""---""")
 

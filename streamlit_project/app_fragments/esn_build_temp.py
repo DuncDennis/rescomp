@@ -15,7 +15,8 @@ ESN_DICT = {"ESN_normal": esn_new.ESN_normal,
             "ESN_input_hybrid": esn_new.ESN_input_hybrid,
             "ESN_full_hybrid": esn_new.ESN_full_hybrid,
             "ESN_full_hybrid_same": esn_new.ESN_full_hybrid_same,
-            "ESN_full_hybrid_same": esn_new.ESN_full_hybrid_same,
+            "ESN_output_hybrid_preprocess": esn_new.ESN_output_hybrid_preprocess,
+            "ESN_outp_var_preproc": esn_new.ESN_outp_var_preproc,
             }
 
 ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
@@ -111,16 +112,20 @@ def train(esn, x_train, t_train_sync):
     esn.train(x_train, sync_steps=t_train_sync, save_res_inp=False, save_r_internal=False, save_r=False,
               save_r_gen=False, save_out=True, save_y_train=True)
 
+    esn.train(x_train, sync_steps=t_train_sync, save_res_inp=True, save_r_internal=True, save_r=True,
+              save_r_gen=False, save_out=True, save_y_train=True)
+
     # x_train_true = x_train[1+t_train_sync:]
-    # act_fct_inp_train = esn.get_act_fct_inp()
-    # r_internal_train = esn.get_r_internal()
-    # r_input_train = esn.get_res_inp()
-    # r_train = esn.get_r()
+    act_fct_inp_train = esn.get_act_fct_inp()
+    r_internal_train = esn.get_r_internal()
+    r_input_train = esn.get_res_inp()
+    r_train = esn.get_r()
     x_train_true = esn.get_y_train()
     # r_gen_train = esn.get_r_gen()
     x_train_pred = esn.get_out()
     print("shapes: ", x_train_true.shape, x_train_pred.shape)
-    return esn, x_train_true, x_train_pred #, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train
+    # return esn, x_train_true, x_train_pred #, r_train, act_fct_inp_train, r_internal_train, r_input_train, r_gen_train
+    return esn, x_train_true, x_train_pred, r_train, act_fct_inp_train, r_internal_train, r_input_train
 
 
 @st.cache(hash_funcs=ESN_HASH_FUNCS)
@@ -162,10 +167,10 @@ def st_basic_esn_build(esn_sub_section: tuple[str, ...] | None = None):
 
     # TODO: also a dict with all the esn types:
     # esn_type = st.selectbox('esn type', esn_types)
-    esn_type = st.selectbox('esn type', ESN_DICT.keys())
+    esn_type = st.selectbox('esn type', esn_dict.keys())
 
     basic_build_args = {}
-    basic_build_args["r_dim"] = st.number_input('Reservoir Dim', value=1000, step=1)
+    basic_build_args["r_dim"] = st.number_input('Reservoir Dim', value=500, step=1)
     basic_build_args["r_to_r_gen_opt"] = st.selectbox('r_to_r_gen_opt', r_to_r_gen_types)
     basic_build_args["act_fct_opt"] = st.selectbox('act_fct_opt', activation_functions)
     basic_build_args["node_bias_opt"] = st.selectbox('node_bias_opt', bias_types)
@@ -214,9 +219,13 @@ def st_hybrid_build_args(esn_type: str, system_name: str, system_parameters: dic
                                                                 max_value=1.0)
     if esn_type in ["ESN_input_hybrid", "ESN_full_hybrid_same"]:
         hybrid_build_args["input_model"], hybrid_build_args["Input Model Parameters"] = syssim.st_get_model_system(system_name, system_parameters)
-    if esn_type == "ESN_output_hybrid":
+    if esn_type in ["ESN_output_hybrid", "ESN_output_hybrid_preprocess"]:
         hybrid_build_args["output_model"], hybrid_build_args["Output Model Parameters"] = syssim.st_get_model_system(system_name,
                                                                       system_parameters)
+    if "preprocess" in esn_type:
+        hybrid_build_args["noise_scale"] = st.number_input("train noise scale", value=0.0, step=0.01,
+                                                        format="%f")
+
     util.line()
     for key, val in hybrid_build_args.items():
         if "Parameters" in key:

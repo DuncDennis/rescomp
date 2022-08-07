@@ -102,7 +102,8 @@ def _plot_2d_line_or_scatter(to_plot_df: pd.DataFrame, x_label: str, y_label: st
                              mode: str, color: str, title_i: str,
                              line_size: float | None = 1,
                              scatter_size: float | None = 1,
-                             fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE
+                             fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE,
+                             log_x: bool = False, log_y: bool = False
                              ) -> go.Figure:
     """General utility plotting function for 2d plots.
     TODO: Better docstring.
@@ -121,6 +122,17 @@ def _plot_2d_line_or_scatter(to_plot_df: pd.DataFrame, x_label: str, y_label: st
         raise Exception(f"mode = {mode} not accounted for.")  # TODO: proper error
 
     fig.update_layout(height=fig_size[1], width=fig_size[0])
+    if log_y:
+        fig.update_layout(
+            yaxis={
+                'exponentformat': 'E'}
+        )
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
+
     return fig
 
 
@@ -134,7 +146,9 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
                             subplot_dimensions_bool: bool = True
                             ) -> list[go.Figure]:
     """ Plot multiple 1d time_series as a line or scatter plot.
-    # TODO: add possibility for vertical lines seperators
+    # TODO: add possibility for vertical lines seperators.
+    # TODO: add logy and logx setting.
+    # TODO: maybe generalize to not only plot "time_series" but general 2d data.
 
     Args:
         time_series_dict: Dict of the form {"timeseries_name_1": time_series_1, ...}.
@@ -169,39 +183,7 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
 
     if dimensions is None:
         dimensions = tuple(np.arange(y_dim))
-    # for i in dimensions:
-    #     to_plot_dict = {x_label: [], y_label: [], "label": []}
-    #     for label, time_series in time_series_dict.items():
-    #         if len(shape) == 1:
-    #             time_series = time_series[:, np.newaxis]
-    #         to_plot_dict[x_label].extend(x_array)
-    #         to_plot_dict[y_label].extend(time_series[:, i])
-    #         to_plot_dict["label"].extend([label, ] * time_series.shape[0])
-    #
-    #     if len(dimensions) > 1:
-    #         if title is not None:
-    #             title_i = f"{title}: dimension: {i}"
-    #         else:
-    #             title_i = f"Dimension: {i}"
-    #     else:
-    #         title_i = title
-    #
-    #     if mode == "line":
-    #         fig = px.line(to_plot_dict, x=x_label, y=y_label, color="label", title=title_i)
-    #         if line_size is not None:
-    #             fig.update_traces(line={"width": line_size})
-    #     elif mode == "scatter":
-    #         fig = px.scatter(to_plot_dict, x=x_label, y=y_label, color="label",
-    #                          title=title_i)
-    #         if scatter_size is not None:
-    #             fig.update_traces(marker={'size': scatter_size})
-    #     else:
-    #         raise Exception(f"mode = {mode} not accounted for.")  # TODO: proper error
-    #
-    #     fig.update_layout(height=fig_size[1], width=fig_size[0])
-    #     figs.append(fig)
 
-    # new:
     to_plot_dict = {x_label: [], y_label: [], "label": [], "dimension": []}
     for dim in dimensions:
         for label, time_series in time_series_dict.items():
@@ -349,7 +331,7 @@ def multiple_time_series_image(time_series_dict: dict[str, np.ndarray],
                                x_label: str = "x",
                                y_label: str = "y",
                                x_scale: float | None = None,
-                               ) -> list[go.Figure, ...]:
+                               ) -> list[go.Figure]:
     # TODO: add docstring
     # TODO: add possibility for vertical lines seperators
     figs = []
@@ -370,37 +352,101 @@ def multiple_time_series_image(time_series_dict: dict[str, np.ndarray],
 
 
 @st.experimental_memo
-def mean_and_std_barplot(time_series: np.ndarray,
-                         fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> list[go.Figure]:
-    """Plot the mean and standard deviation of the time series as a bar plot.
-    TODO: enhance so that one can compare multiple timeseries.
-    Args:
-        time_series: The input time series of shape (time_steps, sys_dim).
-        fig_size: The size of the figure in (width, height).
+def statistical_barplot_multiple(time_series_dict: dict[str, np.ndarray],
+                                 mode: str = "std",
+                                 x_label: str = "system dimension",
+                                 title: str | None = None,
+                                 fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> go.Figure:
+    """Plot a statistical quantity of a dict of time_series as a grouped barplot.
 
+    Args:
+        time_series_dict: The dict of time_series. The key is used as the legend label.
+        mode: One of "std", "var", "mean", "median". # TODO more can be added.
+        x_label: The name of the x_axis.
+        title: The title of the plot.
+        fig_size: The figure size.
 
     Returns:
-        List of both plotly figures for mean and std.
+        The plotly figure.
     """
 
-    x_axis_title = "system dimension"
+    time_steps, sys_dim = list(time_series_dict.values())[0].shape
 
-    mean = np.mean(time_series, axis=0)[:, np.newaxis]
-    std = np.std(time_series, axis=0)[:, np.newaxis]
+    proc_data_dict = {"x_axis": [], "label": [], mode: []}
+    for label, data in time_series_dict.items():
+        if mode == "std":
+            stat_quant = np.std(data, axis=0)
+        elif mode == "mean":
+            stat_quant = np.mean(data, axis=0)
+        elif mode == "median":
+            stat_quant = np.median(data, axis=0)
+        elif mode == "var":
+            stat_quant = np.var(data, axis=0)
+        else:
+            raise ValueError(f"Mode {mode} is not implemented.")
 
-    mean_all = np.round(np.mean(mean), 6)
-    std_all = np.round(np.std(time_series), 6)
+        proc_data_dict["x_axis"] += np.arange(sys_dim).tolist()
+        proc_data_dict["label"] += [label, ] * sys_dim
+        proc_data_dict[mode] += stat_quant.tolist()
 
-    mean_fig = px.bar(mean, width=fig_size[0],
-                     height=fig_size[1], title=f"Mean of time series: {mean_all}")
-    mean_fig.update_yaxes(title="mean")
-    mean_fig.update_xaxes(title=x_axis_title)
-    mean_fig.update_layout(showlegend=False)
+    df = pd.DataFrame.from_dict(proc_data_dict)
 
-    std_fig = px.bar(std, width=fig_size[0],
-                      height=fig_size[1], title=f"Std of time series: {std_all}")
-    std_fig.update_yaxes(title="std")
-    std_fig.update_xaxes(title=x_axis_title)
-    std_fig.update_layout(showlegend=False)
+    fig = px.bar(df, x="x_axis", y=mode, color="label", barmode="group",
+                 title=title)
+    fig.update_layout(height=fig_size[1], width=fig_size[0])
+    fig.update_xaxes(title=x_label)
 
-    return [mean_fig, std_fig]
+    return fig
+
+
+def power_spectrum_multiple(time_series_dict: dict[str, np.ndarray],
+                            ) -> go.Figure:
+    time_steps, sys_dim = list(time_series_dict.values())[0].shape
+
+    to_plot_dict = {"x": [], "y": [], "label": []}
+
+    for label, data in time_series_dict.items():
+        to_plot_dict["label"] += [label, ] * sys_dim
+        x = None
+# def multiple_1d_data_xy(data_dict: dict[str, tuple[np.ndarray, np.ndarray]],
+#                         log_x: bool = False, log_y: bool = False,
+#                         title: str | None = None, x_label: str = "x",
+#                         y_label = "y",
+#                         fig_size: tuple[int, int] = DEFAULT_THREE_D_FIGSIZE,
+#                         )
+
+# @st.experimental_memo
+# def mean_and_std_barplot(time_series: np.ndarray,
+#                          fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> list[go.Figure]:
+#     """Plot the mean and standard deviation of the time series as a bar plot.
+#     TODO: enhance so that one can compare multiple timeseries. Maybe remove
+#     Args:
+#         time_series: The input time series of shape (time_steps, sys_dim).
+#         fig_size: The size of the figure in (width, height).
+#
+#
+#     Returns:
+#         List of both plotly figures for mean and std.
+#     """
+#
+#     x_axis_title = "system dimension"
+#
+#     mean = np.mean(time_series, axis=0)[:, np.newaxis]
+#     std = np.std(time_series, axis=0)[:, np.newaxis]
+#
+#     mean_all = np.round(np.mean(mean), 6)
+#     std_all = np.round(np.std(time_series), 6)
+#
+#     mean_fig = px.bar(mean, width=fig_size[0],
+#                      height=fig_size[1], title=f"Mean of time series: {mean_all}")
+#     mean_fig.update_yaxes(title="mean")
+#     mean_fig.update_xaxes(title=x_axis_title)
+#     mean_fig.update_layout(showlegend=False)
+#
+#     std_fig = px.bar(std, width=fig_size[0],
+#                       height=fig_size[1], title=f"Std of time series: {std_all}")
+#     std_fig.update_yaxes(title="std")
+#     std_fig.update_xaxes(title=x_axis_title)
+#     std_fig.update_layout(showlegend=False)
+#
+#     return [mean_fig, std_fig]

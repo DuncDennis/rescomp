@@ -1,3 +1,5 @@
+"""Python file that includes streamit elements that are used to specify/select and plot a System."""
+
 from __future__ import annotations
 
 from typing import Any, Callable
@@ -6,9 +8,7 @@ import streamlit as st
 import numpy as np
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
-from streamlit_project.app_fragments import utils
 import rescomp.simulations_new as sims
-import rescomp.measures_new as meas
 import rescomp.data_preprocessing as datapre
 
 
@@ -209,74 +209,6 @@ def simulate_trajectory(system_name: str, system_parameters: dict[str, Any], tim
 
 
 @st.experimental_memo
-def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
-                                  steps: int = int(1e3), deviation_scale: float = 1e-10,
-                                  part_time_steps: int = 15, steps_skip: int = 50) -> np.ndarray:
-    """Measure the largest lyapunov exponent of a given system with specified parameters.
-
-    Args:
-        system_name: The system name. Has to be in SYSTEM_DICT.
-        system_parameters: The system parameters. Not every kwarg has to be specified.
-        steps: The number of renormalization steps.
-        deviation_scale: The initial deviation scale for nearby trajectories.
-        part_time_steps: The nr of time steps between renormalizations.
-        steps_skip: The nr of steps to skip before tracking the divergence.
-
-    Returns:
-        The convergence of the largest lyapunov with shape: (steps, ).
-    """
-    sim_instance = SYSTEM_DICT[system_name](**system_parameters)
-    starting_point = sim_instance.default_starting_point
-
-    if hasattr(sim_instance, "dt"):
-        dt = sim_instance.dt
-    else:
-        dt = 1.0
-
-    iterator_func = sim_instance.iterate
-    lle_conv = meas.largest_lyapunov_exponent(iterator_func, starting_point=starting_point, dt=dt,
-                                              steps=steps, part_time_steps=part_time_steps,
-                                              deviation_scale=deviation_scale,
-                                              steps_skip=steps_skip,
-                                              return_convergence=True)
-    return lle_conv
-
-
-def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any]) -> None:
-    """Streamlit element to calculate the largest lyapunov exponent.
-
-    Set up the number inputs for steps, part_time_steps, steps_skip and deviation scale.
-    Plot the convergence.
-
-    Args:
-        system_name: The system name. Has to be in SYSTEM_DICT.
-        system_parameters: The system parameters. Not every kwarg has to be specified.
-    """
-    left, right = st.columns(2)
-    with left:
-        steps = int(st.number_input("steps", value=int(1e3)))
-    with right:
-        part_time_steps = int(st.number_input("time steps of each part", value=15))
-    left, right = st.columns(2)
-    with left:
-        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0))
-    with right:
-        deviation_scale = 10 ** (float(st.number_input("log (deviation_scale)", value=-10.0)))
-
-    lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, steps=steps,
-                                             part_time_steps=part_time_steps,
-                                             deviation_scale=deviation_scale,
-                                             steps_skip=steps_skip)
-    largest_lle = np.round(lle_conv[-1], 5)
-
-    figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
-                                        y_label="running avg of LLE", title=f"Largest Lyapunov "
-                                                                            f"Exponent: "
-                                                                            f"{largest_lle}")
-    plpl.multiple_figs(figs)
-
-
-@st.experimental_memo
 def get_scaled_and_shifted_data(time_series: np.ndarray,
                                 scale: float = 1.0,
                                 shift: float = 0.0
@@ -382,18 +314,6 @@ def st_default_simulation_plot(time_series):
         raise ValueError("x_dim < 1 not supported.")
 
 
-def st_mean_and_std_of_timeseries(time_series: np.ndarray) -> None:
-    """Streamlit plot that shows the mean and std of the timeseries as barplots.
-    TODO: see Todo for plpl.mean_and_std_barplot.
-    Args:
-        time_series: The input timeseries of shape (time_steps, sys_dim)
-    """
-    utils.line()
-    figs = plpl.mean_and_std_barplot(time_series)
-    plpl.multiple_figs(figs)
-    utils.line()
-
-
 def main() -> None:
     st.header("System Simulation")
     with st.sidebar:
@@ -401,19 +321,16 @@ def main() -> None:
         system_name, system_parameters = st_select_system()
         time_steps = st_select_time_steps(default_time_steps=10000)
 
+        if "dt" in system_parameters.keys():
+            dt = system_parameters["dt"]
+        else:
+            dt = 1.0
+
         time_series = simulate_trajectory(system_name, system_parameters, time_steps)
         time_series = st_preprocess_simulation(time_series)
 
     if st.checkbox("Plot time series: "):
         st_default_simulation_plot(time_series)
-
-    with st.expander("Measures based on data"):
-        if st.checkbox("Std and mean"):
-            st_mean_and_std_of_timeseries(time_series)
-
-    with st.expander("Measures based on the system"):
-        if st.checkbox("Calculate largest lyapunov exponent: "):
-            st_largest_lyapunov_exponent(system_name, system_parameters)
 
 
 if __name__ == '__main__':
