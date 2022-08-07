@@ -5,6 +5,43 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
+from scipy import signal
+
+def power_spectrum_componentwise(data: np.ndarray, period: bool = False, dt: float = 1.0
+                                 ) -> tuple[np.ndarray, np.ndarray]:
+    """Calculates the fourier power spectrum of the n-dimensional time_series.
+
+    For every dimension, calculate the FFT. Return the power spectrum over the period
+    (time-domain) or frequency (frequency-domain).
+
+    Args:
+        data: Time series to transform, shape (time_steps, sys_dim).
+        period: If true return time as xout. If false xout = frequency.
+        dt: The time step.
+
+    Returns:
+        Tuple: X values: either period or frequency of shape (time_steps/2,) and y values:
+        power spectrum of shape (time_steps/2, sys_dim).
+    """
+
+    # fourier transform:
+    fourier = np.fft.fft(data, axis=0)
+
+    time_steps, dimension = data.shape
+
+    freq = np.fft.fftfreq(time_steps)
+
+    half_fourier = fourier[1:int(time_steps/2), :]
+    half_freq = freq[1:int(time_steps/2)]/dt
+    yout = np.abs(half_fourier)**2
+
+    if period:
+        half_period = 1/half_freq
+        xout = half_period
+    else:
+        xout = half_freq
+
+    return xout, yout
 
 
 def largest_lyapunov_exponent(
@@ -69,3 +106,27 @@ def largest_lyapunov_exponent(
         return np.array(np.cumsum(log_divergence) / (np.arange(1, steps + 1) * dt * part_time_steps))
     else:
         return float(np.average(log_divergence) / (dt * part_time_steps))
+
+
+def extrema_map(time_series: np.ndarray, mode: str = "minima", i_dim: int = 0) -> np.ndarray:
+    """Calculate consecutive values of extrema in the 1D timeseries given by time_series[:, i_dim].
+
+    Args:
+        time_series: The multidimensional time series.
+        mode: Either get the "minima" or "maxima".
+        i_dim: The dimension to choose.
+
+    Returns:
+        A 2d array of the shape (nr of extrema, 2)
+    """
+
+    x = time_series[:, i_dim]
+    if mode == "minima":
+        ix = signal.argrelextrema(x, np.less)[0]
+    elif mode == "maxima":
+        ix = signal.argrelextrema(x, np.greater)[0]
+    else:
+        raise ValueError(f"mode: {mode} not recognized")
+
+    extreme = x[ix]
+    return np.array([extreme[:-1], extreme[1:]]).T
