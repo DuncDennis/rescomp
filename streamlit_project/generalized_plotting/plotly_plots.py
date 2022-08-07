@@ -1,8 +1,6 @@
 """ A collection of utility plotting functions using plotly"""
 from __future__ import annotations
 
-from typing import Any
-
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go

@@ -7,7 +7,6 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 import numpy as np
-import plotly.express as px  # TODO: maybe move to plotly_plots
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import utils
@@ -15,18 +14,61 @@ from streamlit_project.app_fragments import system_simulation
 import rescomp.measures_new as meas
 
 
-def st_statistical_measures(time_series_data: dict[str, np.ndarray]) -> None:
+@st.experimental_memo
+def get_extrema_maps(time_series_dict: dict[str, np.ndarray], dim_selection: list[int],
+                     mode: str = "maximum"
+                     ) -> list[dict[str, np.ndarray]]:
+    """ Get the extrema data as a list of dictionaries: One dict for each dimensions.
+
+    For each dimension selected in dim_selection, create a dictionary with the same keys as
+    time_series_dict, but values of the shape (nr of extrema, 2) for consecutive extrema.
+
+    Args:
+        time_series_dict: The dictionary containing the time series.
+        dim_selection: A list of ints specifying the dimensions you want to plot.
+        mode: Either "minima" or "maxima".
+
+    Returns:
+        A list of dictionaries. Each dictionary can create one plot.
+    """
+    sub_dicts = []
+    for i_dim in dim_selection:
+        sub_dicts.append({key: meas.extrema_map(val, mode=mode, i_dim=i_dim) for key, val in time_series_dict.items()})
+    return sub_dicts
+
+
+def st_extrema_map(time_series_dict: dict[str, np.ndarray]) -> None:
+    """A streamlit element to plot the extrema map of a time_series dict.
+
+    Args:
+        time_series_dict: The dictionary containing the time series.
+    """
+    time_steps, sys_dim = list(time_series_dict.values())[0].shape
+    dim_select_opts = [f"{i}" for i in range(sys_dim)]
+    left, right = st.columns(2)
+    with left:
+        dim_selection = utils.st_selectbox_with_all("Dimensions", dim_select_opts)
+        dim_selection = [int(x) for x in dim_selection]
+    with right:
+        mode = st.selectbox("Min or max", ["minima", "maxima"])
+    sub_dicts = get_extrema_maps(time_series_dict, dim_selection=dim_selection, mode=mode)
+    for dim, sub_dict in zip(dim_selection, sub_dicts):
+        fig = plpl.multiple_2d_time_series(sub_dict, mode="scatter", title=f"Dim = {dim}",
+                                           x_label="extreme value (i)",
+                                           y_label="extreme value (i+1)", scatter_size=2)
+        st.plotly_chart(fig)
+
+
+def st_statistical_measures(time_series_dict: dict[str, np.ndarray]) -> None:
     """Streamlit element to calculate and plot statistical quantities of a time series.
 
     Args:
-        time_series_data: The time series data.
+        time_series_dict: The time series data.
     """
-    utils.line()
     mode = st.selectbox("Statistical measure", ["std", "var", "mean", "median"])
 
-    fig = plpl.statistical_barplot_multiple(time_series_data, mode=mode)
+    fig = plpl.statistical_barplot_multiple(time_series_dict, mode=mode)
     st.plotly_chart(fig)
-    utils.line()
 
 
 @st.experimental_memo
@@ -131,7 +173,7 @@ def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) 
         opt_select = st.selectbox("Mean or single dimensions", opt)
 
     if opt_select == "single dimension":
-        i_dim = utils.dimension_selection(sys_dim)
+        i_dim = utils.st_dimension_selection(sys_dim)
         label_to_plot = f"power {i_dim}"
     elif opt_select == "mean":
         label_to_plot = "power_mean"
