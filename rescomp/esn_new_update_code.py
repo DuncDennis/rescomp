@@ -8,6 +8,8 @@ from scipy.sparse.linalg.eigen.arpack.arpack \
     import ArpackNoConvergence as _ArpackNoConvergence
 import networkx as nx
 from sklearn import decomposition
+from statsmodels.tsa.vector_ar.var_model import VAR
+
 import pickle
 from copy import deepcopy
 import gc
@@ -2680,6 +2682,108 @@ class ESN_output_hybrid_preprocess(_ResCompCore, _add_basic_defaults, _add_netwo
 
         self.set_output_model(output_model)
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+        self.noise_scale = noise_scale
+        self.noise_seed = noise_seed
+
+
+class ESN_outp_var_preproc(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_model_r_to_rgen,
+                 _add_w_in, _add_preprocess_input_coupling, _add_standard_y_to_x):
+    """ VERY EXPERIMENTAL
+
+    Useful website: https://machinelearningmastery.com/time-series-forecasting-methods-in-python-cheat-sheet/
+    ESN with output hybrid model
+    """
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        _add_model_r_to_rgen.__init__(self)
+        _add_w_in.__init__(self)
+        _add_preprocess_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+    def _get_classical_model(self, x_train):
+        classical_model = VAR(x_train)
+        classical_model_fit = classical_model.fit()
+        next_step_model = lambda x: classical_model_fit.forecast(x[np.newaxis, :], steps=1)[0]
+        self.set_output_model(next_step_model)
+
+    def train(self, use_for_train, sync_steps=0, reset_res_state=True, **kwargs):
+        self._get_classical_model(use_for_train)
+        self.calc_offset_and_scale(use_for_train)
+
+        self.set_r_to_r_gen_fct(r_to_r_gen_opt=self._r_to_r_gen_opt)
+
+        if self.noise_seed is not None:
+            with utilities.temp_seed(self.noise_seed):
+                use_for_train = self.add_train_noise(use_for_train)
+        else:
+            use_for_train = self.add_train_noise(use_for_train)
+
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+        super(ESN_outp_var_preproc, self).train(sync, x_train, y_train, reset_res_state=reset_res_state, **kwargs)
+
+    def set_w_out_to_only_model(self):
+        '''
+        Just a experimental function that wires all connection in w_out to only read
+        the model based prediction (if output_hybrid)
+        :return:
+        '''
+        # modify _w_out:
+        n_dim_mod = self._r_gen_dim
+        x_dim = self._x_dim
+        matrix = np.zeros((x_dim, n_dim_mod))
+        for i in range(0, x_dim):
+            to_add = np.zeros(x_dim)
+            to_add[i] = 1
+            matrix[:, n_dim_mod - x_dim + i] = to_add
+        self._w_out = matrix
+
+    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi", network_creation_attempts=10,
+              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0,
+              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
+              bias_seed=None, w_in_seed=None, noise_scale=0.0, noise_seed=None):
+
+        self.logger.debug("Building ESN Archtecture")
+
+        self._r_to_r_gen_opt = r_to_r_gen_opt
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
+
+        # self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
         self.set_activation_function(act_fct_opt=act_fct_opt)
 
         if bias_seed is not None:
