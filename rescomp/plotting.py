@@ -1,9 +1,15 @@
+from __future__ import annotations
+
+from typing import Any
+
+import h5py
 import matplotlib.pyplot as plt
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import scipy
 # import pandas as pd
 import math
 import rescomp.measures as measures
@@ -813,6 +819,69 @@ def plot_valid_times_sweep(trajs, params_to_show, f, sweep_variable, i_ens=None,
     return fig
 
 
+def plot_vt(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
+                               log_x=False, average_type="mean", in_lyapunov_times=None):
+    """For hdf5 viewer: plot valid times vs a sweep variable.
+
+    Here the valid times are already calculated in the data file.
+    # TODO split into 2 functions, 1 to output the df and one to plot.
+    """
+
+    df = pd.DataFrame()
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:]
+        params = params_to_show[i_traj]
+
+        valid_times = data
+        if in_lyapunov_times is not None:
+            dt = in_lyapunov_times["dt"]
+            le = in_lyapunov_times["LE"]
+            valid_times = dt * le * valid_times
+
+        if i_ens is None and i_time_period is None:
+            valid_times = valid_times.flatten()
+        elif i_ens is None and i_time_period is not None:
+            valid_times = valid_times[:, i_time_period]
+        elif i_ens is not None and i_time_period is None:
+            valid_times = valid_times[i_ens, :]
+
+        if average_type == "mean":
+            valid_times_avg = np.mean(valid_times)
+            valid_times_error_lower = np.std(valid_times)
+            valid_times_error_upper = valid_times_error_lower
+
+        elif average_type == "median":
+            valid_times_avg = np.median(valid_times)
+            valid_times_error_lower = valid_times_avg - np.quantile(valid_times, q=0.25)
+            valid_times_error_upper = np.quantile(valid_times, q=0.75) - valid_times_avg
+
+        df_to_add = pd.DataFrame()
+        df_to_add["valid times"] = [valid_times_avg]
+        df_to_add["valid times error lower"] = [valid_times_error_lower]
+        df_to_add["valid times error upper"] = [valid_times_error_upper]
+        df_to_add[sweep_variable] = [params[sweep_variable]]
+
+        params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
+        df_to_add["Other Parameters"] = [params_str]
+
+        df = pd.concat([df, df_to_add])
+
+    print(df)
+
+    fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times error upper",
+                  error_y_minus="valid times error lower", color="Other Parameters", width=figsize[0],
+                  height=figsize[1], log_x=log_x)
+
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
+    return fig
+
+
+
 def plot_valid_times_sweep_error_first(trajs, params_to_show, f, sweep_variable, i_ens=None, i_time_period=None, figsize=(150, 150),
                                error_threshhold=0.4):
     """
@@ -981,7 +1050,7 @@ def plot_w_out_and_r_gen_std_quantites(r_gen_data, w_out, figsize=(650, 500), lo
     figs = []
 
     x_dim, r_gen_dim = w_out.shape
-    data_dict = {"r_gen_index": [], "w_out": [], "out_channel": [],  "std_r_gen": [], "type": []} #"mean_r_gen": [],
+    data_dict = {"r_gen_index": [], "w_out": [], "out_channel": [],  "std_r_gen": [], "type": []}  #"mean_r_gen": [],
 
     for t, r_gen in r_gen_data.items():
         # mean_r_gen = np.mean(r_gen, axis=0)
@@ -1150,9 +1219,6 @@ def plot_w_out_mean_distribution(data):
     return fig1, fig2, fig3, fig4
 
 
-
-
-
 def plot_1d_time_delay(time_series, i_dim=0, time_delay=1, line=True):
     time_steps = time_series.shape[0]
     time_series_new = np.zeros((time_steps - time_delay*3, 3))
@@ -1160,3 +1226,104 @@ def plot_1d_time_delay(time_series, i_dim=0, time_delay=1, line=True):
     time_series_new[:, 1] = time_series[1:-time_delay*3+1, i_dim]
     time_series_new[:, 2] = time_series[2:-time_delay*3+2, i_dim]
     return plot_3d_time_series(time_series_new, line=line)
+
+
+def get_correlation(r, inp, time_delay=0):
+    if time_delay == 0:
+        pass
+    else:
+        r = r[time_delay:, :]
+        inp = inp[:-time_delay]
+
+    r_dim = r.shape[1]
+    inp_dim = inp.shape[1]
+    # correlation = scipy.signal.correlate(r, input)
+    correlation = np.zeros((r_dim, inp_dim))
+    for i_r in range(r_dim):
+        for i_inp in range(inp_dim):
+            # correlation[i_r, i_inp] = np.correlate(r[:, i_r], inp[:, i_inp])
+            # correlation[i_r, i_inp] = np.dot(r[:, i_r], inp[:, i_inp])
+            correlation[i_r, i_inp] = np.corrcoef(r[:, i_r], inp[:, i_inp])[0, 1]
+
+            # correlation[i_r, i_inp] = np.corrcoef(r[:, i_r], inp[:, i_inp])
+    return correlation
+
+
+def hdf5_to_pandas_vt(trajs: list[str],
+                      params_to_show: list[dict[str, Any]],
+                      f: h5py._hl.files.File,
+                      sweep_variable: str,
+                      i_ens: int | None = None,
+                      i_time_period: int | None = None,
+                      average_type: str = "mean",
+                      in_lyapunov_times: dict[str, float] | None = None,
+                      error_threshhold: int = 0.4):
+
+    """TODO: make nicer and move to a different file. Like utilities/measures.
+    """
+
+    # print("trajs_type: ", type(trajs), trajs)
+    # print("params_to_show: ", type(params_to_show), params_to_show)
+    # print("f: ", type(f), f)
+    # print("sweep_variable: ", type(sweep_variable), sweep_variable)
+
+    df = pd.DataFrame()
+
+    for i_traj, traj in enumerate(trajs):
+        data = f["runs"][traj][:]
+        params = params_to_show[i_traj]
+
+        if len(data.shape) == 5:  # whole trajectory: (N_ens, N_time_period, pred/test, time_steps, space_dims)
+            valid_times = get_valid_times(data, error_threshhold=error_threshhold)
+        elif len(data.shape) == 2:  # valid time: (N_ens, N_time_period)
+            valid_times = data
+        else:
+            raise Exception(f"A data shape of {data.shape} was not expected.")
+
+        if in_lyapunov_times is not None:
+            dt = in_lyapunov_times["dt"]
+            le = in_lyapunov_times["LE"]
+            valid_times = dt * le * valid_times
+
+        if i_ens is None and i_time_period is None:
+            valid_times = valid_times.flatten()
+        elif i_ens is None and i_time_period is not None:
+            valid_times = valid_times[:, i_time_period]
+        elif i_ens is not None and i_time_period is None:
+            valid_times = valid_times[i_ens, :]
+
+        if average_type == "mean":
+            valid_times_avg = np.mean(valid_times)
+            valid_times_error_lower = np.std(valid_times)
+            valid_times_error_upper = valid_times_error_lower
+
+        elif average_type == "median":
+            valid_times_avg = np.median(valid_times)
+            valid_times_error_lower = valid_times_avg - np.quantile(valid_times, q=0.25)
+            valid_times_error_upper = np.quantile(valid_times, q=0.75) - valid_times_avg
+
+        df_to_add = pd.DataFrame()
+        df_to_add["valid times"] = [valid_times_avg]
+        df_to_add["valid times error lower"] = [valid_times_error_lower]
+        df_to_add["valid times error upper"] = [valid_times_error_upper]
+        df_to_add[sweep_variable] = [params[sweep_variable]]
+
+        params_str = ", ".join([f"{key}: {val}" for key, val in params.items() if key != sweep_variable])
+        df_to_add["Other Parameters"] = [params_str]
+
+        df = pd.concat([df, df_to_add])
+    df.sort_values(["Other Parameters", sweep_variable], inplace=True)
+    return df
+
+
+def plot_pandas(df, sweep_variable, figsize=(150, 150), log_x=False):
+    fig = px.line(df, x=sweep_variable, y="valid times", error_y="valid times error upper",
+                  error_y_minus="valid times error lower", color="Other Parameters", width=figsize[0],
+                  height=figsize[1], log_x=log_x)
+
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
+    return fig
