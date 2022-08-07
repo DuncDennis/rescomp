@@ -15,9 +15,15 @@ from streamlit_project.app_fragments import system_simulation
 import rescomp.measures_new as meas
 
 
-def st_stat_measures(time_series_data: dict[str, np.ndarray]) -> None:
+def st_statistical_measures(time_series_data: dict[str, np.ndarray]) -> None:
+    """Streamlit element to calculate and plot statistical quantities of a time series.
+
+    Args:
+        time_series_data: The time series data.
+    """
     utils.line()
     mode = st.selectbox("Statistical measure", ["std", "var", "mean", "median"])
+
     fig = plpl.statistical_barplot_multiple(time_series_data, mode=mode)
     st.plotly_chart(fig)
     utils.line()
@@ -27,7 +33,7 @@ def st_stat_measures(time_series_data: dict[str, np.ndarray]) -> None:
 def get_statistical_measure(time_series_dict: dict[str, np.ndarray],
                             mode: str = "std") -> pd.DataFrame:
     """Get a pandas DataFrame of a statistical quantity of a dict of time_series.
-
+    # TODO: not really needed?
     Args:
         time_series_dict: The dict of time_series. The key is used as the legend label.
         mode: One of "std", "var", "mean", "median". # TODO more can be added.
@@ -58,50 +64,80 @@ def get_statistical_measure(time_series_dict: dict[str, np.ndarray],
     return pd.DataFrame.from_dict(proc_data_dict)
 
 
-def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) -> None:
-    per_or_freq = st.selectbox("Period or Frequency", ["period", "frequency"])
+@st.experimental_memo
+def get_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
+                       per_or_freq: str = "period") -> pd.DataFrame:
+    """Function to calculate the power spectrum of a time series dictionary.
 
-    to_plot_dict = {"x": [], "Power": [], "mode": []}
+    The pandas DataFrame returned has the following columns:
+    - "period"/"frequency": The x axis to plot.
+    - "label": One individual label for each time_series element (i.e. the key of the dict.).
+    - "power 0" to "power {sys_dim-1}": The power of each time-series dimension.
+    - "power_mean": The average over all dimensions.
 
+    Args:
+        time_series_dict: The input time series dictionary.
+        dt: The time step.
+        per_or_freq: Either "period" or "frequency". The x_axis of the spectrum.
+
+    Returns:
+        A Pandas DataFrame with all the power info.
+    """
+    time_steps, sys_dim = list(time_series_dict.values())[0].shape
+
+    power_spectrum_dict = {per_or_freq: [], "label": [], "power_mean": []}
+    power_spectrum_dict = power_spectrum_dict | {f"power {i}": [] for i in range(sys_dim)}
     for label, time_series in time_series_dict.items():
-
         if per_or_freq == "period":
             x, power_spectrum = meas.power_spectrum_componentwise(time_series, dt=dt, period=True)
         elif per_or_freq == "frequency":
             x, power_spectrum = meas.power_spectrum_componentwise(time_series, dt=dt, period=False)
         else:
             raise ValueError(f"This per_or_freq option is not accounted for.")
-        dict_to_plot = {"x": x, "power spectrum": power_spectrum[:, 0]}
-    fig = px.line(dict_to_plot, x="x", y="power spectrum")
 
-    log_x = True
-    log_y = False
-    if log_x:
-        fig.update_xaxes(type="log", exponentformat="E")
-    if log_y:
-        fig.update_yaxes(type="log", exponentformat="E")
-    st.plotly_chart(fig)
+        power_spectrum_dict[per_or_freq] += x.tolist()
+        power_spectrum_dict["label"] += [label, ] * x.size
+
+        for i in range(sys_dim):
+            power_spectrum_dict[f"power {i}"] += power_spectrum[:, i].tolist()
+        power_spectrum_dict["power_mean"] += np.mean(power_spectrum, axis=1).tolist()
+
+    return pd.DataFrame.from_dict(power_spectrum_dict)
 
 
-def st_power_spectrum(time_series: np.ndarray, dt: float = 1.0) -> None:
-    per_or_freq = st.selectbox("Period or Frequency", ["period", "frequency"])
+def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) -> None:
+    """Streamlit element to plot the power spectrum of a timeseries.
 
+    Args:
+        time_series_dict: The dictionary containing the time series data.
+        dt: The time step of the timeseries.
+    """
+    time_steps, sys_dim = list(time_series_dict.values())[0].shape
+
+    left, right = st.columns(2)
+    with left:
+        per_or_freq = st.selectbox("Period or Frequency", ["period", "frequency"])
     if per_or_freq == "period":
-        x, power_spectrum = meas.power_spectrum_componentwise(time_series, dt=dt, period=True)
+        log_x = True
     elif per_or_freq == "frequency":
-        x, power_spectrum = meas.power_spectrum_componentwise(time_series, dt=dt,
-                                                              period=False)
+        log_x = False
     else:
-        raise ValueError(f"This per_or_freq option is not accounted for.")
-    dict_to_plot = {"x": x, "power spectrum": power_spectrum[:, 0]}
-    fig = px.line(dict_to_plot, x="x", y="power spectrum")
+        raise ValueError(f"This per_or_freq option is not implemented.")
 
-    log_x = True
-    log_y = False
-    if log_x:
-        fig.update_xaxes(type="log", exponentformat="E")
-    if log_y:
-        fig.update_yaxes(type="log", exponentformat="E")
+    df = get_power_spectrum(time_series_dict, dt=dt, per_or_freq=per_or_freq)
+
+    opt = ["mean", "single dimension"]
+    with right:
+        opt_select = st.selectbox("Mean or single dimensions", opt)
+
+    if opt_select == "single dimension":
+        i_dim = utils.dimension_selection(sys_dim)
+        label_to_plot = f"power {i_dim}"
+    elif opt_select == "mean":
+        label_to_plot = "power_mean"
+
+    fig = plpl.plot_2d_line_or_scatter(to_plot_df=df, x_label=per_or_freq, y_label=label_to_plot,
+                                 color="label", mode="line", title_i="Power Spectrum", log_x=log_x)
     st.plotly_chart(fig)
 
 

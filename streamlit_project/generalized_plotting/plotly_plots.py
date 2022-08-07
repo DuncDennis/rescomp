@@ -98,30 +98,31 @@ def matrix_as_barchart(data_matrix: np.ndarray, x_axis: str = "x_dim", y_axis: s
     return fig
 
 
-def _plot_2d_line_or_scatter(to_plot_df: pd.DataFrame, x_label: str, y_label: str,
-                             mode: str, color: str, title_i: str,
-                             line_size: float | None = 1,
-                             scatter_size: float | None = 1,
-                             fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE,
-                             log_x: bool = False, log_y: bool = False
-                             ) -> go.Figure:
+def plot_2d_line_or_scatter(to_plot_df: pd.DataFrame, x_label: str, y_label: str,
+                            mode: str, color: str, title_i: str,
+                            line_size: float | None = 1,
+                            scatter_size: float | None = 1,
+                            fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE,
+                            log_x: bool = False, log_y: bool = False
+                            ) -> go.Figure:
     """General utility plotting function for 2d plots.
     TODO: Better docstring.
     """
     if mode == "line":
         fig = px.line(to_plot_df, x=x_label, y=y_label, color=color,
-                      title=title_i)
+                      title=title_i, log_x=log_x, log_y=log_y)
         if line_size is not None:
             fig.update_traces(line={"width": line_size})
     elif mode == "scatter":
         fig = px.scatter(to_plot_df, x=x_label, y=y_label, color=color,
-                         title=title_i)
+                         title=title_i, log_x=log_x, log_y=log_y)
         if scatter_size is not None:
             fig.update_traces(marker={'size': scatter_size})
     else:
         raise Exception(f"mode = {mode} not accounted for.")  # TODO: proper error
 
     fig.update_layout(height=fig_size[1], width=fig_size[0])
+
     if log_y:
         fig.update_layout(
             yaxis={
@@ -143,12 +144,15 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
                             fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE,
                             x_scale: float | None = None, x_label: str = "steps",
                             y_label: str = "value", dimensions: tuple[int, ...] | None = None,
-                            subplot_dimensions_bool: bool = True
+                            subplot_dimensions_bool: bool = True,
+                            log_y: bool = False,
+                            log_x: bool = False
                             ) -> list[go.Figure]:
     """ Plot multiple 1d time_series as a line or scatter plot.
     # TODO: add possibility for vertical lines seperators.
     # TODO: add logy and logx setting.
     # TODO: maybe generalize to not only plot "time_series" but general 2d data.
+    # TODO: just rename and add possibility for passing x_data
 
     Args:
         time_series_dict: Dict of the form {"timeseries_name_1": time_series_1, ...}.
@@ -208,10 +212,10 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
                 title_i = title
 
             color = "label"
-            fig = _plot_2d_line_or_scatter(df_selection, x_label, y_label, mode,
-                                           color, title_i, line_size=line_size,
-                                           scatter_size=scatter_size,
-                                           fig_size=fig_size)
+            fig = plot_2d_line_or_scatter(df_selection, x_label, y_label, mode,
+                                          color, title_i, line_size=line_size,
+                                          scatter_size=scatter_size,
+                                          fig_size=fig_size, log_x=log_x, log_y=log_y)
             figs.append(fig)
 
     else:
@@ -226,10 +230,10 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
 
             color = "dimension"
 
-            fig = _plot_2d_line_or_scatter(df_selection, x_label, y_label, mode,
-                                           color, title_i, line_size=line_size,
-                                           scatter_size=scatter_size,
-                                           fig_size=fig_size)
+            fig = plot_2d_line_or_scatter(df_selection, x_label, y_label, mode,
+                                          color, title_i, line_size=line_size,
+                                          scatter_size=scatter_size,
+                                          fig_size=fig_size, log_x=log_x, log_y=log_y)
             figs.append(fig)
 
     return figs
@@ -358,7 +362,8 @@ def statistical_barplot_multiple(time_series_dict: dict[str, np.ndarray],
                                  title: str | None = None,
                                  fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> go.Figure:
     """Plot a statistical quantity of a dict of time_series as a grouped barplot.
-
+    # TODO: maybe remove the statistical calculations to another part?
+    # TODO: General barplot?
     Args:
         time_series_dict: The dict of time_series. The key is used as the legend label.
         mode: One of "std", "var", "mean", "median". # TODO more can be added.
@@ -397,56 +402,3 @@ def statistical_barplot_multiple(time_series_dict: dict[str, np.ndarray],
     fig.update_xaxes(title=x_label)
 
     return fig
-
-
-def power_spectrum_multiple(time_series_dict: dict[str, np.ndarray],
-                            ) -> go.Figure:
-    time_steps, sys_dim = list(time_series_dict.values())[0].shape
-
-    to_plot_dict = {"x": [], "y": [], "label": []}
-
-    for label, data in time_series_dict.items():
-        to_plot_dict["label"] += [label, ] * sys_dim
-        x = None
-# def multiple_1d_data_xy(data_dict: dict[str, tuple[np.ndarray, np.ndarray]],
-#                         log_x: bool = False, log_y: bool = False,
-#                         title: str | None = None, x_label: str = "x",
-#                         y_label = "y",
-#                         fig_size: tuple[int, int] = DEFAULT_THREE_D_FIGSIZE,
-#                         )
-
-# @st.experimental_memo
-# def mean_and_std_barplot(time_series: np.ndarray,
-#                          fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> list[go.Figure]:
-#     """Plot the mean and standard deviation of the time series as a bar plot.
-#     TODO: enhance so that one can compare multiple timeseries. Maybe remove
-#     Args:
-#         time_series: The input time series of shape (time_steps, sys_dim).
-#         fig_size: The size of the figure in (width, height).
-#
-#
-#     Returns:
-#         List of both plotly figures for mean and std.
-#     """
-#
-#     x_axis_title = "system dimension"
-#
-#     mean = np.mean(time_series, axis=0)[:, np.newaxis]
-#     std = np.std(time_series, axis=0)[:, np.newaxis]
-#
-#     mean_all = np.round(np.mean(mean), 6)
-#     std_all = np.round(np.std(time_series), 6)
-#
-#     mean_fig = px.bar(mean, width=fig_size[0],
-#                      height=fig_size[1], title=f"Mean of time series: {mean_all}")
-#     mean_fig.update_yaxes(title="mean")
-#     mean_fig.update_xaxes(title=x_axis_title)
-#     mean_fig.update_layout(showlegend=False)
-#
-#     std_fig = px.bar(std, width=fig_size[0],
-#                       height=fig_size[1], title=f"Std of time series: {std_all}")
-#     std_fig.update_yaxes(title="std")
-#     std_fig.update_xaxes(title=x_axis_title)
-#     std_fig.update_layout(showlegend=False)
-#
-#     return [mean_fig, std_fig]

@@ -25,10 +25,11 @@ if __name__ == '__main__':
     with st.expander("Measures based on data"):
         if st.checkbox("Statistical measures"):
             data_dict = {"time series": time_series}
-            measures.st_stat_measures(data_dict)
+            measures.st_statistical_measures(data_dict)
 
         if st.checkbox("Power spectrum"):
-            measures.st_power_spectrum(time_series, dt=dt)
+            data_dict = {"time series": time_series}
+            measures.st_power_spectrum(data_dict, dt=dt)
 
     with st.expander("Measures based on the system"):
         if st.checkbox("Calculate largest lyapunov exponent: "):
