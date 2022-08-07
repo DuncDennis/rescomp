@@ -1,5 +1,7 @@
 import numpy as np
 import time
+
+import rescomp.simulations_new
 from . import utilities
 from . import measures
 from . import simulations
@@ -540,7 +542,7 @@ def data_simulation(simulation_function_or_sim_data, t_train_disc, t_train_sync,
 
 def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_train=2000, t_pred_disc=1000,
                         t_pred_sync=300, t_pred=2000, nr_of_time_intervals=1, dt=0.05, normalize=False, train_noise=0.0,
-                        sim_data_return=False, v=1, starting_point=None, t_settings_as_real_time=False):
+                        sim_data_return=False, v=1, starting_point=None, t_settings_as_real_time=False, KS_dim=64):
     """
 
     """
@@ -575,13 +577,25 @@ def data_simulation_new(system="lorenz", t_train_disc=1000, t_train_sync=300, t_
     total_time_steps = train_disc_steps + train_sync_steps + train_steps + (
             pred_disc_steps + pred_sync_steps + pred_steps) * nr_of_time_intervals
 
-    if starting_point is None:
-        sim_data = simulations.simulate_trajectory(system, dt, total_time_steps)
+    if system == "KS":
+        sim_data = rescomp.simulations_new.KuramotoSivashinsky(
+            dt=dt,
+            system_size=35,
+            dimensions=KS_dim).simulate(total_time_steps)
+    elif system == "Lorenz96":
+        sim_data = rescomp.simulations_new.Lorenz96(
+            dt=dt,
+            system_size=35,
+            dimensions=KS_dim).simulate(total_time_steps)
     else:
-        if starting_point == "standard":
-            starting_point = simulations.standard_starting_points[system]
 
-        sim_data = simulations.simulate_trajectory(system, dt, total_time_steps, starting_point)
+        if starting_point is None:
+            sim_data = simulations.simulate_trajectory(system, dt, total_time_steps)
+        else:
+            if starting_point == "standard":
+                starting_point = simulations.standard_starting_points[system]
+
+            sim_data = simulations.simulate_trajectory(system, dt, total_time_steps, starting_point)
 
     x_train = sim_data[train_disc_steps: train_disc_steps + train_sync_steps + train_steps]
 
