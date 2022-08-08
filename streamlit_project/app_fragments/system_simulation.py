@@ -277,43 +277,6 @@ def st_preprocess_simulation(time_series: np.ndarray) -> np.ndarray:
     return mod_time_series
 
 
-def st_default_simulation_plot(time_series):
-    """Streamlit element to plot a time series independent of shape.
-
-    If 1d, plot value vs. time.
-    If 2d, plot value_1 vs value_2 as a scatter plot.
-    If 3d, plot value_1 vs value_2 vs value_3 as a line plot.
-    If d>3, plot as a heatmap: values vs time.
-
-    Args:
-        time_series: The timeseries of shape (time_steps, sys_dim)
-    """
-
-    x_dim = time_series.shape[1]
-    if x_dim == 1:
-
-        figs = plpl.multiple_1d_time_series({"simulated timeseries": time_series, },
-                                            x_label="time step",)
-        plpl.multiple_figs(figs)
-
-    elif x_dim == 2:
-        fig = plpl.multiple_2d_time_series({"simulated timeseries": time_series}, mode="scatter")
-        st.plotly_chart(fig)
-
-    elif x_dim == 3:
-        fig = plpl.multiple_3d_time_series({"simulated timeseries": time_series}, )
-        st.plotly_chart(fig)
-
-    elif x_dim > 3:
-        figs = plpl.multiple_time_series_image({"simulated timeseries": time_series},
-                                               x_label="time steps",
-                                               y_label="dimensions"
-                                               )
-        plpl.multiple_figs(figs)
-    else:
-        raise ValueError("x_dim < 1 not supported.")
-
-
 def main() -> None:
     st.header("System Simulation")
     with st.sidebar:
@@ -321,16 +284,10 @@ def main() -> None:
         system_name, system_parameters = st_select_system()
         time_steps = st_select_time_steps(default_time_steps=10000)
 
-        if "dt" in system_parameters.keys():
-            dt = system_parameters["dt"]
-        else:
-            dt = 1.0
-
         time_series = simulate_trajectory(system_name, system_parameters, time_steps)
         time_series = st_preprocess_simulation(time_series)
 
-    if st.checkbox("Plot time series: "):
-        st_default_simulation_plot(time_series)
+    st.write(time_series)
 
 
 if __name__ == '__main__':
