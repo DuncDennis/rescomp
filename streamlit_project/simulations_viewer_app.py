@@ -10,6 +10,7 @@ if __name__ == '__main__':
     st.set_page_config("Dynamical Systems Viewer", page_icon="🦋")
 
     st.header("System Simulation")
+
     with st.sidebar:
         st.header("System: ")
         system_name, system_parameters = syssim.st_select_system()
@@ -23,6 +24,8 @@ if __name__ == '__main__':
         time_series = syssim.simulate_trajectory(system_name, system_parameters, time_steps)
         time_series = syssim.st_preprocess_simulation(time_series)
         data_dict = {"time series": time_series}
+        # data_dict = {"time series": time_series,
+        #              "time series2": time_series*0.9}
 
     with st.expander("Plotting"):
         utils.st_line()
@@ -31,6 +34,9 @@ if __name__ == '__main__':
         utils.st_line()
         if st.checkbox("Plot 1D"):
             plot.st_plot_dim_selection(data_dict)
+        utils.st_line()
+        if st.checkbox("Plot 3D delay embedding"):
+            plot.st_one_dim_time_delay(data_dict)
 
     with st.expander("Measures based on data"):
         utils.st_line()
@@ -50,3 +56,5 @@ if __name__ == '__main__':
         utils.st_line()
         if st.checkbox("Calculate largest lyapunov exponent"):
             measures.st_largest_lyapunov_exponent(system_name, system_parameters)
+
+    st.session_state

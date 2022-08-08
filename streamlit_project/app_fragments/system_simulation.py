@@ -36,7 +36,8 @@ SYSTEM_DICT = {
 
 
 def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
-                     default_parameters: dict[str, dict[str, Any]] | None = None
+                     default_parameters: dict[str, dict[str, Any]] | None = None,
+                     key: str | None = None
                      ) -> tuple[str, dict[str, Any]]:
     """Create streamlit elements to select the system to simulate and specify the parameters.
 
@@ -45,6 +46,8 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
         default_parameters: Define the default parameters that should be loaded for each
                             system_name.
                             If None, take the default parameters for the simulation.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
 
     Returns: tuple with first element being the system_name, second element being the system
              parameters.
@@ -59,7 +62,8 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
         if len(system_dict) == 0:
             raise ValueError(f"The systems in {systems_sub_section} are not accounted for.")
 
-    system_name = st.selectbox('System', system_dict.keys())
+    system_name = st.selectbox('System', system_dict.keys(),
+                               key=f"{key}__st_select_system__system")
 
     sim_class = system_dict[system_name]
 
@@ -72,13 +76,16 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
             raise ValueError(f"The system specified in default_parameters is not accounted for.")
 
     with st.expander("Parameters: "):
-        for key, val in system_parameters.items():
+        for param_name, val in system_parameters.items():
 
             val_type = type(val)
             if val_type == float:
-                system_parameters[key] = st.number_input(key, value=float(val), step=0.01, format="%f")
+                system_parameters[param_name] = st.number_input(param_name, value=float(val),
+                                                                step=0.01, format="%f",
+                                                                key=f"{key}__st_select_system__{param_name}")
             elif val_type == int:
-                system_parameters[key] = int(st.number_input(key, value=int(val)))
+                system_parameters[param_name] = int(st.number_input(param_name, value=int(val),
+                                                                    key=f"{key}__st_select_system__{param_name}"))
             else:
                 raise TypeError("Other default keyword arguments than float and int are currently"
                                 "not supported.")
@@ -87,79 +94,87 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
 
 
 def st_get_model_system(system_name: str, system_parameters: dict[str, Any],
-                        unique_key: str = ""
+                        key: str | None = None
                         ) -> tuple[Callable[[np.ndarray], np.ndarray], dict[str, Any]]:
     """Get an app-section to modify the system parameters of the system given by system_name.
 
     Args:
         system_name: The name of the system. has to be in SYSTEM_DICT.
         system_parameters: The original system_parameters to be modified.
+        key: Provide a unique key if this streamlit element is used multiple times.
 
     Returns: The iterator function of the modified model and the modified system_parameters.
 
     # TODO: check for possible errors.
+    # TODO: Maybe refactor using session state?
     """
 
     modified_system_parameters = system_parameters.copy()
 
-    relative_change = st.checkbox("Relative change", key=f"{unique_key}")
+    relative_change = st.checkbox("Relative change", key=f"{key}__st_get_model_system__rel_change_check")
 
-    for i, (key, val) in enumerate(modified_system_parameters.items()):
-        print(i, (key, val))
+    for i, (param_name, val) in enumerate(modified_system_parameters.items()):
         val_type = type(val)
         if relative_change:
             left, right = st.columns(2)
 
             with right:
                 eps = st.number_input("Relative change", value=0.0, step=0.01, format="%f",
-                                      key=f"releps{i}_{unique_key}")
+                                      key=f"{key}__st_get_model_system__rel_change_{i}")
             if val_type == float:
-                new_val = system_parameters[key] * (1 + eps)
+                new_val = system_parameters[param_name] * (1 + eps)
             elif val_type == int:
-                new_val = int(system_parameters[key] * (1 + eps))
+                new_val = int(system_parameters[param_name] * (1 + eps))
             else:
                 raise TypeError(
                     "Other default keyword arguments than float and int are currently"
                     "not supported.")
             with left:
-                st.number_input(key, value=new_val, disabled=True, key=f"relative{i}_{unique_key}")
+                st.number_input(param_name, value=new_val, disabled=True,
+                                key=f"{key}__st_get_model_system__param_name_{i}")
 
         else:
             left, right = st.columns(2)
             with left:
                 if val_type == float:
-                    new_val = st.number_input(key, value=float(val), step=0.01, format="%f",
-                                              key=f"absfloat{i}_{unique_key}")
+                    new_val = st.number_input(param_name, value=float(val), step=0.01, format="%f",
+                                              key=f"{key}__st_get_model_system__absfloat_{i}")
                 elif val_type == int:
-                    new_val = st.number_input(key, value=int(val), key=f"absint{i}_{unique_key}", step=1)
+                    new_val = st.number_input(param_name, value=int(val),
+                                              key=f"{key}__st_get_model_system__absint_{i}",
+                                              step=1)
                 else:
                     raise TypeError("Other default keyword arguments than float and int are currently"
                                     "not supported.")
             with right:
-                if system_parameters[key] == 0:
+                if system_parameters[param_name] == 0:
                     eps = np.nan
                 else:
-                    eps = new_val / system_parameters[key] - 1
+                    eps = new_val / system_parameters[param_name] - 1
                 st.number_input("Relative change", value=eps, step=0.01, format="%f",
-                                disabled=True, key=f"abseps{i}_{unique_key}")
+                                disabled=True, key=f"{key}__st_get_model_system__abseps_{i}")
 
-        modified_system_parameters[key] = new_val
+        modified_system_parameters[param_name] = new_val
 
     model_func = SYSTEM_DICT[system_name](**modified_system_parameters).iterate
 
     return model_func, modified_system_parameters
 
 
-def st_select_time_steps(default_time_steps: int = 10000) -> int:
+def st_select_time_steps(default_time_steps: int = 10000,
+                         key: str | None = None) -> int:
     """Streamlit element to select timesteps.
 
     Args:
         default_time_steps: The default nr of time steps to show.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
 
     Returns:
         The selected timesteps.
     """
-    return int(st.number_input('time steps', value=default_time_steps, step=1))
+    return int(st.number_input('time steps', value=default_time_steps, step=1,
+                               key=f"{key}__st_select_time_steps"))
 
 
 def st_select_time_steps_split_up(default_t_train_disc: int = 1000,
@@ -168,6 +183,7 @@ def st_select_time_steps_split_up(default_t_train_disc: int = 1000,
                                   default_t_pred_disc: int = 1000,
                                   default_t_pred_sync: int = 300,
                                   default_t_pred: int = 5000,
+                                  key: str | None = None,
                                   ) -> tuple[int, int, int, int, int, int]:
     """Streamlit elements train discard, train sync, train, pred discard, pred sync and pred.
 
@@ -178,23 +194,32 @@ def st_select_time_steps_split_up(default_t_train_disc: int = 1000,
         default_t_pred_disc: Default predict disc time steps.
         default_t_pred_sync: Default predict sync time steps.
         default_t_pred: Default predict time steps.
+        key: Provide a unique key if this streamlit element is used multiple times.
 
     Returns:
         The selected time steps.
     """
     with st.expander("Time steps: "):
-        t_train_disc = st.number_input('t_train_disc', value=default_t_train_disc, step=1)
-        t_train_sync = st.number_input('t_train_sync', value=default_t_train_sync, step=1)
-        t_train = st.number_input('t_train', value=default_t_train, step=1)
-        t_pred_disc = st.number_input('t_pred_disc', value=default_t_pred_disc, step=1)
-        t_pred_sync = st.number_input('t_pred_sync', value=default_t_pred_sync, step=1)
-        t_pred = st.number_input('t_pred', value=default_t_pred, step=1)
+        t_train_disc = st.number_input('t_train_disc', value=default_t_train_disc, step=1,
+                                       key=f"{key}__st_select_time_steps_split_up__td")
+        t_train_sync = st.number_input('t_train_sync', value=default_t_train_sync, step=1,
+                                       key=f"{key}__st_select_time_steps_split_up__ts")
+        t_train = st.number_input('t_train', value=default_t_train, step=1,
+                                  key=f"{key}__st_select_time_steps_split_up__t")
+        t_pred_disc = st.number_input('t_pred_disc', value=default_t_pred_disc, step=1,
+                                      key=f"{key}__st_select_time_steps_split_up__pd")
+        t_pred_sync = st.number_input('t_pred_sync', value=default_t_pred_sync, step=1,
+                                      key=f"{key}__st_select_time_steps_split_up__ps")
+        t_pred = st.number_input('t_pred', value=default_t_pred, step=1,
+                                 key=f"{key}__st_select_time_steps_split_up__p")
+
         return int(t_train_disc), int(t_train_sync), int(t_train), int(t_pred_disc), \
                int(t_pred_sync), int(t_pred)
 
 
 @st.experimental_memo
-def simulate_trajectory(system_name: str, system_parameters: dict[str, Any], time_steps: int) -> np.ndarray:
+def simulate_trajectory(system_name: str, system_parameters: dict[str, Any], time_steps: int
+                        ) -> np.ndarray:
     """Function to simulate a trajectory given the system_name and the system_parameters.
 
     Args:
@@ -248,12 +273,14 @@ def get_noisy_data(time_series: np.ndarray,
     return datapre.add_noise(time_series, noise_scale=noise_scale, seed=seed)
 
 
-def st_preprocess_simulation(time_series: np.ndarray) -> np.ndarray:
+def st_preprocess_simulation(time_series: np.ndarray,
+                             key: str | None = None) -> np.ndarray:
     """Streamlit elements to preprocess the data.
 
     One can add scale and center the data and add white noise.
     Args:
         time_series: The input timeseries.
+        key: Provide a unique key if this streamlit element is used multiple times.
 
     Returns:
         The modified timeseries.
@@ -262,16 +289,19 @@ def st_preprocess_simulation(time_series: np.ndarray) -> np.ndarray:
         if st.checkbox("Normalize and Center"):
             left, right = st.columns(2)
             with left:
-                scale = st.number_input("scale", value=1.0, min_value=0.0, step=0.1, format="%f")
+                scale = st.number_input("scale", value=1.0, min_value=0.0, step=0.1, format="%f",
+                                        key=f"{key}__st_preprocess_simulation__scale")
             with right:
-                shift = st.number_input("shift", value=0.0, step=0.1, format="%f")
+                shift = st.number_input("shift", value=0.0, step=0.1, format="%f",
+                                        key=f"{key}__st_preprocess_simulation__shift")
             mod_time_series = get_scaled_and_shifted_data(time_series, shift=shift, scale=scale)
         else:
             mod_time_series = time_series
 
         if st.checkbox("Add white noise"):
             noise_scale = st.number_input("noise scale", value=0.1, min_value=0.0, step=0.01,
-                                          format="%f")
+                                          format="%f",
+                                          key=f"{key}__st_preprocess_simulation__noise")
             mod_time_series = get_noisy_data(mod_time_series, noise_scale=noise_scale)
 
     return mod_time_series

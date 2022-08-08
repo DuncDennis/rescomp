@@ -10,6 +10,7 @@ import streamlit_project.generalized_plotting.temp_plotly_plots as tplpl
 import streamlit_project.generalized_plotting.temp_pyplot_plots as tplt
 import streamlit_project.app_fragments.esn_build_temp as esn_app
 import streamlit_project.app_fragments.utilities_temp as util_app
+import streamlit_project.app_fragments.plotting as plotapp
 
 ESN_TO_USE = ("ESN_normal",
               "ESN_output_hybrid",
@@ -72,7 +73,7 @@ if __name__ == '__main__':
             x_dim = time_series.shape[1]
 
             if st.checkbox("Show"):
-                syssim.st_default_simulation_plot(time_series)
+                plotapp.st_default_simulation_plot(time_series)
 
             time_boundaries = (0, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred)
 

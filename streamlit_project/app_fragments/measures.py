@@ -45,20 +45,21 @@ def get_histograms(time_series_dict: dict[str, np.ndarray], dim_selection: list[
     return pd.DataFrame.from_dict(data_dict)
 
 
-def st_histograms(time_series_dict: dict[str, np.ndarray]) -> None:
+def st_histograms(time_series_dict: dict[str, np.ndarray],
+                  key: str | None = None) -> None:
     """Streamlit element to plot a histogram of the time_series.
 
     There is a bins element and a "dimension selector".
 
     Args:
         time_series_dict: The dictionary containing the time series data.
+        key: Provide a unique key if this streamlit element is used multiple times.
 
     """
     time_steps, sys_dim = list(time_series_dict.values())[0].shape
     left, right = st.columns(2)
     with left:
-        dim_selection = utils.st_dimension_selection_multiple(sys_dim)
-        # dim_selection = utils.st_selectbox_with_all("Dimensions", dim_select_opts)
+        dim_selection = utils.st_dimension_selection_multiple(sys_dim, key=f"{key}__st_histogram")
     with right:
         bins = int(st.number_input("Bins", min_value=2, value=50))
     data_df = get_histograms(time_series_dict, dim_selection, bins=bins)
@@ -93,16 +94,19 @@ def get_extrema_maps(time_series_dict: dict[str, np.ndarray], dim_selection: lis
     return sub_dicts
 
 
-def st_extrema_map(time_series_dict: dict[str, np.ndarray]) -> None:
+def st_extrema_map(time_series_dict: dict[str, np.ndarray], key: str | None = None) -> None:
     """A streamlit element to plot the extrema map of a time_series dict.
 
     Args:
         time_series_dict: The dictionary containing the time series.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
     """
     time_steps, sys_dim = list(time_series_dict.values())[0].shape
     left, right = st.columns(2)
     with left:
-        dim_selection = utils.st_dimension_selection_multiple(sys_dim)
+        dim_selection = utils.st_dimension_selection_multiple(sys_dim,
+                                                              key=f"{key}__st_extrema_map")
     with right:
         mode = st.selectbox("Min or max", ["minima", "maxima"])
     sub_dicts = get_extrema_maps(time_series_dict, dim_selection=dim_selection, mode=mode)
@@ -113,13 +117,16 @@ def st_extrema_map(time_series_dict: dict[str, np.ndarray]) -> None:
         st.plotly_chart(fig)
 
 
-def st_statistical_measures(time_series_dict: dict[str, np.ndarray]) -> None:
+def st_statistical_measures(time_series_dict: dict[str, np.ndarray], key: str | None = None
+                            ) -> None:
     """Streamlit element to calculate and plot statistical quantities of a time series.
 
     Args:
         time_series_dict: The time series data.
+        key: Provide a unique key if this streamlit element is used multiple times.
     """
-    mode = st.selectbox("Statistical measure", ["std", "var", "mean", "median"])
+    mode = st.selectbox("Statistical measure", ["std", "var", "mean", "median"],
+                        key=f"{key}__st_statistical_measures")
 
     df = get_statistical_measure(time_series_dict, mode=mode)
     fig = plpl.barplot(df, x="x_axis", y=mode, color="label",
@@ -203,18 +210,21 @@ def get_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
     return pd.DataFrame.from_dict(power_spectrum_dict)
 
 
-def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) -> None:
+def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
+                      key: str | None = None) -> None:
     """Streamlit element to plot the power spectrum of a timeseries.
 
     Args:
         time_series_dict: The dictionary containing the time series data.
         dt: The time step of the timeseries.
+        key: Provide a unique key if this streamlit element is used multiple times.
     """
     time_steps, sys_dim = list(time_series_dict.values())[0].shape
 
     left, right = st.columns(2)
     with left:
-        per_or_freq = st.selectbox("Period or Frequency", ["period", "frequency"])
+        per_or_freq = st.selectbox("Period or Frequency", ["period", "frequency"],
+                                   key=f"{key}__st_power_spectrum__per_or_freq")
     if per_or_freq == "period":
         log_x = True
     elif per_or_freq == "frequency":
@@ -226,16 +236,18 @@ def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) 
 
     opt = ["mean", "single dimension"]
     with right:
-        opt_select = st.selectbox("Mean or single dimensions", opt)
+        opt_select = st.selectbox("Mean or single dimensions", opt,
+                                  key=f"{key}__st_power_spectrum__opt_select")
 
     if opt_select == "single dimension":
-        i_dim = utils.st_dimension_selection(sys_dim)
-        # label_to_plot = f"power {i_dim}"
-        dim_selection = utils.st_dimension_selection_multiple(sys_dim)
+        dim_selection = utils.st_dimension_selection_multiple(sys_dim,
+                                                              key=f"{key}__st_power_spectrum")
         labels_to_plot = [f"power {i_dim}" for i_dim in dim_selection]
     elif opt_select == "mean":
         dim_selection = ["all", ]
         labels_to_plot = ["power_mean", ]
+    else:
+        raise ValueError("Selected option is not accounted for. ")
 
     for i_dim, label_to_plot in zip(dim_selection, labels_to_plot):
         fig = plpl.plot_2d_line_or_scatter(to_plot_df=df, x_label=per_or_freq,
@@ -245,7 +257,8 @@ def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) 
         st.plotly_chart(fig)
 
 
-def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any]) -> None:
+def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
+                                 key: str | None = None) -> None:
     """Streamlit element to calculate the largest lyapunov exponent.
 
     Set up the number inputs for steps, part_time_steps, steps_skip and deviation scale.
@@ -256,17 +269,22 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
     Args:
         system_name: The system name. Has to be in SYSTEM_DICT.
         system_parameters: The system parameters. Not every kwarg has to be specified.
+        key: Provide a unique key if this streamlit element is used multiple times.
     """
     left, right = st.columns(2)
     with left:
-        steps = int(st.number_input("steps", value=int(1e3)))
+        steps = int(st.number_input("steps", value=int(1e3),
+                                    key=f"{key}__st_largest_lyapunov_exponent__steps"))
     with right:
-        part_time_steps = int(st.number_input("time steps of each part", value=15))
+        part_time_steps = int(st.number_input("time steps of each part", value=15,
+                                              key=f"{key}__st_largest_lyapunov_exponent__part"))
     left, right = st.columns(2)
     with left:
-        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0))
+        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0,
+                                         key=f"{key}__st_largest_lyapunov_exponent__skip"))
     with right:
-        deviation_scale = 10 ** (float(st.number_input("log (deviation_scale)", value=-10.0)))
+        deviation_scale = 10 ** (float(st.number_input("log (deviation_scale)", value=-10.0,
+                                                       key=f"{key}__st_largest_lyapunov_exponent__eps")))
 
     lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, steps=steps,
                                              part_time_steps=part_time_steps,
