@@ -353,50 +353,104 @@ def multiple_time_series_image(time_series_dict: dict[str, np.ndarray],
     return figs
 
 
+# @st.experimental_memo
+# def statistical_barplot_multiple(time_series_dict: dict[str, np.ndarray],
+#                                  mode: str = "std",
+#                                  x_label: str = "system dimension",
+#                                  title: str | None = None,
+#                                  fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> go.Figure:
+#     """Plot a statistical quantity of a dict of time_series as a grouped barplot.
+#     # TODO: maybe remove the statistical calculations to another part?
+#     # TODO: General barplot?
+#     Args:
+#         time_series_dict: The dict of time_series. The key is used as the legend label.
+#         mode: One of "std", "var", "mean", "median". # TODO more can be added.
+#         x_label: The name of the x_axis.
+#         title: The title of the plot.
+#         fig_size: The figure size.
+#
+#     Returns:
+#         The plotly figure.
+#     """
+#
+#     time_steps, sys_dim = list(time_series_dict.values())[0].shape
+#
+#     proc_data_dict = {"x_axis": [], "label": [], mode: []}
+#     for label, data in time_series_dict.items():
+#         if mode == "std":
+#             stat_quant = np.std(data, axis=0)
+#         elif mode == "mean":
+#             stat_quant = np.mean(data, axis=0)
+#         elif mode == "median":
+#             stat_quant = np.median(data, axis=0)
+#         elif mode == "var":
+#             stat_quant = np.var(data, axis=0)
+#         else:
+#             raise ValueError(f"Mode {mode} is not implemented.")
+#
+#         proc_data_dict["x_axis"] += np.arange(sys_dim).tolist()
+#         proc_data_dict["label"] += [label, ] * sys_dim
+#         proc_data_dict[mode] += stat_quant.tolist()
+#
+#     df = pd.DataFrame.from_dict(proc_data_dict)
+#
+#     fig = barplot(df, x="x_axis", y=mode, color="label", barmode="group", fig_size=fig_size,
+#                   x_label=x_label, title=title)
+#     return fig
+#
+#     # fig = px.bar(df, x="x_axis", y=mode, color="label", barmode="group",
+#     #              title=title)
+#     # fig.update_layout(height=fig_size[1], width=fig_size[0])
+#     # fig.update_xaxes(title=x_label)
+#     #
+#     # return fig
+
+
 @st.experimental_memo
-def statistical_barplot_multiple(time_series_dict: dict[str, np.ndarray],
-                                 mode: str = "std",
-                                 x_label: str = "system dimension",
-                                 title: str | None = None,
-                                 fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE) -> go.Figure:
-    """Plot a statistical quantity of a dict of time_series as a grouped barplot.
-    # TODO: maybe remove the statistical calculations to another part?
-    # TODO: General barplot?
+def barplot(to_plot_df: pd.DataFrame, x: str, y: str, color: str,
+            barmode: str = "group",
+            fig_size: tuple[int, int] = DEFAULT_TWO_D_FIGSIZE,
+            x_label: str | None = None,
+            y_label: str | None = None,
+            title: str | None = None,
+            log_x: bool = False, log_y: bool = False,
+            ) -> go.Figure:
+    """A wrapper for the plotly express barplot function.
+
     Args:
-        time_series_dict: The dict of time_series. The key is used as the legend label.
-        mode: One of "std", "var", "mean", "median". # TODO more can be added.
-        x_label: The name of the x_axis.
-        title: The title of the plot.
-        fig_size: The figure size.
+        to_plot_df: The dataframe including a column for x, y and color axis.
+        x: The column name of the x-axis.
+        y: The column name of the y-axis.
+        color: The column name of the color axis.
+        barmode: The barmode: "group", "relative", "overlay".
+        fig_size: The size of the figure in (width, height).
+        x_label: Name for x-axis. If None, use the str for "x".
+        y_label: Name for y-axis. If None, use the str for "y".
+        title: The title.
+        log_x: Logarithmic x-axis.
+        log_y: Logarithmic y-axis.
 
     Returns:
         The plotly figure.
     """
 
-    time_steps, sys_dim = list(time_series_dict.values())[0].shape
-
-    proc_data_dict = {"x_axis": [], "label": [], mode: []}
-    for label, data in time_series_dict.items():
-        if mode == "std":
-            stat_quant = np.std(data, axis=0)
-        elif mode == "mean":
-            stat_quant = np.mean(data, axis=0)
-        elif mode == "median":
-            stat_quant = np.median(data, axis=0)
-        elif mode == "var":
-            stat_quant = np.var(data, axis=0)
-        else:
-            raise ValueError(f"Mode {mode} is not implemented.")
-
-        proc_data_dict["x_axis"] += np.arange(sys_dim).tolist()
-        proc_data_dict["label"] += [label, ] * sys_dim
-        proc_data_dict[mode] += stat_quant.tolist()
-
-    df = pd.DataFrame.from_dict(proc_data_dict)
-
-    fig = px.bar(df, x="x_axis", y=mode, color="label", barmode="group",
-                 title=title)
+    fig = px.bar(to_plot_df, x=x, y=y, color=color, barmode=barmode, title=title, log_x=log_x,
+                 log_y=log_y)
     fig.update_layout(height=fig_size[1], width=fig_size[0])
-    fig.update_xaxes(title=x_label)
+    if x_label is not None:
+        fig.update_xaxes(title=x_label)
+    if y_label is not None:
+        fig.update_yaxes(title=y_label)
+
+    if log_y:
+        fig.update_layout(
+            yaxis={
+                'exponentformat': 'E'}
+        )
+    if log_x:
+        fig.update_layout(
+            xaxis={
+                'exponentformat': 'E'}
+        )
 
     return fig

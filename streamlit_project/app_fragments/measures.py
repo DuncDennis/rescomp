@@ -15,10 +15,66 @@ import rescomp.measures_new as meas
 
 
 @st.experimental_memo
+def get_histograms(time_series_dict: dict[str, np.ndarray], dim_selection: list[int],
+                   bins: str | int = 50) -> pd.DataFrame:
+    """Calculate a histogram of a time_series_dict, return a pandas Dataframe.
+
+    Args:
+        time_series_dict: The dictionary containing the time_series data.
+        dim_selection: A list of integers specifying the dimensions to consider.
+        bins: The number of bins.
+
+    Returns:
+        A pandas DataFrame with the columns: "label" (key in time_series_dict), "bins" (the bin
+        middle points), "histogram" (the histogram values), "dimension" (the dimension of the
+        system they refer to).
+    """
+
+    data_dict = {"label": [], "bins": [], "histogram": [], "dimension": []}
+
+    for i_dim in dim_selection:
+        for key, val in time_series_dict.items():
+            hist, binedges = np.histogram(val[:, i_dim], bins=bins, density=True)
+            binmiddle = np.array([(binedges[i] + binedges[i+1])/2 for i in range(bins)])
+            nr_entries = hist.size
+            data_dict["bins"] += binmiddle.tolist()
+            data_dict["histogram"] += hist.tolist()
+            data_dict["label"] += [key, ] * nr_entries
+            data_dict["dimension"] += [i_dim, ] * nr_entries
+
+    return pd.DataFrame.from_dict(data_dict)
+
+
+def st_histograms(time_series_dict: dict[str, np.ndarray]) -> None:
+    """Streamlit element to plot a histogram of the time_series.
+
+    There is a bins element and a "dimension selector".
+
+    Args:
+        time_series_dict: The dictionary containing the time series data.
+
+    """
+    time_steps, sys_dim = list(time_series_dict.values())[0].shape
+    left, right = st.columns(2)
+    with left:
+        dim_selection = utils.st_dimension_selection_multiple(sys_dim)
+        # dim_selection = utils.st_selectbox_with_all("Dimensions", dim_select_opts)
+    with right:
+        bins = int(st.number_input("Bins", min_value=2, value=50))
+    data_df = get_histograms(time_series_dict, dim_selection, bins=bins)
+    for i_dim in dim_selection:
+        sub_df = data_df[data_df["dimension"] == i_dim]
+        fig = plpl.barplot(sub_df, x="bins", y="histogram", color="label",
+                           title=f"Histogram: Dim = {i_dim}",
+                           x_label="value", y_label="frequency", barmode="overlay")
+        st.plotly_chart(fig)
+
+
+@st.experimental_memo
 def get_extrema_maps(time_series_dict: dict[str, np.ndarray], dim_selection: list[int],
                      mode: str = "maximum"
                      ) -> list[dict[str, np.ndarray]]:
-    """ Get the extrema data as a list of dictionaries: One dict for each dimensions.
+    """ Get the extrema data as a list of dictionaries: One dict for each dimension.
 
     For each dimension selected in dim_selection, create a dictionary with the same keys as
     time_series_dict, but values of the shape (nr of extrema, 2) for consecutive extrema.
@@ -44,11 +100,9 @@ def st_extrema_map(time_series_dict: dict[str, np.ndarray]) -> None:
         time_series_dict: The dictionary containing the time series.
     """
     time_steps, sys_dim = list(time_series_dict.values())[0].shape
-    dim_select_opts = [f"{i}" for i in range(sys_dim)]
     left, right = st.columns(2)
     with left:
-        dim_selection = utils.st_selectbox_with_all("Dimensions", dim_select_opts)
-        dim_selection = [int(x) for x in dim_selection]
+        dim_selection = utils.st_dimension_selection_multiple(sys_dim)
     with right:
         mode = st.selectbox("Min or max", ["minima", "maxima"])
     sub_dicts = get_extrema_maps(time_series_dict, dim_selection=dim_selection, mode=mode)
@@ -67,7 +121,10 @@ def st_statistical_measures(time_series_dict: dict[str, np.ndarray]) -> None:
     """
     mode = st.selectbox("Statistical measure", ["std", "var", "mean", "median"])
 
-    fig = plpl.statistical_barplot_multiple(time_series_dict, mode=mode)
+    df = get_statistical_measure(time_series_dict, mode=mode)
+    fig = plpl.barplot(df, x="x_axis", y=mode, color="label",
+                       x_label="system dimension")
+
     st.plotly_chart(fig)
 
 
@@ -75,7 +132,6 @@ def st_statistical_measures(time_series_dict: dict[str, np.ndarray]) -> None:
 def get_statistical_measure(time_series_dict: dict[str, np.ndarray],
                             mode: str = "std") -> pd.DataFrame:
     """Get a pandas DataFrame of a statistical quantity of a dict of time_series.
-    # TODO: not really needed?
     Args:
         time_series_dict: The dict of time_series. The key is used as the legend label.
         mode: One of "std", "var", "mean", "median". # TODO more can be added.
@@ -174,13 +230,19 @@ def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0) 
 
     if opt_select == "single dimension":
         i_dim = utils.st_dimension_selection(sys_dim)
-        label_to_plot = f"power {i_dim}"
+        # label_to_plot = f"power {i_dim}"
+        dim_selection = utils.st_dimension_selection_multiple(sys_dim)
+        labels_to_plot = [f"power {i_dim}" for i_dim in dim_selection]
     elif opt_select == "mean":
-        label_to_plot = "power_mean"
+        dim_selection = ["all", ]
+        labels_to_plot = ["power_mean", ]
 
-    fig = plpl.plot_2d_line_or_scatter(to_plot_df=df, x_label=per_or_freq, y_label=label_to_plot,
-                                 color="label", mode="line", title_i="Power Spectrum", log_x=log_x)
-    st.plotly_chart(fig)
+    for i_dim, label_to_plot in zip(dim_selection, labels_to_plot):
+        fig = plpl.plot_2d_line_or_scatter(to_plot_df=df, x_label=per_or_freq,
+                                           y_label=label_to_plot,
+                                           color="label", mode="line",
+                                           title_i=f"Power Spectrum, dim = {i_dim}", log_x=log_x)
+        st.plotly_chart(fig)
 
 
 def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any]) -> None:
