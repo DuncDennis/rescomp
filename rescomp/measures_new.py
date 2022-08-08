@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
+import scipy.spatial
 from scipy import signal
+
 
 def power_spectrum_componentwise(data: np.ndarray, period: bool = False, dt: float = 1.0
                                  ) -> tuple[np.ndarray, np.ndarray]:
@@ -106,6 +108,86 @@ def largest_lyapunov_exponent(
         return np.array(np.cumsum(log_divergence) / (np.arange(1, steps + 1) * dt * part_time_steps))
     else:
         return float(np.average(log_divergence) / (dt * part_time_steps))
+
+
+def largest_lyapunov_from_data(
+    time_series: np.ndarray,
+    time_steps: int = 100,
+    dt: float = 1.0,
+    neighbours_to_check: int = 50,
+    min_index_difference: int = 50,
+    distance_upper_bound: float = np.inf,
+) -> tuple[np.ndarray, np.ndarray]:
+    """An algorithm to estimate the Lyapunov Exponent only from data.
+
+    The algorithm is close to the Rosenstein algorithm.
+    Original Paper: Rosenstein et. al. (1992)
+    https://doi.org/10.1016/0167-2789(93)90009-P
+
+    Returns the mean logarithmic distance between close trajectories and the corresponding x axis.
+    -> by fitting the linear region of this curve, the largest lyapunov exponent can be obtained
+    from the sloap.
+
+    Args:
+        time_series: The timeseries.
+        time_steps: Number of time_steps to track for each neighbour pair.
+        dt: The timestep.
+        neighbours_to_check: Number of next neighbours to check so that there is atleast one that
+                             fullfills the min_index_difference condition.
+        min_index_difference: The minimal difference between neighbour indices in order to count as
+                              a valid neighbour.
+        distance_upper_bound: If the distance is too big it is also not a valid neighbour.
+
+    Returns:
+        Return the mean logarithmic divergence, shape (time_steps, ) and the initial_distances.
+    """
+
+    nr_points = time_series.shape[0]
+    tree = scipy.spatial.cKDTree(time_series)
+
+    # get the neighbour_index for each index
+    neighbours = []
+    for i in range(nr_points):
+        x = time_series[i, :]
+
+        # get the k nearest neighbours (indices)
+        potential_neighbours = tree.query(x, k=neighbours_to_check, distance_upper_bound=distance_upper_bound)[1]
+
+        # skip point if no neighbour was found with the given distance_upper_bound
+        if potential_neighbours[1] == nr_points:
+            continue
+
+        # only keep the closest neighbour that is at least min_index_difference apart
+        i_neighbour = potential_neighbours[np.argmax(np.abs(potential_neighbours - i) >= min_index_difference)]
+
+        # if there is no suitable neighbour skip this point:
+        if i == i_neighbour:
+            continue
+
+        # check if valid neighbour:
+        if i + time_steps < nr_points and i_neighbour + time_steps < nr_points:
+            neighbours.append((i, i_neighbour))
+
+    # calculate for each point the distance to the neighbour for the next t time_steps
+    nr_valid_points = len(neighbours)
+    distance = np.zeros((nr_valid_points, time_steps))
+    for i, (i_base, i_neigh) in enumerate(neighbours):
+        diff = time_series[i_base: i_base + time_steps, :] - time_series[i_neigh: i_neigh + time_steps, :]
+        distance[i, :] = np.linalg.norm(diff, axis=-1)
+
+    # debug:
+    initial_distance = distance[:, 0]
+
+    # normalize distance array by first distance for each neighbour_pair
+    distance = (distance.T / distance[:, 0]).T
+
+    # calculate the log distance
+    log_distance = np.log(distance)
+
+    # calculate the mean of the log distance:
+    mean_log_distance = np.mean(log_distance, axis=0)
+
+    return mean_log_distance / dt, initial_distance
 
 
 def extrema_map(time_series: np.ndarray, mode: str = "minima", i_dim: int = 0) -> np.ndarray:

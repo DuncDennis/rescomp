@@ -333,5 +333,85 @@ def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str,
     return lle_conv
 
 
+@st.experimental_memo
+def get_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
+                                   time_steps: int = 100,
+                                   dt: float = 1.0,
+                                   neighbours_to_check: int = 50,
+                                   min_index_difference: int = 50,
+                                   distance_upper_bound: float = np.inf
+                                   ) -> pd.DataFrame:
+    """Calculate the largest lyapunov based only data.
+
+    Args:
+        time_series_dict: The dictionary containing the time-series data.
+        time_steps: The nr of time steps to use for the divergence.
+        dt: The time step.
+        neighbours_to_check: Number of next neighbours to check so that there is atleast one that
+                             fullfills the min_index_difference condition.
+        min_index_difference: The minimal difference between neighbour indices in order to count as
+                              a valid neighbour.
+        distance_upper_bound: If the distance is too big it is also not a valid neighbour.
+
+    Returns:
+        A pandas DataFrame with the columns: "log_div/dt", "label" and "steps".
+    """
+    out_dict = {"label": [], "log_div/dt": [], "steps": []}
+    for label, time_series in time_series_dict.items():
+        log_dist, _ = meas.largest_lyapunov_from_data(time_series,
+                                                      time_steps=time_steps,
+                                                      dt=dt,
+                                                      neighbours_to_check=neighbours_to_check,
+                                                      min_index_difference=min_index_difference,
+                                                      distance_upper_bound=distance_upper_bound)
+        nr_steps = log_dist.size
+        steps = np.arange(nr_steps)
+        lyap = np.polyfit(steps, log_dist, 1)[0]
+
+        out_dict["log_div/dt"] += log_dist.tolist()
+        new_label = f"{label}: {np.round(lyap, 4)}"
+        out_dict["label"] += [new_label, ] * nr_steps
+        out_dict["steps"] += steps.tolist()
+
+    return pd.DataFrame.from_dict(out_dict)
+
+
+def st_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
+                                  dt: float = 1.0,
+                                  key: str | None = None) -> None:
+    """A streamlit element to calculate and plot the largest lyapunov exponent based on data.
+
+    Args:
+        time_series_dict: The dictionary containing the time series data.
+        dt: The time step dt.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        time_steps = int(st.number_input("Time steps", value=100, min_value=2,
+                                         key=f"{key}__st_largest_lyapunov_from_data__ts"))
+    with col2:
+        neighbours_to_check = int(st.number_input("Neighbours to check", value=50, min_value=1,
+                                                  key=f"{key}__st_largest_lyapunov_from_data__nc"))
+    with col3:
+        min_index_difference = int(st.number_input("Min index difference", value=50, min_value=1,
+                                                   key=f"{key}__st_largest_lyapunov_from_data__mid"))
+    df_to_plot = get_largest_lyapunov_from_data(time_series_dict, time_steps=time_steps,
+                                                neighbours_to_check=neighbours_to_check,
+                                                min_index_difference=min_index_difference,
+                                                dt=dt)
+
+    fig = plpl.plot_2d_line_or_scatter(df_to_plot,
+                                       x_label="steps",
+                                       y_label="log_div/dt",
+                                       mode="line",
+                                       color="label",
+                                       title_i="Logar. trajectory divergence / dt",
+                                       )
+
+    st.plotly_chart(fig)
+
+
 if __name__ == "__main__":
     pass

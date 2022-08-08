@@ -51,10 +51,10 @@ if __name__ == '__main__':
         utils.st_line()
         if st.checkbox("Power spectrum"):
             measures.st_power_spectrum(data_dict, dt=dt)
-
+        utils.st_line()
+        if st.checkbox("Lyapunov from data"):
+            measures.st_largest_lyapunov_from_data(data_dict, dt=dt)
     with st.expander("Measures based on the system"):
         utils.st_line()
         if st.checkbox("Calculate largest lyapunov exponent"):
             measures.st_largest_lyapunov_exponent(system_name, system_parameters)
-
-    st.session_state

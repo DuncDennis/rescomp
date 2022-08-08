@@ -74,13 +74,16 @@ def st_one_dim_time_delay(time_series_dict: dict[str, np.ndarray],
 
     """
     time_steps, sys_dim = list(time_series_dict.values())[0].shape
-    left, right = st.columns(2)
+    left, mid, right = st.columns(3)
     with left:
         dim_selection = utils.st_dimension_selection_multiple(dimension=sys_dim,
                                                               key=f"{key}__st_one_dim_time_delay")
-    with right:
+    with mid:
         time_delay = st.number_input("Time delay", value=1, min_value=1,
                                      key=f"{key}__st_one_dim_time_delay__time_delay")
+    with right:
+        scatter_or_line = st.selectbox("Line/Scatter", ["scatter", "line"],
+                                       key=f"{key}__st_one_dim_time_delay__scatter_line")
     for i_dim in dim_selection:
         sub_dict = {}
         for key, val in time_series_dict.items():
@@ -90,5 +93,5 @@ def st_one_dim_time_delay(time_series_dict: dict[str, np.ndarray],
             time_series_new[:, 2] = val[2:-time_delay * 3 + 2, i_dim]
             sub_dict[key] = time_series_new
 
-        fig = plpl.multiple_3d_time_series(sub_dict)
+        fig = plpl.multiple_3d_time_series(sub_dict, mode=scatter_or_line)
         st.plotly_chart(fig)
