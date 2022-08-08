@@ -454,3 +454,40 @@ def barplot(to_plot_df: pd.DataFrame, x: str, y: str, color: str,
         )
 
     return fig
+
+
+@st.experimental_memo
+def one_dim_timeseries_with_sections(time_series: np.ndarray,
+                                     section_steps: list[int],
+                                     section_names: list[str]
+                                     ) -> go.Figure:
+    """Plot one dimensional timeseries with differently colored areas defined by some boundaries.
+
+    section_steps must have the same number of entries as section_names.
+
+    Args:
+        time_series: A timeseries of the shape (time_steps, ).
+        section_steps: A list of integers representing the nr of steps for each section.
+        section_names: A list of names defining the names of the sections. They will appear
+                       in the legend.
+
+    Returns:
+        A plotly figure.
+    """
+
+    nr_of_sections = len(section_names)
+
+    x_list = np.arange(time_series.shape[0])
+    right = 0
+    fig = make_subplots()
+    for i in range(nr_of_sections):
+        left = right
+        right = section_steps[i] + right
+
+        fig.add_trace(go.Scatter(
+            x=x_list[left: right],
+            y=time_series[left: right],
+            name=section_names[i]
+        )
+        )
+    return fig

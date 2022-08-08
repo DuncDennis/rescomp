@@ -16,7 +16,7 @@ def seed_interface():
     else:
         if st.button("new seed"):
             get_random_int.clear()
-        seed = get_random_int()  # lets see what to do with that
+        seed = get_random_int()  # let's see what to do with that
 
     st.write(f"Current seed: {seed}")
     return seed

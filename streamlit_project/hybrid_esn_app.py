@@ -75,14 +75,15 @@ if __name__ == '__main__':
             if st.checkbox("Show"):
                 plotapp.st_default_simulation_plot(time_series)
 
-            time_boundaries = (0, t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred)
+            section_steps = [t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred]
+            section_names = ["train disc", "train sync", "train", "pred disc", "pred sync", "pred"]
 
             plot_trajectory_time_series = st.checkbox("Show one dimension")
             if plot_trajectory_time_series:
                 util_app.line()
-                i_dim = st.number_input("i_dim", min_value=0, max_value=x_dim - 1)
-                fig = tplpl.plot_1d_time_series(time_series, i_dim, boundaries=time_boundaries)
-                st.plotly_chart(fig, use_container_width=True)
+                plotapp.st_one_dim_time_series_with_sections(time_series, section_steps,
+                                                             section_names)
+
                 util_app.line()
             ct.metric("r_dim to x_dim factor: ", value=np.round(build_args["r_dim"]/x_dim, 1))
 

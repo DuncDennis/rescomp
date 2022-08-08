@@ -1,4 +1,4 @@
-"""Python file that includes streamit elements that are used to specify/select and plot a System."""
+"""Python file that includes streamlit elements that are used to specify/select and plot a System."""
 
 from __future__ import annotations
 
