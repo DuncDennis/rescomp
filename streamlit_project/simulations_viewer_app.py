@@ -27,10 +27,10 @@ if __name__ == '__main__':
     with st.expander("Plotting"):
         utils.st_line()
         if st.checkbox("Plot"):
-            syssim.st_default_simulation_plot(time_series)
+            plot.st_default_simulation_plot(time_series)
         utils.st_line()
         if st.checkbox("Plot 1D"):
-            plot.plot_some_dimensions(data_dict)
+            plot.st_plot_dim_selection(data_dict)
 
     with st.expander("Measures based on data"):
         utils.st_line()
