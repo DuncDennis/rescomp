@@ -24,8 +24,6 @@ if __name__ == '__main__':
         time_series = syssim.simulate_trajectory(system_name, system_parameters, time_steps)
         time_series = syssim.st_preprocess_simulation(time_series)
         data_dict = {"time series": time_series}
-        # data_dict = {"time series": time_series,
-        #              "time series2": time_series*0.9}
 
     with st.expander("Plotting"):
         utils.st_line()

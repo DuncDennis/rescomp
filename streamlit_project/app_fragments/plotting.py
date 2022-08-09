@@ -30,13 +30,15 @@ def st_plot_dim_selection(time_series_dict: dict[str, np.ndarray],
 def st_default_simulation_plot(time_series: np.ndarray) -> None:
     """Streamlit element to plot a time series independent of shape.
 
+    TODO: maybe remove this function since st_default_simulation_plot_dict exists now?
+
     If 1d, plot value vs. time.
     If 2d, plot value_1 vs value_2 as a scatter plot.
     If 3d, plot value_1 vs value_2 vs value_3 as a line plot.
     If d>3, plot as a heatmap: values vs time.
 
     Args:
-        time_series: The timeseries of shape (time_steps, sys_dim)
+        time_series: The timeseries of shape (time_steps, sys_dim).
     """
 
     x_dim = time_series.shape[1]
@@ -122,3 +124,59 @@ def st_one_dim_time_series_with_sections(time_series: np.ndarray,
     fig = plpl.one_dim_timeseries_with_sections(time_series_one_d, section_steps=section_steps,
                                                 section_names=section_names)
     st.plotly_chart(fig)
+
+
+def st_default_simulation_plot_dict(time_series_dict: dict[str, np.ndarray]) -> None:
+    """Streamlit element to plot a time series dict independent of the timeseries shape.
+
+    Same as "default_simulation_plot" but for a time_series_dict.
+
+    If 1d, plot value vs. time.
+    If 2d, plot value_1 vs value_2 as a scatter plot.
+    If 3d, plot value_1 vs value_2 vs value_3 as a line plot.
+    If d>3, plot as a heatmap: values vs time.
+
+    Args:
+        time_series_dict: Dictionary of the time series of shape (time_steps, sys_dim).
+    """
+
+    x_dim = list(time_series_dict.values())[0].shape[1]
+    if x_dim == 1:
+
+        figs = plpl.multiple_1d_time_series(time_series_dict,
+                                            x_label="time step", )
+        plpl.multiple_figs(figs)
+
+    elif x_dim == 2:
+        fig = plpl.multiple_2d_time_series(time_series_dict, mode="scatter")
+        st.plotly_chart(fig)
+
+    elif x_dim == 3:
+        fig = plpl.multiple_3d_time_series(time_series_dict, )
+        st.plotly_chart(fig)
+
+    elif x_dim > 3:
+        figs = plpl.multiple_time_series_image(time_series_dict,
+                                               x_label="time steps",
+                                               y_label="dimensions"
+                                               )
+        plpl.multiple_figs(figs)
+    else:
+        raise ValueError("x_dim < 1 not supported.")
+
+
+def st_all_plots(time_series_dict: dict[str, np.ndarray], key: str | None = None
+                 ) -> None:
+    """Streamlit element to do all plots of a time_series_dict.
+
+    Args:
+        time_series_dict: Dictionary containing the time series.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+    if st.checkbox("Attractor", key=f"{key}__st_all_plots"):
+        st_default_simulation_plot_dict(time_series_dict)
+    utils.st_line()
+    if st.checkbox("Trajectory", key=f"{key}__st_all_plots"):
+        st_plot_dim_selection(time_series_dict, key=f"{key}__st_all_plots")
+
