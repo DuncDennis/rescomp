@@ -32,6 +32,7 @@ SYSTEM_DICT = {
     "Logistic": sims.Logistic,
     "KuramotoSivashinsky": sims.KuramotoSivashinsky,
     "Lorenz96": sims.Lorenz96,
+    "LinearSystem": sims.LinearSystem
 }
 
 
@@ -87,8 +88,10 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
                 system_parameters[param_name] = int(st.number_input(param_name, value=int(val),
                                                                     key=f"{key}__st_select_system__{param_name}"))
             else:
-                raise TypeError("Other default keyword arguments than float and int are currently"
-                                "not supported.")
+                st.write(param_name, val)
+                # TODO: maybe make nicer?
+                # raise TypeError("Other default keyword arguments than float and int are currently"
+                #                 "not supported.")
 
     return system_name, system_parameters
 
