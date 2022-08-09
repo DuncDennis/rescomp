@@ -74,34 +74,85 @@ if __name__ == '__main__':
 
     with tab1:
         if simulate_bool:
-            if st.checkbox("Plot"):
-                plot.st_default_simulation_plot(time_series)
-            utils.st_line()
-            if st.checkbox("Sections"):
-                plot.st_one_dim_time_series_with_sections(time_series,
-                                                          section_steps=section_steps,
-                                                          section_names=section_names)
+            st.info("Plot the simulated data and measure some quantites.")
+            plot_tab, measure_tab = st.tabs(["Plot", "Measures"])
+            with plot_tab:
+                if st.checkbox("Plot"):
+                    plot.st_default_simulation_plot(time_series)
+                utils.st_line()
+                if st.checkbox("Train / Predict split"):
+                    plot.st_one_dim_time_series_with_sections(time_series,
+                                                              section_steps=section_steps,
+                                                              section_names=section_names)
+
+            with measure_tab:
+                data_dict = {"time series": time_series}
+
+                measures.st_all_data_measures(data_dict, dt=dt, key="simulation")
+                # if st.checkbox("Consecutive extrema"):
+                #     measures.st_extrema_map(data_dict)
+                # utils.st_line()
+                # if st.checkbox("Statistical measures"):
+                #     measures.st_statistical_measures(data_dict)
+                # utils.st_line()
+                # if st.checkbox("Histogram"):
+                #     measures.st_histograms(data_dict)
+                # utils.st_line()
+                # if st.checkbox("Power spectrum"):
+                #     measures.st_power_spectrum(data_dict, dt=dt)
+                # utils.st_line()
+                # if st.checkbox("Lyapunov from data"):
+                #     measures.st_largest_lyapunov_from_data(data_dict, dt=dt)
+
+                utils.st_line()
+                if st.checkbox("Calculate largest lyapunov exponent"):
+                    measures.st_largest_lyapunov_exponent(system_name, system_parameters)
+
         else:
-            st.write("Activate Simulate Data checkbox to see something.")
+            st.info('Activate [🌀 Simulate data] checkbox to see something.')
 
     with tab2:
         if build_bool:
+            st.info("TBD: Some architecture plots.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
-            st.write(esn_obj)
+            if st.checkbox("W_in matrix"):
+                st.write(esn_obj._w_in)
         else:
-            st.write("Activate Build checkbox to see something.")
+            st.info('Activate [🛠️ Build] checkbox to see something.')
 
     with tab3:
         if train_bool:
             y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
-            if st.checkbox("Show training"):
-                train_data = {"train true": y_train_true,
-                              "train fitted": y_train_fit}
-                # train_data_diff = {"Difference": y_train_true - y_train_fit}
+            train_data_dict = {"train true": y_train_true,
+                          "train fitted": y_train_fit}
+            plot_tab, measure_tab = st.tabs(["Plot", "Measures"])
+            with plot_tab:
 
-                plot.st_plot_dim_selection(train_data, key="train")
+                if st.checkbox("Attractor"):
+                    pass
+                utils.st_line()
+                if st.checkbox("Trajectory"):
+                    plot.st_plot_dim_selection(train_data_dict, key="train")
+                    # train_data_diff = {"Difference": y_train_true - y_train_fit}
+            with measure_tab:
+                measures.st_all_data_measures(train_data_dict, dt=dt, key="train")
+                # if st.checkbox("Consecutive extrema"):
+                #     measures.st_extrema_map(train_data_dict)
+                # utils.st_line()
+                # if st.checkbox("Statistical measures"):
+                #     measures.st_statistical_measures(train_data_dict)
+                # utils.st_line()
+                # if st.checkbox("Histogram"):
+                #     measures.st_histograms(train_data_dict)
+                # utils.st_line()
+                # if st.checkbox("Power spectrum"):
+                #     measures.st_power_spectrum(train_data_dict, dt=dt)
+                # utils.st_line()
+                # if st.checkbox("Lyapunov from data"):
+                #     measures.st_largest_lyapunov_from_data(train_data_dict, dt=dt)
+
         else:
-            st.write("Activate Train checkbox to see something.")
+            st.info('Activate [🦾 Train] checkbox to see something.')
 
     with tab4:
         if predict_bool:
@@ -113,7 +164,7 @@ if __name__ == '__main__':
 
                 plot.st_plot_dim_selection(pred_data, key="pred")
         else:
-            st.write("Activate Predict checkbox to see something.")
+            st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with tab5:
         st.write("TBD")

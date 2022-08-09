@@ -87,8 +87,8 @@ def st_basic_esn_build(key: str | None = None) -> dict[str, object]:
     """
 
     basic_build_args = {}
-    basic_build_args["r_dim"] = st.number_input('Reservoir Dim', value=500, step=1,
-                                                key=f"{key}__st_basic_esn_build__rd")
+    basic_build_args["r_dim"] = int(st.number_input('Reservoir Dim', value=500, step=1,
+                                                key=f"{key}__st_basic_esn_build__rd"))
     basic_build_args["r_to_r_gen_opt"] = st.selectbox('r_to_r_gen_opt', R_TO_R_GEN_TYPES,
                                                       key=f"{key}__st_basic_esn_build__rrgen")
     basic_build_args["act_fct_opt"] = st.selectbox('act_fct_opt', ACTIVATION_FUNCTIONS,

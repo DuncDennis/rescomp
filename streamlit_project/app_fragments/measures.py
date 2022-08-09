@@ -413,5 +413,32 @@ def st_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
     st.plotly_chart(fig)
 
 
+def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key: str | None = None
+                         ) -> None:
+    """Streamlit element for all data measures.
+
+    Args:
+        data_dict: Dictionary containing the time series.
+        dt: The time step.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+
+    if st.checkbox("Consecutive extrema", key=f"{key}__st_all_data_measures"):
+        st_extrema_map(data_dict, key=f"{key}__st_all_data_measures")
+    utils.st_line()
+    if st.checkbox("Statistical measures", key=f"{key}__st_all_data_measures"):
+        st_statistical_measures(data_dict, key=f"{key}__st_all_data_measures")
+    utils.st_line()
+    if st.checkbox("Histogram", key=f"{key}__st_all_data_measures"):
+        st_histograms(data_dict, key=f"{key}__st_all_data_measures")
+    utils.st_line()
+    if st.checkbox("Power spectrum", key=f"{key}__st_all_data_measures"):
+        st_power_spectrum(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
+    utils.st_line()
+    if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures"):
+        st_largest_lyapunov_from_data(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
+
+
 if __name__ == "__main__":
     pass
