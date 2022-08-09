@@ -53,17 +53,16 @@ def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     return esn
 
 
-def st_basic_esn_build(esn_sub_section: tuple[str, ...] | None = None,
-                       key: str | None = None) -> tuple[str, dict[str, object]]:
-    """Streamlit elements to specify the basic esn settings.
+def st_select_esn_type(esn_sub_section: tuple[str, ...] | None = None,
+                       key: str | None = None) -> str:
+    """Streamlit elements to specify the esn type.
 
     Args:
         esn_sub_section: A subsection of the keys in ESN_DICT, or if None, take all of ESN_DICT.
         key: Provide a unique key if this streamlit element is used multiple times.
 
     Returns:
-        A tuple with the first element being the esn type, the second argument being the
-        build_args.
+        The esn_type as a string.
     """
     if esn_sub_section is None:
         esn_dict = ESN_DICT
@@ -73,7 +72,19 @@ def st_basic_esn_build(esn_sub_section: tuple[str, ...] | None = None,
         if len(esn_dict) == 0:  # TODO: proper error
             raise Exception(f"The systems in {esn_sub_section} are not accounted for.")
 
-    esn_type = st.selectbox('esn type', esn_dict.keys())
+    esn_type = st.selectbox('esn type', esn_dict.keys(), key=f"{key}__st_select_esn_type")
+    return esn_type
+
+
+def st_basic_esn_build(key: str | None = None) -> dict[str, object]:
+    """Streamlit elements to specify the basic esn settings.
+
+    Args:
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        The basic esn build_args as a dictionary.
+    """
 
     basic_build_args = {}
     basic_build_args["r_dim"] = st.number_input('Reservoir Dim', value=500, step=1,
@@ -99,7 +110,7 @@ def st_basic_esn_build(esn_sub_section: tuple[str, ...] | None = None,
                                     key=f"{key}__st_basic_esn_build__reg")
     basic_build_args["reg_param"] = 10 ** (log_reg_param)
 
-    return esn_type, basic_build_args
+    return basic_build_args
 
 
 def st_network_build_args(key: str | None = None) -> dict[str, object]:
