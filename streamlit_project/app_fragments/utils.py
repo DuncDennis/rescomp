@@ -1,6 +1,7 @@
 """Utlity streamlit fragments."""
 from __future__ import annotations
 
+import numpy as np
 import streamlit as st
 
 
@@ -109,6 +110,37 @@ def st_main_checkboxes(key: str | None = None) -> tuple[bool, bool, bool, bool]:
     predict_bool = st.checkbox("🔮 Predict", disabled=disabled, key=f"{basic_key}__pred")
 
     return simulate_bool, build_bool, train_bool, predict_bool
+
+
+@st.experimental_memo
+def get_random_int() -> int:
+    """Get a random integer between 1 and 1000000.
+    TODO: maybe handle with generators in future.
+    Is used to get a new seed.
+
+    Returns:
+        The random integer.
+    """
+    return np.random.randint(1, 1000000)
+
+
+def st_seed(key: str | None = None) -> int:
+    """Streamlit element to specify the random seed.
+
+    Args:
+        key: A optional key if it's used multiple times.
+
+    Returns:
+        The seed.
+    """
+    new_seed = st.button("new random seed", key=f"{key}__new_seed")
+    if new_seed:
+        get_random_int.clear()
+        seed = get_random_int()
+        st.session_state[f"{key}__st_seed__seed"] = seed
+
+    seed = st.number_input("Seed", max_value=1000000, key=f"{key}__st_seed__seed")
+    return seed
 
 
 if __name__ == '__main__':

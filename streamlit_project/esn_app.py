@@ -66,47 +66,86 @@ if __name__ == '__main__':
 
     with st.sidebar:
         st.header("Seed: ")
-        seed = 1  # TODO: add seed handling.
+        seed = utils.st_seed()
+        utils.st_line()
 
-    tab1, tab2, tab3 = st.tabs(["🌀 Simulate data", "🏗️ Architecture", "Owl"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["🌀 Simulated data", "🛠️ Architecture", "🦾 Training",
+                                            "🔮 Prediction", "🔬 Other visualizations"])
 
-    with st.expander("🌀 Simulate data"):
-        utils.st_line()
-        if st.checkbox("Plot"):
-            plot.st_default_simulation_plot(time_series)
-        utils.st_line()
-        if st.checkbox("Sections"):
-            plot.st_one_dim_time_series_with_sections(time_series,
-                                                      section_steps=section_steps,
-                                                      section_names=section_names)
-    with st.expander("🛠️ Build"):
-        utils.st_line()
+    with tab1:
+        if simulate_bool:
+            if st.checkbox("Plot"):
+                plot.st_default_simulation_plot(time_series)
+            utils.st_line()
+            if st.checkbox("Sections"):
+                plot.st_one_dim_time_series_with_sections(time_series,
+                                                          section_steps=section_steps,
+                                                          section_names=section_names)
+        else:
+            st.write("Activate Simulate Data checkbox to see something.")
+
+    with tab2:
         if build_bool:
-            utils.st_line()
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
-            # st.write(esn_obj._w_out)
+            st.write(esn_obj)
+        else:
+            st.write("Activate Build checkbox to see something.")
 
+    with tab3:
+        if train_bool:
             y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
-            # st.write(esn_obj._w_out)
-    with st.expander("🦾 Train"):
-        if st.checkbox("Show training"):
-            train_data = {"train true": y_train_true,
-                          "train fitted": y_train_fit}
-            # train_data_diff = {"Difference": y_train_true - y_train_fit}
+            if st.checkbox("Show training"):
+                train_data = {"train true": y_train_true,
+                              "train fitted": y_train_fit}
+                # train_data_diff = {"Difference": y_train_true - y_train_fit}
 
-            plot.st_plot_dim_selection(train_data, key="train")
+                plot.st_plot_dim_selection(train_data, key="train")
+        else:
+            st.write("Activate Train checkbox to see something.")
 
-    with st.expander("🔮 Predict"):
-        utils.st_line()
-        disabled = False if train_bool else True
-        predict_bool = st.checkbox("Predict", disabled=disabled)
+    with tab4:
         if predict_bool:
-            utils.st_line()
             y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
-
             if st.checkbox("Show prediction"):
                 pred_data = {"true": y_pred_true,
                              "pred": y_pred}
                 # train_data_diff = {"Difference": y_pred_true - y_pred}
 
                 plot.st_plot_dim_selection(pred_data, key="pred")
+        else:
+            st.write("Activate Predict checkbox to see something.")
+
+    with tab5:
+        st.write("TBD")
+
+    # with st.expander("🛠️ Build"):
+    #     utils.st_line()
+    #     if build_bool:
+    #         utils.st_line()
+    #         esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
+    #         # st.write(esn_obj._w_out)
+    #
+    #         y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
+    #         # st.write(esn_obj._w_out)
+    # with st.expander("🦾 Train"):
+    #     if st.checkbox("Show training"):
+    #         train_data = {"train true": y_train_true,
+    #                       "train fitted": y_train_fit}
+    #         # train_data_diff = {"Difference": y_train_true - y_train_fit}
+    #
+    #         plot.st_plot_dim_selection(train_data, key="train")
+    #
+    # with st.expander("🔮 Predict"):
+    #     utils.st_line()
+    #     disabled = False if train_bool else True
+    #     predict_bool = st.checkbox("Predict", disabled=disabled)
+    #     if predict_bool:
+    #         utils.st_line()
+    #         y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
+    #
+    #         if st.checkbox("Show prediction"):
+    #             pred_data = {"true": y_pred_true,
+    #                          "pred": y_pred}
+    #             # train_data_diff = {"Difference": y_pred_true - y_pred}
+    #
+    #             plot.st_plot_dim_selection(pred_data, key="pred")
