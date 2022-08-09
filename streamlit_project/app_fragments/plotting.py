@@ -174,9 +174,8 @@ def st_all_plots(time_series_dict: dict[str, np.ndarray], key: str | None = None
         key: Provide a unique key if this streamlit element is used multiple times.
 
     """
-    if st.checkbox("Attractor", key=f"{key}__st_all_plots"):
+    if st.checkbox("Attractor", key=f"{key}__st_all_plots__attr"):
         st_default_simulation_plot_dict(time_series_dict)
     utils.st_line()
-    if st.checkbox("Trajectory", key=f"{key}__st_all_plots"):
+    if st.checkbox("Trajectory", key=f"{key}__st_all_plots__traj"):
         st_plot_dim_selection(time_series_dict, key=f"{key}__st_all_plots")
-

@@ -5,7 +5,7 @@ import streamlit_project.app_fragments.measures as measures
 import streamlit_project.app_fragments.utils as utils
 import streamlit_project.app_fragments.plotting as plot
 import streamlit_project.app_fragments.esn as esn
-
+import streamlit_project.generalized_plotting.plotly_plots as plpl
 
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
@@ -70,7 +70,7 @@ if __name__ == '__main__':
         seed = utils.st_seed()
         utils.st_line()
 
-    sim_data_tab, tab2, tab3, tab4, tab5 = st.tabs(
+    sim_data_tab, build_tab, train_tab, predict_tab, tab5 = st.tabs(
         ["🌀 Simulated data", "🛠️ Architecture", "🦾 Training",
          "🔮 Prediction", "🔬 Other visualizations"])
 
@@ -100,7 +100,7 @@ if __name__ == '__main__':
         else:
             st.info('Activate [🌀 Simulate data] checkbox to see something.')
 
-    with tab2:
+    with build_tab:
         if build_bool:
             st.info("TBD: Some architecture plots.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
@@ -109,64 +109,49 @@ if __name__ == '__main__':
         else:
             st.info('Activate [🛠️ Build] checkbox to see something.')
 
-    with tab3:
+    with train_tab:
         if train_bool:
             y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
             train_data_dict = {"train true": y_train_true,
                                "train fitted": y_train_fit}
-            plot_tab, measure_tab = st.tabs(["Plot", "Measures"])
+            plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
 
             with plot_tab:
                 plot.st_all_plots(train_data_dict, key="train")
             with measure_tab:
                 measures.st_all_data_measures(train_data_dict, dt=dt, key="train")
-
+            with difference_tab:
+                measures.st_all_difference_measures(y_pred_traj=y_train_fit,
+                                                    y_true_traj=y_train_true,
+                                                    dt=dt,
+                                                    key="train")
         else:
             st.info('Activate [🦾 Train] checkbox to see something.')
 
-    with tab4:
+    with predict_tab:
         if predict_bool:
             y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
-            if st.checkbox("Show prediction"):
-                pred_data = {"true": y_pred_true,
-                             "pred": y_pred}
-                # train_data_diff = {"Difference": y_pred_true - y_pred}
-
-                plot.st_plot_dim_selection(pred_data, key="pred")
+            pred_data_dict = {"true": y_pred_true,
+                              "pred": y_pred}
+            plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
+            with plot_tab:
+                plot.st_all_plots(pred_data_dict, key="predict")
+            with measure_tab:
+                measures.st_all_data_measures(pred_data_dict, dt=dt, key="predict")
+            with difference_tab:
+                measures.st_all_difference_measures(y_pred_traj=y_pred,
+                                                    y_true_traj=y_pred_true,
+                                                    dt=dt,
+                                                    key="predict")
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with tab5:
         st.write("TBD")
 
-    # with st.expander("🛠️ Build"):
-    #     utils.st_line()
-    #     if build_bool:
-    #         utils.st_line()
-    #         esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
-    #         # st.write(esn_obj._w_out)
-    #
-    #         y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
-    #         # st.write(esn_obj._w_out)
-    # with st.expander("🦾 Train"):
-    #     if st.checkbox("Show training"):
-    #         train_data = {"train true": y_train_true,
-    #                       "train fitted": y_train_fit}
-    #         # train_data_diff = {"Difference": y_train_true - y_train_fit}
-    #
-    #         plot.st_plot_dim_selection(train_data, key="train")
-    #
-    # with st.expander("🔮 Predict"):
-    #     utils.st_line()
-    #     disabled = False if train_bool else True
-    #     predict_bool = st.checkbox("Predict", disabled=disabled)
-    #     if predict_bool:
-    #         utils.st_line()
-    #         y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
-    #
-    #         if st.checkbox("Show prediction"):
-    #             pred_data = {"true": y_pred_true,
-    #                          "pred": y_pred}
-    #             # train_data_diff = {"Difference": y_pred_true - y_pred}
-    #
-    #             plot.st_plot_dim_selection(pred_data, key="pred")
+    st.markdown('###')
+    utils.st_line()
+    st.subheader("Checkbox values: ")
+    true_checkboxes = {key: val for key, val in st.session_state.items() if
+                       type(val) == bool and val is True}
+    true_checkboxes

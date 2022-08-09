@@ -22,7 +22,7 @@ def error_over_time(y_pred: np.ndarray, y_true: np.ndarray, normalization: str |
     Returns:
         The error array of shape (time_steps, )
     """
-    error_no_norm = np.linalg.norm(y_pred - y_true)
+    error_no_norm = np.linalg.norm(y_pred - y_true, axis=1)
 
     if normalization is None:
         error = error_no_norm
@@ -54,11 +54,11 @@ def valid_time_index(error_series: np.ndarray, error_threshold: float) -> int:
 
     if error_threshold < 0:
         raise ValueError("error_threshhold must be equal or greater than 0.")
-    bool_array = error_series > error_threshold
-    if np.all(bool_array is False):
-        return bool_array.size - 1
+    error_step_bigger_than_thresh = error_series > error_threshold
+    if np.all(np.invert(error_step_bigger_than_thresh)):
+        return error_step_bigger_than_thresh.size - 1
     else:
-        return int(np.argmax(bool_array))
+        return int(np.argmax(error_step_bigger_than_thresh))
 
 
 def power_spectrum_componentwise(data: np.ndarray, period: bool = False, dt: float = 1.0

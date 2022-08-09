@@ -13,6 +13,8 @@ from streamlit_project.app_fragments import utils
 from streamlit_project.app_fragments import system_simulation
 import rescomp.measures_new as meas
 
+STATE_PREFIX = "measures"  # The prefix for the session state variables.
+
 
 @st.experimental_memo
 def get_histograms(time_series_dict: dict[str, np.ndarray], dim_selection: list[int],
@@ -293,6 +295,8 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
                                              steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
+    utils.st_add_to_state(prefix=STATE_PREFIX, name="LLE", value=largest_lle)
+
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
                                                                             f"Exponent: "
@@ -459,7 +463,7 @@ def get_error(y_pred_traj: np.ndarray,
 
 
 @st.experimental_memo
-def get_valid_time_index(error_series: np.ndarray, error_threshold: float) -> int:
+def get_valid_time_index(error_series: np.ndarray, error_threshold: float, ) -> int:
     """Get the valid time index from an error_series.
 
     Args:
@@ -472,22 +476,116 @@ def get_valid_time_index(error_series: np.ndarray, error_threshold: float) -> in
     return meas.valid_time_index(error_series=error_series, error_threshold=error_threshold)
 
 
+def st_show_error(y_pred_traj: np.ndarray,
+                  y_true_traj: np.ndarray) -> None:
+    """Streamlit element to show the error between a prediction and a true time series.
+
+    TODO: root_of_avg_of_spacedist_squared is the only normalization available at the moment .
+
+    Args:
+        y_pred_traj: The predicted time series with error.
+        y_true_traj: The true, baseline time series.
+
+    """
+    error = get_error(y_pred_traj, y_true_traj)
+    data_dict = {"Error": error}
+    figs = plpl.multiple_1d_time_series(data_dict, y_label="Error")
+    plpl.multiple_figs(figs)
+
+
+def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
+                                           y_true_traj: np.ndarray,
+                                           dt: float,
+                                           key: str | None = None) -> None:
+    """Streamlit element to show a valid times vs error threshold plot.
+
+    # TODO: Decide whether the session state stuff is too complicated.
+    # TODO: Add valid time for 0.4 to streamlit session state.
+
+    There is an option to load the last measured value of st_largest_lyapunov_exponent with
+    streamlit session state variables.
+
+    Args:
+        y_pred_traj: The predicted time series with error.
+        y_true_traj: The true, baseline time series.
+        dt: The time step.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+    error_series = get_error(y_pred_traj, y_true_traj)
+    error_thresh_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    thresh_steps = len(error_thresh_list)
+    valid_times = np.zeros(thresh_steps)
+    for i, thresh in enumerate(error_thresh_list):
+        valid_time = get_valid_time_index(error_series, error_threshold=thresh)
+        valid_times[i] = valid_time
+
+    time_axis = st.selectbox("Time axis", ["steps", "real time", "lyapunov times"],
+                             key=f"{key}__st_show_valid_times_vs_error_threshold__ta")
+
+    if time_axis == "steps":
+        y_label_add = "steps"
+    elif time_axis == "real time":
+        y_label_add = "real time"
+        valid_times *= dt
+    elif time_axis == "lyapunov times":
+
+        latest_measured_lle = utils.st_get_session_state(prefix=STATE_PREFIX, name="LLE")
+        if latest_measured_lle is None:
+            disabled = True
+        else:
+            disabled = False
+        if st.button("Get latest measured LLE", disabled=disabled):
+            default_lle = latest_measured_lle
+        else:
+            default_lle = 0.5
+
+        lle = st.number_input(f"Largest Lyapunov exponent", value=default_lle,
+                              min_value=0.001,
+                              format="%f",
+                              key=f"{key}__st_show_valid_times_vs_error_threshold__lle")
+
+        y_label_add = "lyapunov time"
+        valid_times *= dt * lle
+    else:
+        raise ValueError(f"This time_axis option {time_axis} is not accounted for.")
+
+    data_dict = {"Valid time vs. thresh": valid_times}
+    figs = plpl.multiple_1d_time_series(data_dict, y_label=f"Valid times in {y_label_add}",
+                                        x_label="error threshold")
+    plpl.multiple_figs(figs)
+
+
 def st_all_difference_measures(y_pred_traj: np.ndarray,
                                y_true_traj: np.ndarray,
+                               dt: float,
                                key: str | None = None
                                ) -> None:
+    """Streamlit element for all difference based measures.
+
+    - Plots the difference y_true - y_pred.
+    - Plots the error(y_true, y_pred).
+    - Plots the valid time vs. error threshold.
+
+    Args:
+        y_pred_traj: The predicted time series with error.
+        y_true_traj: The true, baseline time series.
+        dt: The time step.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
     if st.checkbox("Trajectory", key=f"{key}__st_all_difference_measures__traj"):
         difference_dict = {"Difference": y_true_traj - y_pred_traj}
         figs = plpl.multiple_1d_time_series(difference_dict,
                                             subplot_dimensions_bool=False,
                                             y_label="true - fit")
         plpl.multiple_figs(figs)
-
+    utils.st_line()
     if st.checkbox("Error", key=f"{key}__st_all_difference_measures__error"):
-        pass
-
+        st_show_error(y_pred_traj, y_true_traj)
+    utils.st_line()
     if st.checkbox("Valid time", key=f"{key}__st_all_difference_measures__vt"):
-        pass
+        st_show_valid_times_vs_error_threshold(y_pred_traj, y_true_traj, dt=dt)
 
 
 if __name__ == "__main__":
