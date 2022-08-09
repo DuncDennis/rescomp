@@ -5,6 +5,7 @@ import streamlit_project.app_fragments.measures as measures
 import streamlit_project.app_fragments.utils as utils
 import streamlit_project.app_fragments.plotting as plot
 import streamlit_project.app_fragments.esn as esn
+import streamlit_project.app_fragments.esn_plotting as esnplot
 
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
@@ -71,7 +72,7 @@ if __name__ == '__main__':
         seed = utils.st_seed()
         utils.st_line()
 
-    sim_data_tab, build_tab, train_tab, predict_tab, tab5 = st.tabs(
+    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab = st.tabs(
         ["🌀 Simulated data", "🛠️ Architecture", "🦾 Training",
          "🔮 Prediction", "🔬 Other visualizations"])
 
@@ -103,7 +104,7 @@ if __name__ == '__main__':
 
     with build_tab:
         if build_bool:
-            st.info("TBD: Some architecture plots.")
+            st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
             if st.checkbox("W_in matrix"):
                 st.write(esn_obj._w_in)
@@ -149,9 +150,17 @@ if __name__ == '__main__':
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
-    with tab5:
+    with other_vis_tab:
         if predict_bool:
-            st.info("Other Visualizations: TBD")
+            st.info("More esn visualizations.")
+            w_out_r_gen_tab, tbd = st.tabs(["W_out and R_gen", "TBD"])
+            with w_out_r_gen_tab:
+                if st.checkbox("W_out"):
+                    w_out = esn_obj.get_w_out()
+                    esnplot.st_plot_w_out_as_barchart(w_out)
+                utils.st_line()
+                if st.checkbox("R_gen std"):
+                    pass
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 

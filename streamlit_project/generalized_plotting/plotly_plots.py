@@ -176,7 +176,6 @@ def multiple_1d_time_series(time_series_dict: dict[str, np.ndarray], mode: str =
         x_steps, y_dim = shape[0], 1
     else:
         x_steps, y_dim = shape
-    print(x_steps, y_dim)
 
     if x_scale is None:
         x_array = np.arange(x_steps)
