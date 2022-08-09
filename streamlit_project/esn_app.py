@@ -10,9 +10,17 @@ import streamlit_project.app_fragments.esn as esn
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="🥦")
 
-    st.header("Basic ESN Viewer")
+    # st.header("Basic ESN Viewer")
 
     with st.sidebar:
+
+        simulate_data_bool = st.checkbox("🌀Simulate data")
+        disabled = False if simulate_data_bool else True
+        build_and_train_bool = st.checkbox("🛠️ Build and train", disabled=disabled)
+        disabled = False if build_and_train_bool else True
+        predict_bool = st.checkbox("🔮 Predict", disabled=disabled)
+
+        utils.st_line()
         st.header("System: ")
         system_name, system_parameters = syssim.st_select_system()
 
@@ -33,34 +41,42 @@ if __name__ == '__main__':
         else:
             dt = 1.0
 
-        time_series = syssim.simulate_trajectory(system_name, system_parameters, time_steps)
-        time_series = syssim.st_preprocess_simulation(time_series)
-        x_train, x_pred = syssim.split_time_series_for_train_pred(time_series,
-                                                                  t_train_disc=t_train_disc,
-                                                                  t_train_sync=t_train_sync,
-                                                                  t_train=t_train,
-                                                                  t_pred_disc=t_pred_disc,
-                                                                  t_pred_sync=t_pred_sync,
-                                                                  t_pred=t_pred,
-                                                                  )
+        scale, shift, noise_scale = syssim.st_preprocess_simulation()
 
-        x_dim = time_series.shape[1]
+        if simulate_data_bool:
+            time_series = syssim.simulate_trajectory(system_name, system_parameters, time_steps)
+            time_series = syssim.preprocess_simulation(time_series,
+                                                       scale=scale,
+                                                       shift=shift,
+                                                       noise_scale=noise_scale)
+
+            x_train, x_pred = syssim.split_time_series_for_train_pred(time_series,
+                                                                      t_train_disc=t_train_disc,
+                                                                      t_train_sync=t_train_sync,
+                                                                      t_train=t_train,
+                                                                      t_pred_disc=t_pred_disc,
+                                                                      t_pred_sync=t_pred_sync,
+                                                                      t_pred=t_pred,
+                                                                      )
+            x_dim = time_series.shape[1]
         utils.st_line()
 
     with st.sidebar:
         st.header("ESN: ")
-        esn_type, basic_build_args = esn.st_basic_esn_build()
-        st.subheader("System specific parameters: ")
+        esn_type = esn.st_select_esn_type()
+        with st.expander("Basic parameters: "):
+            basic_build_args = esn.st_basic_esn_build()
         with st.expander("Network parameters: "):
             build_args = basic_build_args | esn.st_network_build_args()
         utils.st_line()
 
     with st.sidebar:
         st.header("Seed: ")
-        utils.st_line()
         seed = 1  # TODO: add seed handling.
 
-    with st.expander("🌀 Input data"):
+    tab1, tab2, tab3 = st.tabs(["🌀 Simulate data", "🏗️ Architecture", "Owl"])
+
+    with st.expander("🌀 Simulate data"):
         utils.st_line()
         if st.checkbox("Plot"):
             plot.st_default_simulation_plot(time_series)
@@ -71,8 +87,7 @@ if __name__ == '__main__':
                                                       section_names=section_names)
     with st.expander("🛠️ Build and train"):
         utils.st_line()
-        build_train_bool = st.checkbox("Build and train")
-        if build_train_bool:
+        if build_and_train_bool:
             utils.st_line()
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
             # st.write(esn_obj._w_out)
@@ -88,7 +103,7 @@ if __name__ == '__main__':
 
     with st.expander("🔮 Predict"):
         utils.st_line()
-        disabled = False if build_train_bool else True
+        disabled = False if build_and_train_bool else True
         predict_bool = st.checkbox("Predict", disabled=disabled)
         if predict_bool:
             utils.st_line()
