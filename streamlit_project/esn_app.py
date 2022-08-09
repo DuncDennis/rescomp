@@ -5,13 +5,14 @@ import streamlit_project.app_fragments.measures as measures
 import streamlit_project.app_fragments.utils as utils
 import streamlit_project.app_fragments.plotting as plot
 import streamlit_project.app_fragments.esn as esn
-import streamlit_project.generalized_plotting.plotly_plots as plpl
 
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
 
     with st.sidebar:
         st.header("ESN Viewer")
+        utils.st_reset_all_check_boxes()
+
         simulate_bool, build_bool, train_bool, predict_bool = utils.st_main_checkboxes()
 
         utils.st_line()
@@ -24,7 +25,7 @@ if __name__ == '__main__':
                                                  default_t_train=5000,
                                                  default_t_pred_disc=2500,
                                                  default_t_pred_sync=200,
-                                                 default_t_pred=1000)
+                                                 default_t_pred=3000)
         section_steps = [t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred]
         section_names = ["train disc", "train sync", "train", "pred disc", "pred sync", "pred"]
 
@@ -111,6 +112,7 @@ if __name__ == '__main__':
 
     with train_tab:
         if train_bool:
+            st.info("Plot and Measure some quantities regarding the training.")
             y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
             train_data_dict = {"train true": y_train_true,
                                "train fitted": y_train_fit}
@@ -130,6 +132,7 @@ if __name__ == '__main__':
 
     with predict_tab:
         if predict_bool:
+            st.info("Plot and Measure some quantities regarding the prediction.")
             y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
             pred_data_dict = {"true": y_pred_true,
                               "pred": y_pred}
@@ -147,11 +150,15 @@ if __name__ == '__main__':
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with tab5:
-        st.write("TBD")
+        if predict_bool:
+            st.info("Other Visualizations: TBD")
+        else:
+            st.info('Activate [🔮 Predict] checkbox to see something.')
 
-    st.markdown('###')
-    utils.st_line()
-    st.subheader("Checkbox values: ")
-    true_checkboxes = {key: val for key, val in st.session_state.items() if
-                       type(val) == bool and val is True}
-    true_checkboxes
+
+    # st.markdown('###')
+    # utils.st_line()
+    # st.subheader("Checkbox values: ")
+    # true_checkboxes = {key: val for key, val in st.session_state.items() if
+    #                    type(val) == bool and val is True}
+    # true_checkboxes

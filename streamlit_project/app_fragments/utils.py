@@ -177,5 +177,16 @@ def st_get_session_state(prefix: str, name: str) -> Any:
         return None
 
 
+def st_reset_all_check_boxes(key: str | None = None) -> None:
+    if st.button("Untick all", key=f"{key}__st_reset_all_check_boxes"):
+        true_checkboxes = {key: val for key, val in st.session_state.items() if
+                           type(val) == bool and val is True}
+        for k in true_checkboxes.keys():
+            if k == f"{key}__st_reset_all_check_boxes":
+                continue
+            else:
+                st.session_state[k] = False
+
+
 if __name__ == '__main__':
     pass

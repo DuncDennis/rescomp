@@ -123,9 +123,9 @@ def st_network_build_args(key: str | None = None) -> dict[str, object]:
         A dictionary containing the network build args.
     """
     network_build_args = {}
-    network_build_args["n_rad"] = st.number_input('n_rad', value=0.4, step=0.1, format="%f",
+    network_build_args["n_rad"] = st.number_input('n_rad', value=0.1, step=0.1, format="%f",
                                                   key=f"{key}__st_network_build_args__nrad")
-    network_build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=3.0, step=0.1,
+    network_build_args["n_avg_deg"] = st.number_input('n_avg_deg', value=5.0, step=0.1,
                                                       key=f"{key}__st_network_build_args__ndeg")
     network_build_args["n_type_opt"] = st.selectbox('n_type_opt', NETWORK_TYPES,
                                                     key=f"{key}__st_network_build_args__nopt")
