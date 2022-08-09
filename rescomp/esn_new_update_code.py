@@ -229,6 +229,8 @@ class _ResCompCore(utilities._ESNLogging):
     def get_y_train(self):
         return self._saved_y_train
 
+    def get_w_out(self):
+        return self._w_out
 
 class _add_basic_defaults():
     """
