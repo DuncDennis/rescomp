@@ -9,6 +9,58 @@ import scipy.spatial
 from scipy import signal
 
 
+def error_over_time(y_pred: np.ndarray, y_true: np.ndarray, normalization: str | None = None
+                    ) -> np.ndarray:
+    """Calculate the error over time between y_pred and y_true.
+
+    Args:
+        y_pred: The predicted time series with error.
+        y_true: The true, baseline time series.
+        normalization: The normalization of the time series. If None no normalization is used.
+                        If string it can be "mean" or "root_of_avg_of_spacedist_squared".
+
+    Returns:
+        The error array of shape (time_steps, )
+    """
+    error_no_norm = np.linalg.norm(y_pred - y_true)
+
+    if normalization is None:
+        error = error_no_norm
+
+    else:
+        if normalization == "mean":
+            norm = np.mean(y_true)
+        elif normalization == "root_of_avg_of_spacedist_squared":
+            norm = np.sqrt(np.mean(np.linalg.norm(y_true, axis=1) ** 2))
+        else:
+            raise ValueError(f"Normalization {normalization} not accounted for.")
+        error = error_no_norm / norm
+    return error
+
+
+def valid_time_index(error_series: np.ndarray, error_threshold: float) -> int:
+    """Return the valid time index for a given error_series and error_threshold.
+
+    If the whole error_series is smaller than the threshold, the last index is returned.
+
+    Args:
+        error_series: Array of shape (time_steps, ) representing the error between true and predict.
+        error_threshold: The threshold were the error is too big.
+
+    Returns:
+        Return the index of the error_series where time error > error_threshold for the first
+        time.
+    """
+
+    if error_threshold < 0:
+        raise ValueError("error_threshhold must be equal or greater than 0.")
+    bool_array = error_series > error_threshold
+    if np.all(bool_array is False):
+        return bool_array.size - 1
+    else:
+        return int(np.argmax(bool_array))
+
+
 def power_spectrum_componentwise(data: np.ndarray, period: bool = False, dt: float = 1.0
                                  ) -> tuple[np.ndarray, np.ndarray]:
     """Calculates the fourier power spectrum of the n-dimensional time_series.

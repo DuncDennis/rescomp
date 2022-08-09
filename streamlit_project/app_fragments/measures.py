@@ -35,7 +35,7 @@ def get_histograms(time_series_dict: dict[str, np.ndarray], dim_selection: list[
     for i_dim in dim_selection:
         for key, val in time_series_dict.items():
             hist, binedges = np.histogram(val[:, i_dim], bins=bins, density=True)
-            binmiddle = np.array([(binedges[i] + binedges[i+1])/2 for i in range(bins)])
+            binmiddle = np.array([(binedges[i] + binedges[i + 1]) / 2 for i in range(bins)])
             nr_entries = hist.size
             data_dict["bins"] += binmiddle.tolist()
             data_dict["histogram"] += hist.tolist()
@@ -90,7 +90,8 @@ def get_extrema_maps(time_series_dict: dict[str, np.ndarray], dim_selection: lis
     """
     sub_dicts = []
     for i_dim in dim_selection:
-        sub_dicts.append({key: meas.extrema_map(val, mode=mode, i_dim=i_dim) for key, val in time_series_dict.items()})
+        sub_dicts.append({key: meas.extrema_map(val, mode=mode, i_dim=i_dim) for key, val in
+                          time_series_dict.items()})
     return sub_dicts
 
 
@@ -424,20 +425,69 @@ def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key:
 
     """
 
-    if st.checkbox("Consecutive extrema", key=f"{key}__st_all_data_measures"):
+    if st.checkbox("Consecutive extrema", key=f"{key}__st_all_data_measures__ce"):
         st_extrema_map(data_dict, key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Statistical measures", key=f"{key}__st_all_data_measures"):
+    if st.checkbox("Statistical measures", key=f"{key}__st_all_data_measures__sm"):
         st_statistical_measures(data_dict, key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Histogram", key=f"{key}__st_all_data_measures"):
+    if st.checkbox("Histogram", key=f"{key}__st_all_data_measures__hist"):
         st_histograms(data_dict, key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Power spectrum", key=f"{key}__st_all_data_measures"):
+    if st.checkbox("Power spectrum", key=f"{key}__st_all_data_measures__ps"):
         st_power_spectrum(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures"):
+    if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures__ledata"):
         st_largest_lyapunov_from_data(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
+
+
+@st.experimental_memo
+def get_error(y_pred_traj: np.ndarray,
+              y_true_traj: np.ndarray, ) -> np.ndarray:
+    """Get the error between y_pred_traj and y_true_traj.
+    TODO: Not good that only one normalization is hardcoded.
+    Args:
+        y_pred_traj: The predicted time series with error.
+        y_true_traj: The true, baseline time series.
+
+    Returns:
+        The error over time of shape (time_steps, ).
+    """
+    error_series = meas.error_over_time(y_pred_traj, y_true_traj,
+                                        normalization="root_of_avg_of_spacedist_squared")
+    return error_series
+
+
+@st.experimental_memo
+def get_valid_time_index(error_series: np.ndarray, error_threshold: float) -> int:
+    """Get the valid time index from an error_series.
+
+    Args:
+        error_series: The error over time of shape (time_steps, ).
+        error_threshold: The error threshold.
+
+    Returns:
+        The valid time index as an integer.
+    """
+    return meas.valid_time_index(error_series=error_series, error_threshold=error_threshold)
+
+
+def st_all_difference_measures(y_pred_traj: np.ndarray,
+                               y_true_traj: np.ndarray,
+                               key: str | None = None
+                               ) -> None:
+    if st.checkbox("Trajectory", key=f"{key}__st_all_difference_measures__traj"):
+        difference_dict = {"Difference": y_true_traj - y_pred_traj}
+        figs = plpl.multiple_1d_time_series(difference_dict,
+                                            subplot_dimensions_bool=False,
+                                            y_label="true - fit")
+        plpl.multiple_figs(figs)
+
+    if st.checkbox("Error", key=f"{key}__st_all_difference_measures__error"):
+        pass
+
+    if st.checkbox("Valid time", key=f"{key}__st_all_difference_measures__vt"):
+        pass
 
 
 if __name__ == "__main__":
