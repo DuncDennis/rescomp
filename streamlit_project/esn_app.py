@@ -8,17 +8,11 @@ import streamlit_project.app_fragments.esn as esn
 
 
 if __name__ == '__main__':
-    st.set_page_config("Basic ESN Viewer", page_icon="🥦")
-
-    # st.header("Basic ESN Viewer")
+    st.set_page_config("Basic ESN Viewer", page_icon="⚡")
 
     with st.sidebar:
-
-        simulate_data_bool = st.checkbox("🌀Simulate data")
-        disabled = False if simulate_data_bool else True
-        build_and_train_bool = st.checkbox("🛠️ Build and train", disabled=disabled)
-        disabled = False if build_and_train_bool else True
-        predict_bool = st.checkbox("🔮 Predict", disabled=disabled)
+        st.header("ESN Viewer")
+        simulate_bool, build_bool, train_bool, predict_bool = utils.st_main_checkboxes()
 
         utils.st_line()
         st.header("System: ")
@@ -43,7 +37,7 @@ if __name__ == '__main__':
 
         scale, shift, noise_scale = syssim.st_preprocess_simulation()
 
-        if simulate_data_bool:
+        if simulate_bool:
             time_series = syssim.simulate_trajectory(system_name, system_parameters, time_steps)
             time_series = syssim.preprocess_simulation(time_series,
                                                        scale=scale,
@@ -85,25 +79,26 @@ if __name__ == '__main__':
             plot.st_one_dim_time_series_with_sections(time_series,
                                                       section_steps=section_steps,
                                                       section_names=section_names)
-    with st.expander("🛠️ Build and train"):
+    with st.expander("🛠️ Build"):
         utils.st_line()
-        if build_and_train_bool:
+        if build_bool:
             utils.st_line()
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
             # st.write(esn_obj._w_out)
+
             y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
             # st.write(esn_obj._w_out)
+    with st.expander("🦾 Train"):
+        if st.checkbox("Show training"):
+            train_data = {"train true": y_train_true,
+                          "train fitted": y_train_fit}
+            # train_data_diff = {"Difference": y_train_true - y_train_fit}
 
-            if st.checkbox("Show training"):
-                train_data = {"train true": y_train_true,
-                              "train fitted": y_train_fit}
-                # train_data_diff = {"Difference": y_train_true - y_train_fit}
-
-                plot.st_plot_dim_selection(train_data, key="train")
+            plot.st_plot_dim_selection(train_data, key="train")
 
     with st.expander("🔮 Predict"):
         utils.st_line()
-        disabled = False if build_and_train_bool else True
+        disabled = False if train_bool else True
         predict_bool = st.checkbox("Predict", disabled=disabled)
         if predict_bool:
             utils.st_line()
@@ -115,4 +110,3 @@ if __name__ == '__main__':
                 # train_data_diff = {"Difference": y_pred_true - y_pred}
 
                 plot.st_plot_dim_selection(pred_data, key="pred")
-
