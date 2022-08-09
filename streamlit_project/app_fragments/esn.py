@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import streamlit as st
 
@@ -10,6 +12,7 @@ import rescomp.esn_new_update_code as esn
 
 ESN_DICT = {"ESN_normal": esn.ESN_normal,
             }
+
 ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
 
 W_IN_TYPES = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
@@ -22,9 +25,11 @@ R_TO_R_GEN_TYPES = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_
                     "linear_and_square_r_alt",
                     "exponential_r", "bias_and_exponential_r"]
 
+ESN_TYPING = Any
+
 
 @st.cache(hash_funcs=ESN_HASH_FUNCS)
-def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> object:
+def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     """Build the esn class.
 
     Args:
@@ -114,3 +119,45 @@ def st_network_build_args(key: str | None = None) -> dict[str, object]:
     network_build_args["n_type_opt"] = st.selectbox('n_type_opt', NETWORK_TYPES,
                                                     key=f"{key}__st_network_build_args__nopt")
     return network_build_args
+
+
+@st.cache(hash_funcs=ESN_HASH_FUNCS)
+def train(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
+          ) -> tuple[np.ndarray, np.ndarray]:
+    """Train the esn_obj with a given x_train and t_train-sync.
+
+    Args:
+        esn_obj: The esn_obj, that has a train method.
+        x_train: The np.ndarray of shape (t_train_sync_steps + t_train_steps, sys_dim)
+        t_train_sync: The number of time steps used for syncing the esn before training.
+
+    Returns:
+        Tuple with the fitted output and the real output.
+    """
+
+    esn_obj.train(x_train, sync_steps=t_train_sync,
+                  save_y_train=True, save_out=True)
+
+    y_train_true = esn_obj.get_y_train()
+    y_train_fit = esn_obj.get_out()
+
+    return y_train_fit, y_train_true
+
+
+@st.cache(hash_funcs=ESN_HASH_FUNCS)
+def predict(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
+            ) -> tuple[np.ndarray, np.ndarray]:
+    """Predict with the esn_obj with a given x_pred and x_pred_sync.
+
+    Args:
+        esn_obj: The esn_obj, that has a predict method.
+        x_pred: The np.ndarray of shape (t_pred_sync_steps + t_pred_steps, sys_dim)
+        t_pred_sync: The number of time steps used for syncing the esn before prediction.
+
+    Returns:
+        Tuple with predicted and true data, each of shape (t_pred_steps, sys_dim)
+    """
+
+    y_pred, y_pred_true = esn_obj.predict(x_pred, sync_steps=t_pred_sync)
+
+    return y_pred, y_pred_true

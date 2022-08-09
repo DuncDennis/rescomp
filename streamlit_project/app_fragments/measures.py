@@ -16,7 +16,7 @@ import rescomp.measures_new as meas
 
 @st.experimental_memo
 def get_histograms(time_series_dict: dict[str, np.ndarray], dim_selection: list[int],
-                   bins: str | int = 50) -> pd.DataFrame:
+                   bins: int = 50) -> pd.DataFrame:
     """Calculate a histogram of a time_series_dict, return a pandas Dataframe.
 
     Args:

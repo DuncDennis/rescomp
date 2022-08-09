@@ -307,6 +307,37 @@ def st_preprocess_simulation(time_series: np.ndarray,
     return mod_time_series
 
 
+def split_time_series_for_train_pred(time_series: np.ndarray,
+                                     t_train_disc: int,
+                                     t_train_sync: int,
+                                     t_train: int,
+                                     t_pred_disc: int,
+                                     t_pred_sync: int,
+                                     t_pred: int) -> tuple[np.ndarray, np.ndarray]:
+    """Split the time_series for training and prediction of an esn.
+
+    Remove t_train_disc from time_series and use t_train_sync and t_train for x_train.
+    Then remove t_pred_disc from the remainder and use the following t_pred_sync and t_pred
+    steps for x_pred.
+
+    Args:
+        time_series: The input timeseries of shape (time_steps, sys_dim).
+        t_train_disc: The time steps to skip before x_train.
+        t_train_sync: The time steps used for synchro before training.
+        t_train: The time steps used for training.
+        t_pred_disc: The time steps to skip before prediction.
+        t_pred_sync: The time steps to use for synchro before training.
+        t_pred: The time steps used for prediction.
+
+    Returns:
+        A tuple containing x_train and x_pred.
+    """
+    x_train = time_series[t_train_disc: t_train_disc + t_train_sync + t_train]
+    start = t_train_disc + t_train_sync + t_train + t_pred_disc
+    x_pred = time_series[start: start + t_pred_sync + t_pred]
+
+    return x_train, x_pred
+
 def main() -> None:
     st.header("System Simulation")
     with st.sidebar:
