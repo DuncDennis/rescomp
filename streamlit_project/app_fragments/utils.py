@@ -1,6 +1,8 @@
 """Utlity streamlit fragments."""
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 import streamlit as st
 
@@ -141,6 +143,38 @@ def st_seed(key: str | None = None) -> int:
 
     seed = st.number_input("Seed", max_value=1000000, key=f"{key}__st_seed__seed")
     return seed
+
+
+def st_add_to_state(prefix: str, name: str, value: Any) -> None:
+    """Add a variable to the session state.
+
+    The name will be saved as f"{prefix}__{name}"
+
+    Args:
+        prefix: The prefix of the session state variable.
+        name: The name of the session state variable.
+        value: The value of the variable.
+
+    """
+    full_name = f"{prefix}__{name}"
+    st.session_state[full_name] = value
+
+
+def st_get_session_state(prefix: str, name: str) -> Any:
+    """Get a variable of session state by defining the prefix and name.
+
+    Args:
+        prefix: The prefix of the session state variable.
+        name: The name of the session state variable.
+
+    Returns:
+        The value of the variable.
+    """
+    full_name = f"{prefix}__{name}"
+    if full_name in st.session_state:
+        return st.session_state[full_name]
+    else:
+        return None
 
 
 if __name__ == '__main__':
