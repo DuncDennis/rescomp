@@ -1276,8 +1276,11 @@ class LinearSystem(SimBaseRungeKutta):
             A: The Matrix describing the linear system: x_t = A*x
             dt: Size of time steps.
         """
+        if A is None:
+            self.A = np.array(self.default_parameters["A"])
+        else:
+            self.A = A
 
-        self.A = A or np.array(self.default_parameters["A"])
         self.dt = dt or float(self.default_parameters["dt"])
 
         self.sys_dim = self.A.shape[0]
