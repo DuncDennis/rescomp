@@ -273,20 +273,21 @@ def get_noisy_data(time_series: np.ndarray,
     return datapre.add_noise(time_series, noise_scale=noise_scale, seed=seed)
 
 
-def st_preprocess_simulation(time_series: np.ndarray,
-                             key: str | None = None) -> np.ndarray:
-    """Streamlit elements to preprocess the data.
+def st_preprocess_simulation(key: str | None = None
+                             ) -> tuple[float | None, float | None, float | None]:
+    """Streamlit elements to get parameters for preprocessing the data.
+
+    To be used together with preprocess_simulation.
 
     One can add scale and center the data and add white noise.
     Args:
-        time_series: The input timeseries.
         key: Provide a unique key if this streamlit element is used multiple times.
 
     Returns:
-        The modified timeseries.
+        The scale, shift and noise_scale to be input into preprocess_simulation.
     """
-    with st.expander("Preprocessing: "):
-        if st.checkbox("Normalize and Center"):
+    with st.expander("Preprocess:"):
+        if st.checkbox("Normalize and center"):
             left, right = st.columns(2)
             with left:
                 scale = st.number_input("scale", value=1.0, min_value=0.0, step=0.1, format="%f",
@@ -294,15 +295,42 @@ def st_preprocess_simulation(time_series: np.ndarray,
             with right:
                 shift = st.number_input("shift", value=0.0, step=0.1, format="%f",
                                         key=f"{key}__st_preprocess_simulation__shift")
-            mod_time_series = get_scaled_and_shifted_data(time_series, shift=shift, scale=scale)
         else:
-            mod_time_series = time_series
+            scale, shift = None, None
 
         if st.checkbox("Add white noise"):
             noise_scale = st.number_input("noise scale", value=0.1, min_value=0.0, step=0.01,
                                           format="%f",
                                           key=f"{key}__st_preprocess_simulation__noise")
-            mod_time_series = get_noisy_data(mod_time_series, noise_scale=noise_scale)
+        else:
+            noise_scale = None
+    return scale, shift, noise_scale
+
+
+@st.experimental_memo
+def preprocess_simulation(time_series: np.ndarray, shift: float | None = None,
+                          scale: float | None = None,
+                          noise_scale: float | None = None) -> np.ndarray:
+    """Function to preprocess the data: scale shift and add noise.
+
+    Args:
+        time_series: The input timeseries.
+        shift: The mean in every direction of the modified time series.
+               If None don't scale and shift.
+        scale: The std in every direction of the modified time series.
+               If None don't scale and shift.
+        noise_scale: The scale of the added white noise.
+
+    Returns:
+        The modified timeseries.
+    """
+
+    mod_time_series = time_series
+    if shift is not None and scale is not None:
+        mod_time_series = get_scaled_and_shifted_data(time_series, shift=shift, scale=scale)
+
+    if noise_scale is not None:
+        mod_time_series = get_noisy_data(mod_time_series, noise_scale=noise_scale)
 
     return mod_time_series
 
