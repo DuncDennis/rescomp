@@ -63,7 +63,7 @@ def st_histograms(time_series_dict: dict[str, np.ndarray],
     with left:
         dim_selection = utils.st_dimension_selection_multiple(sys_dim, key=f"{key}__st_histogram")
     with right:
-        bins = int(st.number_input("Bins", min_value=2, value=50))
+        bins = int(st.number_input("Bins", min_value=2, value=50, key=f"{key}__st_histogram__bins"))
     data_df = get_histograms(time_series_dict, dim_selection, bins=bins)
     for i_dim in dim_selection:
         sub_df = data_df[data_df["dimension"] == i_dim]
