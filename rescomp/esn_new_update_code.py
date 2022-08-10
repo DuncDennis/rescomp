@@ -232,6 +232,15 @@ class _ResCompCore(utilities._ESNLogging):
     def get_w_out(self):
         return self._w_out
 
+    def get_dimensions(self) -> tuple[int, int, int, int]:
+        """Return the dimensions of input, reservoir, gen. reservoir and output.
+
+        Returns:
+            Tuple of the four dimensions: input x, reservoir r, gen reservoir r_gen and output y.
+        """
+        return self._x_dim, self._r_dim, self._r_gen_dim, self._y_dim
+
+
 class _add_basic_defaults():
     """
     add activation function options, node bias options, leak factor, default_res_state,
