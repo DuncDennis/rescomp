@@ -6,7 +6,6 @@ import streamlit_project.app_fragments.utils as utils
 import streamlit_project.app_fragments.plotting as plot
 import streamlit_project.app_fragments.esn as esn
 import streamlit_project.app_fragments.esn_plotting as esnplot
-import streamlit_project.latex_formulas.systems as latexsys
 
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
@@ -181,7 +180,7 @@ if __name__ == '__main__':
             res_states_tab, w_out_r_gen_tab = st.tabs(["Reservoir states", "W_out and R_gen"])
 
             with res_states_tab:
-                if st.checkbox("Node value histogram"):
+                if st.checkbox("Node value histograms"):
                     act_fct = esn_obj.get_act_fct()
                     esnplot.st_reservoir_states_histogram(res_train_dict, res_pred_dict, act_fct)
 

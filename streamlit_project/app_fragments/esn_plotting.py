@@ -12,10 +12,13 @@ import plotly.graph_objects as go
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import utils
 from streamlit_project.app_fragments import measures as meas_app
+import streamlit_project.latex_formulas.esn_formulas as esn_latex
 
 
 def st_plot_w_out_as_barchart(w_out: np.ndarray, key: str | None = None) -> None:
     """Streamlit element to plot w_out as a barchart.
+
+    TODO: add bargap as a option in matrix_as_barchart?
 
     Args:
         w_out: The w_out matrix of shape (output dimension, r_gen dimension).
@@ -73,6 +76,9 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
                                   key: str | None = None) -> None:
     """Streamlit element to show histograms of reservoir state quantities.
 
+    TODO: Bad practice that res_train_dict has one item more than actually needed?
+    TODO: Also include bias and r_to_r_gen?
+
     Show value histograms of:
     - Res. input: W_in * INPUT
     - Res. internal update: Network * PREVIOUS_RES_STATE
@@ -90,6 +96,11 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
         key: Provide a unique key if this streamlit element is used multiple times.
 
     """
+
+    utils.st_line()
+    st.latex(esn_latex.w_in_and_network_update_equation_with_explanation)
+    utils.st_line()
+
     cols = st.columns(3)
     with cols[0]:
         train_or_predict = st.selectbox("Train or predict", ["train", "predict"],
@@ -120,7 +131,9 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
                         subplot_titles=["Res. input", "Res. internal update", "Act. fct. argument",
                                         "Res. states"],
                         specs=[[{}, {}],
-                               [{"secondary_y": True}, {}]])
+                               [{"secondary_y": True}, {}]],
+                        horizontal_spacing=0.1,
+                        vertical_spacing=0.2)
 
     df_sub = df[df["label"] == "r_input"]
     fig.add_trace(
@@ -157,8 +170,9 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
     fig.update_layout(legend=dict(
         orientation="h",
         yanchor="bottom",
-        y=-0.2,
+        y=-0.15,
         xanchor="left")
         )
+    fig.update_layout(width=750, height=500)
 
     st.plotly_chart(fig)
