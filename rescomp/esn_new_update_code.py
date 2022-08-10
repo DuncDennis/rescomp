@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 """ Implements the Echo State Network (ESN) used in Reservoir Computing """
+from __future__ import annotations
+
+from typing import Callable
 
 import numpy as np
 import scipy.sparse
@@ -239,6 +242,9 @@ class _ResCompCore(utilities._ESNLogging):
             Tuple of the four dimensions: input x, reservoir r, gen reservoir r_gen and output y.
         """
         return self._x_dim, self._r_dim, self._r_gen_dim, self._y_dim
+
+    def get_act_fct(self) -> None | Callable[[np.ndarray], np.ndarray]:
+        return self._act_fct
 
 
 class _add_basic_defaults():
