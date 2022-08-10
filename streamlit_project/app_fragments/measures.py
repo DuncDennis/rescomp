@@ -513,7 +513,7 @@ def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
 
     """
     error_series = get_error(y_pred_traj, y_true_traj)
-    error_thresh_list = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    error_thresh_list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     thresh_steps = len(error_thresh_list)
     valid_times = np.zeros(thresh_steps)
     for i, thresh in enumerate(error_thresh_list):
@@ -552,7 +552,7 @@ def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
 
     data_dict = {"Valid time vs. thresh": valid_times}
     figs = plpl.multiple_1d_time_series(data_dict, y_label=f"Valid times in {y_label_add}",
-                                        x_label="error threshold")
+                                        x_label="error threshold", x_scale=1/10)
     plpl.multiple_figs(figs)
 
 
