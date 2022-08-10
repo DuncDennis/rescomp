@@ -112,11 +112,16 @@ if __name__ == '__main__':
             st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
 
-            with st.expander("Show architecture: "):
-                archit_container = st.container()
-
-            if st.checkbox("W_in matrix"):
-                st.write(esn_obj._w_in)
+            tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
+            with tabs[0]:
+                # with st.expander("Show architecture: "):
+                architecture_container = st.container()
+            with tabs[1]:
+                if st.checkbox("W_in matrix"):
+                    st.write(esn_obj._w_in)
+            with tabs[2]:
+                if st.checkbox("Network matrix"):
+                    st.write(esn_obj.return_network())
         else:
             st.info('Activate [🛠️ Build] checkbox to see something.')
 
@@ -174,10 +179,10 @@ if __name__ == '__main__':
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with todo_tab:
-        st.markdown("- Plot latex formulas.")
+        # st.markdown("- Plot latex formulas.")
         st.markdown("- Surrogate as preprocessing.")
         st.markdown("- 1D time-series embedding as preprocessing.")
-        st.markdown("- Main architecture with dimensions. ")
+        # st.markdown("- Main architecture with dimensions. ")
         st.markdown("- Network properties and plots. ")
         st.markdown("- Train and Predict: Reservoir value histograms.")
         st.markdown("- Autocorrelation between reservoir nodes and input.")
@@ -185,7 +190,7 @@ if __name__ == '__main__':
     #  Container code at the end:
     if build_bool:
         x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()
-        with archit_container:
+        with architecture_container:
             esnplot.st_plot_architecture(x_dim=x_dim, r_dim=r_dim, r_gen_dim=r_gen_dim,
                                          y_dim=y_dim)
 
