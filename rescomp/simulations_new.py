@@ -207,7 +207,7 @@ class Roessler(SimBaseRungeKutta):
         return np.array([-x[1] - x[2], x[0] + self.a * x[1], self.b + x[2] * (x[0] - self.c)])
 
 
-class ComplexButterly(SimBaseRungeKutta):
+class ComplexButterfly(SimBaseRungeKutta):
     """Simulate the 3-dimensional autonomous flow: Complex butterfly.
 
     Literature values (Sprott, Julien Clinton, and Julien C. Sprott. Chaos and time-series
