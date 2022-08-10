@@ -111,6 +111,10 @@ if __name__ == '__main__':
         if build_bool:
             st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
+
+            with st.expander("Show architecture: "):
+                archit_container = st.container()
+
             if st.checkbox("W_in matrix"):
                 st.write(esn_obj._w_in)
         else:
@@ -177,6 +181,13 @@ if __name__ == '__main__':
         st.markdown("- Network properties and plots. ")
         st.markdown("- Train and Predict: Reservoir value histograms.")
         st.markdown("- Autocorrelation between reservoir nodes and input.")
+
+    #  Container code at the end:
+    if build_bool:
+        x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()
+        with archit_container:
+            esnplot.st_plot_architecture(x_dim=x_dim, r_dim=r_dim, r_gen_dim=r_gen_dim,
+                                         y_dim=y_dim)
 
     # st.markdown('###')
     # utils.st_line()
