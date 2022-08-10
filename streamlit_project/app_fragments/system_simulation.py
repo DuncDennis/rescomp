@@ -7,7 +7,8 @@ from typing import Any, Callable
 import streamlit as st
 import numpy as np
 
-from streamlit_project.generalized_plotting import plotly_plots as plpl
+# from streamlit_project.generalized_plotting import plotly_plots as plpl
+from streamlit_project.latex_formulas import systems as latexsys
 import rescomp.simulations_new as sims
 import rescomp.data_preprocessing as datapre
 
@@ -15,7 +16,7 @@ import rescomp.data_preprocessing as datapre
 SYSTEM_DICT = {
     "Lorenz63": sims.Lorenz63,
     "Roessler": sims.Roessler,
-    "ComplexButterly": sims.ComplexButterly,
+    "ComplexButterfly": sims.ComplexButterfly,
     "Chen": sims.Chen,
     "ChuaCircuit": sims.ChuaCircuit,
     "Thomas": sims.Thomas,
@@ -368,6 +369,21 @@ def split_time_series_for_train_pred(time_series: np.ndarray,
     x_pred = time_series[start: start + t_pred_sync + t_pred]
 
     return x_train, x_pred
+
+
+def st_show_latex_formula(system_name: str) -> None:
+    """Streamlit element to show the latex formula of the system.
+
+    Args:
+        system_name: The system name. Must be part of latexsys.LATEX_DICT.
+
+    """
+    if system_name in latexsys.LATEX_DICT:
+        latex_str = latexsys.LATEX_DICT[system_name]
+        st.latex(latex_str)
+    else:
+        st.warning("No latex formula for this system implemented.")
+
 
 def main() -> None:
     st.header("System Simulation")

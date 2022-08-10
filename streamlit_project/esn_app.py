@@ -6,6 +6,7 @@ import streamlit_project.app_fragments.utils as utils
 import streamlit_project.app_fragments.plotting as plot
 import streamlit_project.app_fragments.esn as esn
 import streamlit_project.app_fragments.esn_plotting as esnplot
+import streamlit_project.latex_formulas.systems as latexsys
 
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
@@ -72,14 +73,18 @@ if __name__ == '__main__':
         seed = utils.st_seed()
         utils.st_line()
 
-    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab = st.tabs(
+    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, todo_tab = st.tabs(
         ["🌀 Simulated data", "🛠️ Architecture", "🦾 Training",
-         "🔮 Prediction", "🔬 Other visualizations"])
+         "🔮 Prediction", "🔬 Other visualizations", "✅ TODO"])
 
     with sim_data_tab:
         if simulate_bool:
             # TODO: add it all to a streamlit element function?
             st.info("Plot the simulated data and measure some quantites.")
+
+            with st.expander("Show equation: "):
+                syssim.st_show_latex_formula(system_name)
+
             plot_tab, measure_tab, train_pred_tab, lyapunov_tab = st.tabs(["Plot", "Measures",
                                                                            "Train-predict-split",
                                                                            "Lyapunov Exponent"])
@@ -164,6 +169,14 @@ if __name__ == '__main__':
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
+    with todo_tab:
+        st.markdown("- Plot latex formulas.")
+        st.markdown("- Surrogate as preprocessing.")
+        st.markdown("- 1D time-series embedding as preprocessing.")
+        st.markdown("- Main architecture with dimensions. ")
+        st.markdown("- Network properties and plots. ")
+        st.markdown("- Train and Predict: Reservoir value histograms.")
+        st.markdown("- Autocorrelation between reservoir nodes and input.")
 
     # st.markdown('###')
     # utils.st_line()
