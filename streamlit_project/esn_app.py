@@ -128,9 +128,15 @@ if __name__ == '__main__':
     with train_tab:
         if train_bool:
             st.info("Plot and Measure some quantities regarding the training.")
-            y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
+            # y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
+
+            y_train_fit, y_train_true, res_train_dict = esn.train_return_res(esn_obj,
+                                                                             x_train,
+                                                                             t_train_sync)
+
             train_data_dict = {"train true": y_train_true,
                                "train fitted": y_train_fit}
+
             plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
 
             with plot_tab:
@@ -148,7 +154,12 @@ if __name__ == '__main__':
     with predict_tab:
         if predict_bool:
             st.info("Plot and Measure some quantities regarding the prediction.")
-            y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
+            # y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
+
+            y_pred, y_pred_true, res_pred_dict = esn.train_return_res(esn_obj,
+                                                                      x_pred,
+                                                                      t_pred_sync)
+
             pred_data_dict = {"true": y_pred_true,
                               "pred": y_pred}
             plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
@@ -167,7 +178,13 @@ if __name__ == '__main__':
     with other_vis_tab:
         if predict_bool:
             st.info("More esn visualizations.")
-            w_out_r_gen_tab, tbd = st.tabs(["W_out and R_gen", "TBD"])
+            res_states_tab, w_out_r_gen_tab = st.tabs(["Reservoir states", "W_out and R_gen"])
+
+            with res_states_tab:
+                if st.checkbox("Node value histogram"):
+                    act_fct = esn_obj.get_act_fct()
+                    esnplot.st_reservoir_states_histogram(res_train_dict, res_pred_dict, act_fct)
+
             with w_out_r_gen_tab:
                 if st.checkbox("W_out"):
                     w_out = esn_obj.get_w_out()
@@ -175,6 +192,7 @@ if __name__ == '__main__':
                 utils.st_line()
                 if st.checkbox("R_gen std"):
                     pass
+
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
