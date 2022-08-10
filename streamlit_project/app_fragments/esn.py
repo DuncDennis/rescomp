@@ -11,6 +11,7 @@ import rescomp
 import rescomp.esn_new_update_code as esn
 
 ESN_DICT = {"ESN_normal": esn.ESN_normal,
+            "ESN_pca": esn.ESN_pca
             }
 
 ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
@@ -88,7 +89,7 @@ def st_basic_esn_build(key: str | None = None) -> dict[str, object]:
 
     basic_build_args = {}
     basic_build_args["r_dim"] = int(st.number_input('Reservoir Dim', value=500, step=1,
-                                                key=f"{key}__st_basic_esn_build__rd"))
+                                                    key=f"{key}__st_basic_esn_build__rd"))
     basic_build_args["r_to_r_gen_opt"] = st.selectbox('r_to_r_gen_opt', R_TO_R_GEN_TYPES,
                                                       key=f"{key}__st_basic_esn_build__rrgen")
     basic_build_args["act_fct_opt"] = st.selectbox('act_fct_opt', ACTIVATION_FUNCTIONS,
@@ -133,7 +134,7 @@ def st_network_build_args(key: str | None = None) -> dict[str, object]:
 
 
 @st.cache(hash_funcs=ESN_HASH_FUNCS)
-def train(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
+def train(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int,
           ) -> tuple[np.ndarray, np.ndarray]:
     """Train the esn_obj with a given x_train and t_train-sync.
 
@@ -156,6 +157,46 @@ def train(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
 
 
 @st.cache(hash_funcs=ESN_HASH_FUNCS)
+def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int,
+                     ) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    """Train the esn_obj with a given x_train and t_train-sync and return internal reservoir states.
+
+    TODO: check when to use this func and when to use train.
+
+    Args:
+        esn_obj: The esn_obj, that has a train method.
+        x_train: The np.ndarray of shape (t_train_sync_steps + t_train_steps, sys_dim)
+        t_train_sync: The number of time steps used for syncing the esn before training.
+
+    Returns:
+        Tuple with the fitted output, the real output and reservoir dictionary containing states
+        for r_act_fct_inp, r_internal, r_input, r, r_gen.
+    """
+
+    esn_obj.train(x_train,
+                  sync_steps=t_train_sync,
+                  save_y_train=True,
+                  save_out=True,
+                  save_res_inp=True,
+                  save_r_internal=True,
+                  save_r=True,
+                  save_r_gen=True
+                  )
+
+    y_train_true = esn_obj.get_y_train()
+    y_train_fit = esn_obj.get_out()
+
+    res_state_dict = {}
+    res_state_dict["r_act_fct_inp"] = esn_obj.get_act_fct_inp()
+    res_state_dict["r_internal"] = esn_obj.get_r_internal()
+    res_state_dict["r_input"] = esn_obj.get_res_inp()
+    res_state_dict["r"] = esn_obj.get_r()
+    res_state_dict["r_gen"] = esn_obj.get_r_gen()
+
+    return y_train_fit, y_train_true, res_state_dict
+
+
+@st.cache(hash_funcs=ESN_HASH_FUNCS)
 def predict(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
             ) -> tuple[np.ndarray, np.ndarray]:
     """Predict with the esn_obj with a given x_pred and x_pred_sync.
@@ -172,3 +213,37 @@ def predict(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
     y_pred, y_pred_true = esn_obj.predict(x_pred, sync_steps=t_pred_sync)
 
     return y_pred, y_pred_true
+
+
+@st.cache(hash_funcs=ESN_HASH_FUNCS)
+def predict_return_res(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
+                       ) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
+    """Predict with the esn_obj with a given x_pred and x_pred_sync and return internal reservoir states.
+
+    TODO: check when to use this func and when to use predict.
+
+    Args:
+        esn_obj: The esn_obj, that has a predict method.
+        x_pred: The np.ndarray of shape (t_pred_sync_steps + t_pred_steps, sys_dim)
+        t_pred_sync: The number of time steps used for syncing the esn before prediction.
+
+    Returns:
+        Tuple with the fitted output, the real output and reservoir dictionary containing states
+        for r_act_fct_inp, r_internal, r_input, r, r_gen.
+    """
+
+    y_pred, y_pred_true = esn_obj.predict(x_pred,
+                                          sync_steps=t_pred_sync,
+                                          save_res_inp=True,
+                                          save_r_internal=True,
+                                          save_r=True,
+                                          save_r_gen=True
+                                          )
+    res_state_dict = {}
+    res_state_dict["r_act_fct_inp"] = esn_obj.get_act_fct_inp()
+    res_state_dict["r_internal"] = esn_obj.get_r_internal()
+    res_state_dict["r_input"] = esn_obj.get_res_inp()
+    res_state_dict["r"] = esn_obj.get_r()
+    res_state_dict["r_gen"] = esn_obj.get_r_gen()
+
+    return y_pred, y_pred_true, res_state_dict
