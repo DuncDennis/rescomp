@@ -8,6 +8,7 @@ import numpy as np
 import streamlit as st
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
+import plotly.express as px
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import utils
@@ -16,7 +17,7 @@ import streamlit_project.latex_formulas.esn_formulas as esn_latex
 
 
 def st_plot_w_out_as_barchart(w_out: np.ndarray, key: str | None = None) -> None:
-    """Streamlit element to plot w_out as a barchart.
+    """Streamlit element to plot w_out as a barchart with r_gen_dim as x_axis.
 
     TODO: add bargap as a option in matrix_as_barchart?
 
@@ -29,6 +30,34 @@ def st_plot_w_out_as_barchart(w_out: np.ndarray, key: str | None = None) -> None
     fig = plpl.matrix_as_barchart(w_out.T, x_axis="r_gen index", y_axis="out dim",
                                   value_name="w_out", log_y=log_y)
     fig.update_layout(bargap=0.0)
+    st.plotly_chart(fig)
+
+
+def st_plot_output_w_out_strength(w_out: np.ndarray, key: str | None = None) -> None:
+    """Streamlit element to plot the strength of w_out for each output component.
+
+    Args:
+        w_out: The w_out matrix of shape (output dimension, r_gen dimension).
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+    utils.st_line()
+    cols = st.columns(2)
+    with cols[0]:
+        st.latex(esn_latex.w_out_sum_over_r_gen_left)
+    with cols[1]:
+        st.latex(esn_latex.w_out_sum_over_r_gen_right)
+    utils.st_line()
+
+    out_dim = w_out.shape[0]
+
+    w_out_summed = np.sum(np.abs(w_out), axis=1)
+    x = np.arange(out_dim)
+    fig = px.bar(x=x, y=w_out_summed)
+    fig.update_xaxes(title="Output dimension i", tickvals=x)
+    fig.update_yaxes(title="a_i")
+    fig.update_layout(title="Summed abs. w_out entries vs. output dimension")
+
     st.plotly_chart(fig)
 
 
@@ -98,9 +127,11 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
     """
 
     utils.st_line()
+    st.markdown("**Reservoir update equation:**")
     st.latex(esn_latex.w_in_and_network_update_equation_with_explanation)
     utils.st_line()
 
+    st.markdown("**Histograms of terms in update equation:**")
     cols = st.columns(3)
     with cols[0]:
         train_or_predict = st.selectbox("Train or predict", ["train", "predict"],
