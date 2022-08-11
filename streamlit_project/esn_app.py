@@ -71,6 +71,9 @@ if __name__ == '__main__':
         st.header("Seed: ")
         seed = utils.st_seed()
         utils.st_line()
+        st.header("Clear cash: ")
+        utils.st_clear_all_cashes()
+        utils.st_line()
 
     sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, todo_tab = st.tabs(
         ["🌀 Simulated data", "🛠️ Architecture", "🦾 Training",
@@ -79,7 +82,7 @@ if __name__ == '__main__':
     with sim_data_tab:
         if simulate_bool:
             # TODO: add it all to a streamlit element function?
-            st.info("Plot the simulated data and measure some quantites.")
+            # st.info("Plot the simulated data and measure some quantites.")
 
             with st.expander("Show equation: "):
                 syssim.st_show_latex_formula(system_name)
@@ -108,7 +111,7 @@ if __name__ == '__main__':
 
     with build_tab:
         if build_bool:
-            st.info("Diagrams and plots to visualize the esn architecture.")
+            # st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
 
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
@@ -126,7 +129,7 @@ if __name__ == '__main__':
 
     with train_tab:
         if train_bool:
-            st.info("Plot and Measure some quantities regarding the training.")
+            # st.info("Plot and Measure some quantities regarding the training.")
             # y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
 
             y_train_fit, y_train_true, res_train_dict = esn.train_return_res(esn_obj,
@@ -152,12 +155,12 @@ if __name__ == '__main__':
 
     with predict_tab:
         if predict_bool:
-            st.info("Plot and Measure some quantities regarding the prediction.")
+            # st.info("Plot and Measure some quantities regarding the prediction.")
             # y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
 
-            y_pred, y_pred_true, res_pred_dict = esn.train_return_res(esn_obj,
-                                                                      x_pred,
-                                                                      t_pred_sync)
+            y_pred, y_pred_true, res_pred_dict = esn.predict_return_res(esn_obj,
+                                                                        x_pred,
+                                                                        t_pred_sync)
 
             pred_data_dict = {"true": y_pred_true,
                               "pred": y_pred}
@@ -176,7 +179,7 @@ if __name__ == '__main__':
 
     with other_vis_tab:
         if predict_bool:
-            st.info("More esn visualizations.")
+            # st.info("More esn visualizations.")
             res_states_tab, w_out_r_gen_tab = st.tabs(["Reservoir states", "W_out and R_gen"])
 
             with res_states_tab:
@@ -202,7 +205,14 @@ if __name__ == '__main__':
         # st.markdown("- Main architecture with dimensions. ")
         st.markdown("- Network properties and plots. ")
         st.markdown("- Train and Predict: Reservoir value histograms.")
+        st.markdown(
+            "- Measure for w_out distribution: how is w_out spread over the output dimensions. ")
+        st.markdown("- Weird Input systems.")
+        st.markdown("- Custom Input.")
+        st.markdown("- More helping text.")
+        st.markdown("- More helping text.")
         st.markdown("- Autocorrelation between reservoir nodes and input.")
+        st.markdown("- Doc string and typehinting for all used code and new repo!")
 
     #  Container code at the end:
     if build_bool:

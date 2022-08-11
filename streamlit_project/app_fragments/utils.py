@@ -178,7 +178,16 @@ def st_get_session_state(prefix: str, name: str) -> Any:
 
 
 def st_reset_all_check_boxes(key: str | None = None) -> None:
-    if st.button("Untick all", key=f"{key}__st_reset_all_check_boxes"):
+    """Streamlit button to reset all session state variables that are boolean to false.
+
+    This is used to set all checkboxes back to False.
+
+    Args:
+        key: A optional key if it's used multiple times.
+
+    """
+    help = "Sets all checkboxes in the app back to false. "
+    if st.button("Untick all", help=help, key=f"{key}__st_reset_all_check_boxes"):
         true_checkboxes = {key: val for key, val in st.session_state.items() if
                            type(val) == bool and val is True}
         for k in true_checkboxes.keys():
@@ -186,6 +195,19 @@ def st_reset_all_check_boxes(key: str | None = None) -> None:
                 continue
             else:
                 st.session_state[k] = False
+
+
+def st_clear_all_cashes(key: str | None = None) -> None:
+    """Streamlit button to clear all cashed values.
+
+    Args:
+        key: A optional key if it's used multiple times.
+
+    """
+    help = "Clears all cashed values. Use if app gets too slow because of memory issues."
+    if st.button("Clear cash", help=help, key=f"{key}__st_clear_all_cashes"):
+        st.experimental_memo.clear()
+        st.experimental_singleton.clear()
 
 
 if __name__ == '__main__':
