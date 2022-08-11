@@ -116,6 +116,7 @@ def st_one_dim_time_series_with_sections(time_series: np.ndarray,
         key: Provide a unique key if this streamlit element is used multiple times.
 
     """
+    st.markdown("**See which parts of the time series are used for training and prediction:**")
     sys_dim = time_series.shape[1]
     dim = utils.st_dimension_selection(dimension=sys_dim,
                                        key=f"{key}__st_one_dim_time_series_with_sections")
@@ -165,7 +166,8 @@ def st_default_simulation_plot_dict(time_series_dict: dict[str, np.ndarray]) -> 
         raise ValueError("x_dim < 1 not supported.")
 
 
-def st_all_plots(time_series_dict: dict[str, np.ndarray], key: str | None = None
+def st_all_plots(time_series_dict: dict[str, np.ndarray],
+                 key: str | None = None
                  ) -> None:
     """Streamlit element to do all plots of a time_series_dict.
 

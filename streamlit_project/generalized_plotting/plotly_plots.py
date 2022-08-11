@@ -416,6 +416,8 @@ def barplot(to_plot_df: pd.DataFrame, x: str, y: str, color: str,
             ) -> go.Figure:
     """A wrapper for the plotly express barplot function.
 
+    # TODO: maybe not really needed as an extra function?
+
     Args:
         to_plot_df: The dataframe including a column for x, y and color axis.
         x: The column name of the x-axis.

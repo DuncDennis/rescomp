@@ -277,6 +277,7 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
         system_parameters: The system parameters. Not every kwarg has to be specified.
         key: Provide a unique key if this streamlit element is used multiple times.
     """
+    st.markdown("**Calculate the largest Lyapunov exponent using the system equations:**")
     left, right = st.columns(2)
     with left:
         steps = int(st.number_input("steps", value=int(1e3),
