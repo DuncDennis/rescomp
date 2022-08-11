@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import itertools
 from typing import Any
 
 import pandas as pd
 import streamlit as st
 import numpy as np
+import plotly.graph_objects as go
+import plotly.express as px
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import utils
@@ -361,7 +364,7 @@ def get_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
     Returns:
         A pandas DataFrame with the columns: "log_div/dt", "label" and "steps".
     """
-    out_dict = {"label": [], "log_div/dt": [], "steps": []}
+    out_dict = {"label": [], "log_div/dt": [], "steps": [], "linear fit": [], "lle": []}
     for label, time_series in time_series_dict.items():
         log_dist, _ = meas.largest_lyapunov_from_data(time_series,
                                                       time_steps=time_steps,
@@ -371,10 +374,16 @@ def get_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
                                                       distance_upper_bound=distance_upper_bound)
         nr_steps = log_dist.size
         steps = np.arange(nr_steps)
-        lyap = np.polyfit(steps, log_dist, 1)[0]
 
+        coefficients = np.polyfit(steps, log_dist, 1)
+        poly1d_fn = np.poly1d(coefficients)
+        out_dict["linear fit"] += poly1d_fn(steps).tolist()
+
+        lyap = np.polyfit(steps, log_dist, 1)[0]
+        out_dict["lle"] += [np.round(lyap, 4), ] * nr_steps
         out_dict["log_div/dt"] += log_dist.tolist()
-        new_label = f"{label}: {np.round(lyap, 4)}"
+        # new_label = f"{label}: {np.round(lyap, 4)}"
+        new_label = f"{label}"
         out_dict["label"] += [new_label, ] * nr_steps
         out_dict["steps"] += steps.tolist()
 
@@ -407,13 +416,42 @@ def st_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
                                                 min_index_difference=min_index_difference,
                                                 dt=dt)
 
-    fig = plpl.plot_2d_line_or_scatter(df_to_plot,
-                                       x_label="steps",
-                                       y_label="log_div/dt",
-                                       mode="line",
-                                       color="label",
-                                       title_i="Logar. trajectory divergence / dt",
-                                       )
+    col_pal = px.colors.qualitative.Plotly
+    col_pal_iterator = itertools.cycle(col_pal)
+    fig = go.Figure()
+    for label in df_to_plot["label"].unique():
+        df_sub = df_to_plot[df_to_plot["label"] == label]
+        color = next(col_pal_iterator)
+        lle = df_sub["lle"].unique()[0]
+
+        fig.add_trace(
+            go.Scatter(x=df_sub["steps"], y=df_sub["log_div/dt"], name=label, showlegend=True,
+                       legendgroup=label,
+                       line=dict(color=color)
+                       )
+        )
+
+        fig.add_trace(
+            go.Scatter(x=df_sub["steps"], y=df_sub["linear fit"],
+                       name=f"linear fit: sloap/lyapunov: {lle}",
+                       legendgroup=label,
+                       showlegend=True,
+                       line=dict(color=color, dash='dash', width=1),
+                       marker=dict()
+                       )
+        )
+
+    fig.update_xaxes(title="time steps")
+    fig.update_yaxes(title="log_div/dt")
+    fig.update_layout(margin=dict(t=50))
+
+    fig.update_layout(bargap=0.0)
+    fig.update_layout(legend=dict(
+        yanchor="top",
+        y=0.99,
+        xanchor="left",
+        x=0.01)
+        )
 
     st.plotly_chart(fig)
 
@@ -430,18 +468,27 @@ def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key:
     """
 
     if st.checkbox("Consecutive extrema", key=f"{key}__st_all_data_measures__ce"):
+        st.markdown("**Plot consecutive minima or maxima for individual dimensions:**")
         st_extrema_map(data_dict, key=f"{key}__st_all_data_measures")
     utils.st_line()
     if st.checkbox("Statistical measures", key=f"{key}__st_all_data_measures__sm"):
+        st.markdown("**Plot the standard deviation, variance, mean or median of the time series:**")
         st_statistical_measures(data_dict, key=f"{key}__st_all_data_measures")
     utils.st_line()
     if st.checkbox("Histogram", key=f"{key}__st_all_data_measures__hist"):
+        st.markdown("**Plot the value histogram for individual dimensions:**")
         st_histograms(data_dict, key=f"{key}__st_all_data_measures")
     utils.st_line()
     if st.checkbox("Power spectrum", key=f"{key}__st_all_data_measures__ps"):
+        st.markdown("**Plot the mean or dimension resolved power spectrum:**")
         st_power_spectrum(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
     utils.st_line()
     if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures__ledata"):
+
+        st.markdown("**Plot the logarithmic trajectory divergence from data.**")
+        with st.expander("More info ..."):
+            st.write("The algorithm is based on the Rosenstein algorithm. Original Paper: Rosenstein et. al. (1992).")
+            st.write("The sloap of the linear fit represents the largest Lyapunov exponent.")
         st_largest_lyapunov_from_data(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
 
 
