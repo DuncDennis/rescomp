@@ -17,3 +17,14 @@ f(
 \text{bias} 
 }_\text{Act. fct. argument}
 )"""
+
+w_out_sum_over_r_gen_left = r"""
+a_i = \sum_{j=0} |W_\text{out}(i, j)|
+"""
+
+w_out_sum_over_r_gen_right = r"""
+\begin{aligned}
+& i: \text{Output index} \\
+& j: \text{R generalized index}\\
+\end{aligned}
+"""
