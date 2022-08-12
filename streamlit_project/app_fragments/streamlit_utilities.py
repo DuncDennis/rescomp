@@ -67,57 +67,10 @@ def st_dimension_selection_multiple(dimension: int, key: str | None = None) -> l
     return dim_selection
 
 
-def st_main_checkboxes(key: str | None = None) -> tuple[bool, bool, bool, bool]:
-    """Streamlit element to create 4 esn checkboxes: Simulate data, Build, Train and Predict.
-
-    Args:
-        key: A optional key if it's used multiple times.
-
-    Returns:
-        The states of the four checkboxes: simulate_bool, build_bool, train_bool, predict_bool.
-    """
-
-    basic_key = f"{key}__st_main_checkboxes"
-
-    def on_change_sim():
-        if not st.session_state[f"{basic_key}__sim"]:
-            other_keys = [f"{basic_key}__{x}" for x in ("build", "train", "pred")]
-            for k in other_keys:
-                st.session_state[k] = False
-
-    def on_change_build():
-        if not st.session_state[f"{basic_key}__build"]:
-            other_keys = [f"{basic_key}__{x}" for x in ("train", "pred")]
-            for k in other_keys:
-                st.session_state[k] = False
-
-    def on_change_train():
-        if not st.session_state[f"{basic_key}__train"]:
-            other_keys = [f"{basic_key}__{x}" for x in ("pred", )]
-            for k in other_keys:
-                st.session_state[k] = False
-
-    simulate_bool = st.checkbox("🌀Simulate data", key=f"{basic_key}__sim",
-                                on_change=on_change_sim)
-
-    disabled = False if simulate_bool else True
-    build_bool = st.checkbox("🛠️ Build", disabled=disabled, key=f"{basic_key}__build",
-                             on_change=on_change_build)
-
-    disabled = False if build_bool else True
-    train_bool = st.checkbox("🦾 Train", disabled=disabled, key=f"{basic_key}__train",
-                             on_change=on_change_train)
-
-    disabled = False if train_bool else True
-    predict_bool = st.checkbox("🔮 Predict", disabled=disabled, key=f"{basic_key}__pred")
-
-    return simulate_bool, build_bool, train_bool, predict_bool
-
-
 @st.experimental_memo
 def get_random_int() -> int:
     """Get a random integer between 1 and 1000000.
-    TODO: maybe handle with generators in future.
+    TODO: maybe handle with generators in the future.
     Is used to get a new seed.
 
     Returns:
@@ -145,34 +98,30 @@ def st_seed(key: str | None = None) -> int:
     return seed
 
 
-def st_add_to_state(prefix: str, name: str, value: Any) -> None:
+def st_add_to_state(name: str, value: Any) -> None:
     """Add a variable to the session state.
 
-    The name will be saved as f"{prefix}__{name}"
+    The name will be saved as f"{name}".
 
     Args:
-        prefix: The prefix of the session state variable.
         name: The name of the session state variable.
         value: The value of the variable.
 
     """
-    full_name = f"{prefix}__{name}"
-    st.session_state[full_name] = value
+    st.session_state[name] = value
 
 
-def st_get_session_state(prefix: str, name: str) -> Any:
+def st_get_session_state(name: str) -> Any:
     """Get a variable of session state by defining the prefix and name.
 
     Args:
-        prefix: The prefix of the session state variable.
         name: The name of the session state variable.
 
     Returns:
         The value of the variable.
     """
-    full_name = f"{prefix}__{name}"
-    if full_name in st.session_state:
-        return st.session_state[full_name]
+    if name in st.session_state:
+        return st.session_state[name]
     else:
         return None
 

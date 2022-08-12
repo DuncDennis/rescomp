@@ -1,4 +1,4 @@
-"""Python file that includes Streamlit elements used for plotting esn quantites."""
+"""Python file that includes Streamlit elements used for plotting esn quantities."""
 
 from __future__ import annotations
 
@@ -11,8 +11,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
-from streamlit_project.app_fragments import utils
-from streamlit_project.app_fragments import measures as meas_app
+from streamlit_project.app_fragments import streamlit_utilities as utils
+from streamlit_project.app_fragments import timeseries_measures as meas_app
 import streamlit_project.latex_formulas.esn_formulas as esn_latex
 
 
@@ -155,7 +155,7 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
         raise ValueError("This train or predict option is not accounted for.")
 
     res_state_dict_flattened = {key: val.flatten()[:, np.newaxis] for key, val in
-                                res_state_dict.items() if key != "r_gen"}
+                                res_state_dict.items()}  # if key != "r_gen"
     df = meas_app.get_histograms(res_state_dict_flattened, dim_selection=[0], bins=bins)
 
     fig = make_subplots(rows=2, cols=2, shared_xaxes=share_x, shared_yaxes=share_y,

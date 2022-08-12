@@ -6,7 +6,7 @@ import numpy as np
 import streamlit as st
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
-from streamlit_project.app_fragments import utils
+from streamlit_project.app_fragments import streamlit_utilities as utils
 
 
 def st_plot_dim_selection(time_series_dict: dict[str, np.ndarray],
@@ -166,9 +166,9 @@ def st_default_simulation_plot_dict(time_series_dict: dict[str, np.ndarray]) -> 
         raise ValueError("x_dim < 1 not supported.")
 
 
-def st_all_plots(time_series_dict: dict[str, np.ndarray],
-                 key: str | None = None
-                 ) -> None:
+def st_all_timeseries_plots(time_series_dict: dict[str, np.ndarray],
+                            key: str | None = None
+                            ) -> None:
     """Streamlit element to do all plots of a time_series_dict.
 
     Args:

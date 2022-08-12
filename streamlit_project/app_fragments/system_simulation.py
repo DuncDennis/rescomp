@@ -1,4 +1,4 @@
-"""Python file that includes streamlit elements that are used to specify/select and plot a System."""
+"""Python file that includes streamlit elements that are used to specify/select."""
 
 from __future__ import annotations
 
@@ -7,7 +7,6 @@ from typing import Any, Callable
 import streamlit as st
 import numpy as np
 
-# from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.latex_formulas import systems as latexsys
 import rescomp.simulations_new as sims
 import rescomp.data_preprocessing as datapre

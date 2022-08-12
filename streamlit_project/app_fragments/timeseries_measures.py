@@ -1,9 +1,8 @@
-"""Streamlit elements to measure a time-series / a system. """
+"""Streamlit elements to measure a single time-series / a system. """
 
 from __future__ import annotations
 
 import itertools
-from typing import Any
 
 import pandas as pd
 import streamlit as st
@@ -12,11 +11,8 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
-from streamlit_project.app_fragments import utils
-from streamlit_project.app_fragments import system_simulation
+from streamlit_project.app_fragments import streamlit_utilities as utils
 import rescomp.measures_new as meas
-
-STATE_PREFIX = "measures"  # The prefix for the session state variables.
 
 
 @st.experimental_memo
@@ -114,7 +110,7 @@ def st_extrema_map(time_series_dict: dict[str, np.ndarray], key: str | None = No
         dim_selection = utils.st_dimension_selection_multiple(sys_dim,
                                                               key=f"{key}__st_extrema_map")
     with right:
-        mode = st.selectbox("Min or max", ["minima", "maxima"])
+        mode = st.selectbox("Min or max", ["minima", "maxima"], key=f"{key}__st_extrema_map__mode")
     sub_dicts = get_extrema_maps(time_series_dict, dim_selection=dim_selection, mode=mode)
     for dim, sub_dict in zip(dim_selection, sub_dicts):
         fig = plpl.multiple_2d_time_series(sub_dict, mode="scatter", title=f"Dim = {dim}",
@@ -263,85 +259,6 @@ def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
         st.plotly_chart(fig)
 
 
-def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
-                                 key: str | None = None) -> None:
-    """Streamlit element to calculate the largest lyapunov exponent.
-
-    Set up the number inputs for steps, part_time_steps, steps_skip and deviation scale.
-    Plot the convergence.
-
-    # TODO maybe move to another python file like "system_measures"? Or just to measures?
-
-    Args:
-        system_name: The system name. Has to be in SYSTEM_DICT.
-        system_parameters: The system parameters. Not every kwarg has to be specified.
-        key: Provide a unique key if this streamlit element is used multiple times.
-    """
-    st.markdown("**Calculate the largest Lyapunov exponent using the system equations:**")
-    left, right = st.columns(2)
-    with left:
-        steps = int(st.number_input("steps", value=int(1e3),
-                                    key=f"{key}__st_largest_lyapunov_exponent__steps"))
-    with right:
-        part_time_steps = int(st.number_input("time steps of each part", value=15,
-                                              key=f"{key}__st_largest_lyapunov_exponent__part"))
-    left, right = st.columns(2)
-    with left:
-        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0,
-                                         key=f"{key}__st_largest_lyapunov_exponent__skip"))
-    with right:
-        deviation_scale = 10 ** (float(st.number_input("log (deviation_scale)", value=-10.0,
-                                                       key=f"{key}__st_largest_lyapunov_exponent__eps")))
-
-    lle_conv = get_largest_lyapunov_exponent(system_name, system_parameters, steps=steps,
-                                             part_time_steps=part_time_steps,
-                                             deviation_scale=deviation_scale,
-                                             steps_skip=steps_skip)
-    largest_lle = np.round(lle_conv[-1], 5)
-
-    utils.st_add_to_state(prefix=STATE_PREFIX, name="LLE", value=largest_lle)
-
-    figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
-                                        y_label="running avg of LLE", title=f"Largest Lyapunov "
-                                                                            f"Exponent: "
-                                                                            f"{largest_lle}")
-    plpl.multiple_figs(figs)
-
-
-@st.experimental_memo
-def get_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
-                                  steps: int = int(1e3), deviation_scale: float = 1e-10,
-                                  part_time_steps: int = 15, steps_skip: int = 50) -> np.ndarray:
-    """Measure the largest lyapunov exponent of a given system with specified parameters.
-
-    Args:
-        system_name: The system name. Has to be in SYSTEM_DICT.
-        system_parameters: The system parameters. Not every kwarg has to be specified.
-        steps: The number of renormalization steps.
-        deviation_scale: The initial deviation scale for nearby trajectories.
-        part_time_steps: The nr of time steps between renormalizations.
-        steps_skip: The nr of steps to skip before tracking the divergence.
-
-    Returns:
-        The convergence of the largest lyapunov with shape: (steps, ).
-    """
-    sim_instance = system_simulation.SYSTEM_DICT[system_name](**system_parameters)
-    starting_point = sim_instance.default_starting_point
-
-    if hasattr(sim_instance, "dt"):
-        dt = sim_instance.dt
-    else:
-        dt = 1.0
-
-    iterator_func = sim_instance.iterate
-    lle_conv = meas.largest_lyapunov_exponent(iterator_func, starting_point=starting_point, dt=dt,
-                                              steps=steps, part_time_steps=part_time_steps,
-                                              deviation_scale=deviation_scale,
-                                              steps_skip=steps_skip,
-                                              return_convergence=True)
-    return lle_conv
-
-
 @st.experimental_memo
 def get_largest_lyapunov_from_data(time_series_dict: dict[str, np.ndarray],
                                    time_steps: int = 100,
@@ -487,153 +404,10 @@ def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key:
     if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures__ledata"):
 
         st.markdown("**Plot the logarithmic trajectory divergence from data.**")
-        with st.expander("More info ..."):
+        with st.expander("More info ...", key=f"{key}__st_all_data_measures__moreinfo"):
             st.write("The algorithm is based on the Rosenstein algorithm. Original Paper: Rosenstein et. al. (1992).")
             st.write("The sloap of the linear fit represents the largest Lyapunov exponent.")
         st_largest_lyapunov_from_data(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
-
-
-@st.experimental_memo
-def get_error(y_pred_traj: np.ndarray,
-              y_true_traj: np.ndarray, ) -> np.ndarray:
-    """Get the error between y_pred_traj and y_true_traj.
-    TODO: Not good that only one normalization is hardcoded.
-    Args:
-        y_pred_traj: The predicted time series with error.
-        y_true_traj: The true, baseline time series.
-
-    Returns:
-        The error over time of shape (time_steps, ).
-    """
-    error_series = meas.error_over_time(y_pred_traj, y_true_traj,
-                                        normalization="root_of_avg_of_spacedist_squared")
-    return error_series
-
-
-@st.experimental_memo
-def get_valid_time_index(error_series: np.ndarray, error_threshold: float, ) -> int:
-    """Get the valid time index from an error_series.
-
-    Args:
-        error_series: The error over time of shape (time_steps, ).
-        error_threshold: The error threshold.
-
-    Returns:
-        The valid time index as an integer.
-    """
-    return meas.valid_time_index(error_series=error_series, error_threshold=error_threshold)
-
-
-def st_show_error(y_pred_traj: np.ndarray,
-                  y_true_traj: np.ndarray) -> None:
-    """Streamlit element to show the error between a prediction and a true time series.
-
-    TODO: root_of_avg_of_spacedist_squared is the only normalization available at the moment .
-
-    Args:
-        y_pred_traj: The predicted time series with error.
-        y_true_traj: The true, baseline time series.
-
-    """
-    error = get_error(y_pred_traj, y_true_traj)
-    data_dict = {"Error": error}
-    figs = plpl.multiple_1d_time_series(data_dict, y_label="Error")
-    plpl.multiple_figs(figs)
-
-
-def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
-                                           y_true_traj: np.ndarray,
-                                           dt: float,
-                                           key: str | None = None) -> None:
-    """Streamlit element to show a valid times vs error threshold plot.
-
-    # TODO: Decide whether the session state stuff is too complicated.
-    # TODO: Add valid time for 0.4 to streamlit session state.
-
-    There is an option to load the last measured value of st_largest_lyapunov_exponent with
-    streamlit session state variables.
-
-    Args:
-        y_pred_traj: The predicted time series with error.
-        y_true_traj: The true, baseline time series.
-        dt: The time step.
-        key: Provide a unique key if this streamlit element is used multiple times.
-
-    """
-    error_series = get_error(y_pred_traj, y_true_traj)
-    error_thresh_list = [0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
-    thresh_steps = len(error_thresh_list)
-    valid_times = np.zeros(thresh_steps)
-    for i, thresh in enumerate(error_thresh_list):
-        valid_time = get_valid_time_index(error_series, error_threshold=thresh)
-        valid_times[i] = valid_time
-
-    time_axis = st.selectbox("Time axis", ["steps", "real time", "lyapunov times"],
-                             key=f"{key}__st_show_valid_times_vs_error_threshold__ta")
-
-    if time_axis == "steps":
-        y_label_add = "steps"
-    elif time_axis == "real time":
-        y_label_add = "real time"
-        valid_times *= dt
-    elif time_axis == "lyapunov times":
-
-        latest_measured_lle = utils.st_get_session_state(prefix=STATE_PREFIX, name="LLE")
-        if latest_measured_lle is None:
-            disabled = True
-        else:
-            disabled = False
-        if st.button("Get latest measured LLE", disabled=disabled):
-            default_lle = latest_measured_lle
-        else:
-            default_lle = 0.5
-
-        lle = st.number_input(f"Largest Lyapunov exponent", value=default_lle,
-                              min_value=0.001,
-                              format="%f",
-                              key=f"{key}__st_show_valid_times_vs_error_threshold__lle")
-
-        y_label_add = "lyapunov time"
-        valid_times *= dt * lle
-    else:
-        raise ValueError(f"This time_axis option {time_axis} is not accounted for.")
-
-    data_dict = {"Valid time vs. thresh": valid_times}
-    figs = plpl.multiple_1d_time_series(data_dict, y_label=f"Valid times in {y_label_add}",
-                                        x_label="error threshold", x_scale=1/10)
-    plpl.multiple_figs(figs)
-
-
-def st_all_difference_measures(y_pred_traj: np.ndarray,
-                               y_true_traj: np.ndarray,
-                               dt: float,
-                               key: str | None = None
-                               ) -> None:
-    """Streamlit element for all difference based measures.
-
-    - Plots the difference y_true - y_pred.
-    - Plots the error(y_true, y_pred).
-    - Plots the valid time vs. error threshold.
-
-    Args:
-        y_pred_traj: The predicted time series with error.
-        y_true_traj: The true, baseline time series.
-        dt: The time step.
-        key: Provide a unique key if this streamlit element is used multiple times.
-
-    """
-    if st.checkbox("Trajectory", key=f"{key}__st_all_difference_measures__traj"):
-        difference_dict = {"Difference": y_true_traj - y_pred_traj}
-        figs = plpl.multiple_1d_time_series(difference_dict,
-                                            subplot_dimensions_bool=False,
-                                            y_label="true - fit")
-        plpl.multiple_figs(figs)
-    utils.st_line()
-    if st.checkbox("Error", key=f"{key}__st_all_difference_measures__error"):
-        st_show_error(y_pred_traj, y_true_traj)
-    utils.st_line()
-    if st.checkbox("Valid time", key=f"{key}__st_all_difference_measures__vt"):
-        st_show_valid_times_vs_error_threshold(y_pred_traj, y_true_traj, dt=dt)
 
 
 if __name__ == "__main__":

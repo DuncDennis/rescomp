@@ -1,10 +1,16 @@
+"""Streamlit app to predict a timeseries with an Echo State Network.
+Author: Dennis Duncan [DuncDennis@gmail.com]"""
+
 import streamlit as st
 
+import streamlit_project.app_fragments.esn_app_utilities as esnutils
 import streamlit_project.app_fragments.system_simulation as syssim
-import streamlit_project.app_fragments.measures as measures
-import streamlit_project.app_fragments.utils as utils
-import streamlit_project.app_fragments.plotting as plot
-import streamlit_project.app_fragments.esn as esn
+import streamlit_project.app_fragments.timeseries_measures as measures
+import streamlit_project.app_fragments.pred_vs_true_plotting as pred_vs_true
+import streamlit_project.app_fragments.system_measures as sysmeas
+import streamlit_project.app_fragments.streamlit_utilities as utils
+import streamlit_project.app_fragments.timeseries_plotting as plot
+import streamlit_project.app_fragments.esn_build_train_predict as esn
 import streamlit_project.app_fragments.esn_plotting as esnplot
 
 if __name__ == '__main__':
@@ -14,7 +20,7 @@ if __name__ == '__main__':
         st.header("ESN Viewer")
         utils.st_reset_all_check_boxes()
 
-        simulate_bool, build_bool, train_bool, predict_bool = utils.st_main_checkboxes()
+        simulate_bool, build_bool, train_bool, predict_bool = esnutils.st_main_checkboxes()
 
         utils.st_line()
         st.header("System: ")
@@ -76,22 +82,30 @@ if __name__ == '__main__':
         utils.st_line()
 
     sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, todo_tab = st.tabs(
-        ["🌀 Simulated data", "🛠️ Architecture", "🦾 Training",
-         "🔮 Prediction", "🔬 Other visualizations", "✅ TODO"])
+        ["🌀 Simulated data",
+         "🛠️ Architecture",
+         "🦾 Training",
+         "🔮 Prediction",
+         "🔬 Look-under-hood",
+         "✅ TODO"])  # "🔬 Other visualizations"
 
     with sim_data_tab:
         if simulate_bool:
             # TODO: add it all to a streamlit element function?
             # st.info("Plot the simulated data and measure some quantites.")
-
-            with st.expander("Show equation: "):
+            st.markdown(
+                "Plot and measure the **simulated data**, see which intervals are used for "
+                "**training and prediction** and determine the **Lyapunov exponent** of the "
+                "system. ")
+            with st.expander("Show system equation: "):
+                st.markdown(f"**{system_name}**")
                 syssim.st_show_latex_formula(system_name)
 
             plot_tab, measure_tab, train_pred_tab, lyapunov_tab = st.tabs(["Plot", "Measures",
                                                                            "Train-predict-split",
                                                                            "Lyapunov Exponent"])
             with plot_tab:
-                plot.st_all_plots(time_series_dict, key="simulation")
+                plot.st_all_timeseries_plots(time_series_dict, key="simulation")
 
             with measure_tab:
                 measures.st_all_data_measures(time_series_dict, dt=dt, key="simulation")
@@ -104,7 +118,7 @@ if __name__ == '__main__':
 
             with lyapunov_tab:
                 if st.checkbox("Calculate Lyapunov exponent of system"):
-                    measures.st_largest_lyapunov_exponent(system_name, system_parameters)
+                    sysmeas.st_largest_lyapunov_exponent(system_name, system_parameters)
 
         else:
             st.info('Activate [🌀 Simulate data] checkbox to see something.')
@@ -113,11 +127,12 @@ if __name__ == '__main__':
         if build_bool:
             # st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
-
+            st.markdown("Explore the Echo State Network architecture.")
+            st.markdown("TODO: Show the bias, plot the network (maybe even some quantites), ")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
             with tabs[0]:
-                # with st.expander("Show architecture: "):
-                architecture_container = st.container()
+                with st.expander("Show architecture: "):
+                    architecture_container = st.container()
             with tabs[1]:
                 if st.checkbox("W_in matrix"):
                     st.write(esn_obj._w_in)
@@ -138,25 +153,30 @@ if __name__ == '__main__':
 
             train_data_dict = {"train true": y_train_true,
                                "train fitted": y_train_fit}
+            st.markdown(
+                "Compare the **training data** with the **fitted data** produced during training.")
+
+            with st.expander("More info ..."):
+                st.write(
+                    "During training, the true training data and the fitted data should be very "
+                    "similar. Otherwise the Echo State Network prediction is very likely to fail.")
 
             plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
 
             with plot_tab:
-                plot.st_all_plots(train_data_dict, key="train")
+                plot.st_all_timeseries_plots(train_data_dict, key="train")
             with measure_tab:
                 measures.st_all_data_measures(train_data_dict, dt=dt, key="train")
             with difference_tab:
-                measures.st_all_difference_measures(y_pred_traj=y_train_fit,
-                                                    y_true_traj=y_train_true,
-                                                    dt=dt,
-                                                    key="train")
+                pred_vs_true.st_all_difference_measures(y_pred_traj=y_train_fit,
+                                                        y_true_traj=y_train_true,
+                                                        dt=dt,
+                                                        key="train")
         else:
             st.info('Activate [🦾 Train] checkbox to see something.')
 
     with predict_tab:
         if predict_bool:
-            # st.info("Plot and Measure some quantities regarding the prediction.")
-            # y_pred, y_pred_true = esn.predict(esn_obj, x_pred, t_pred_sync)
 
             y_pred, y_pred_true, res_pred_dict = esn.predict_return_res(esn_obj,
                                                                         x_pred,
@@ -164,33 +184,55 @@ if __name__ == '__main__':
 
             pred_data_dict = {"true": y_pred_true,
                               "pred": y_pred}
+            st.markdown("Compare the Echo State Network **prediction** with the **true data**.")
             plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
             with plot_tab:
-                plot.st_all_plots(pred_data_dict, key="predict")
+                plot.st_all_timeseries_plots(pred_data_dict, key="predict")
             with measure_tab:
                 measures.st_all_data_measures(pred_data_dict, dt=dt, key="predict")
             with difference_tab:
-                measures.st_all_difference_measures(y_pred_traj=y_pred,
-                                                    y_true_traj=y_pred_true,
-                                                    dt=dt,
-                                                    key="predict")
+                pred_vs_true.st_all_difference_measures(y_pred_traj=y_pred,
+                                                        y_true_traj=y_pred_true,
+                                                        dt=dt,
+                                                        key="predict")
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with other_vis_tab:
         if predict_bool:
             # st.info("More esn visualizations.")
+            st.markdown("Explore the ESN architecture and look under the hood. ")
+            st.markdown("TODO: structure: reservoir state: show hist, show image, plot individual dimensions")
+            st.markdown("TODO: structure: w_out. Show how much everything is connected to what. ")
+            st.markdown("TODO: structure: Compare internal reservoir states for training and prediction (e.g. std(r_gen)")
+            st.markdown("TODO: calculate the lyapunov exponent for the reservoir update function???.")
+            st.markdown("TODO: Show correlations between input/output/reservoir states.")
+            st.markdown("TODO: Add free looping of reservoir states and see where the output goes to.")
+            st.markdown("TODO: Untick all does not work for every checkbox only for the ones with a key.")
+
             res_states_tab, w_out_r_gen_tab = st.tabs(["Reservoir states", "W_out and R_gen"])
+
+            res_train_dict_no_rgen = {k: v for k, v in res_train_dict.items() if k != "r_gen"}
+            res_pred_dict_no_rgen = {k: v for k, v in res_pred_dict.items() if k != "r_gen"}
 
             with res_states_tab:
                 if st.checkbox("Node value histograms"):
                     act_fct = esn_obj.get_act_fct()
-                    esnplot.st_reservoir_states_histogram(res_train_dict, res_pred_dict, act_fct)
+                    esnplot.st_reservoir_states_histogram(res_train_dict_no_rgen,
+                                                          res_pred_dict_no_rgen,
+                                                          act_fct)
+                # TODO: make nicer:
+                utils.st_line()
+                if st.checkbox("Trajectory", key=f"r_gen_train_dict"):
+                    st.markdown("**Plot individual dimensions:**")
+                    plot.st_plot_dim_selection(res_train_dict_no_rgen, key=f"res_train_key")
+                    plot.st_plot_dim_selection(res_pred_dict_no_rgen, key=f"res_pred_key")
 
             with w_out_r_gen_tab:
                 if st.checkbox("W_out"):
                     w_out = esn_obj.get_w_out()
                     esnplot.st_plot_w_out_as_barchart(w_out)
+                    esnplot.st_plot_output_w_out_strength(w_out)
                 utils.st_line()
                 if st.checkbox("R_gen std"):
                     pass
@@ -199,7 +241,6 @@ if __name__ == '__main__':
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with todo_tab:
-        # st.markdown("- Plot latex formulas.")
         st.markdown("- Surrogate as preprocessing.")
         st.markdown("- 1D time-series embedding as preprocessing.")
         # st.markdown("- Main architecture with dimensions. ")
@@ -210,9 +251,9 @@ if __name__ == '__main__':
         st.markdown("- Weird Input systems.")
         st.markdown("- Custom Input.")
         st.markdown("- More helping text.")
-        st.markdown("- More helping text.")
         st.markdown("- Autocorrelation between reservoir nodes and input.")
         st.markdown("- Doc string and typehinting for all used code and new repo!")
+        st.markdown("- A tab to explain the basic esn structure and how it works.")
 
     #  Container code at the end:
     if build_bool:
