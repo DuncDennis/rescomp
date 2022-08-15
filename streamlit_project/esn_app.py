@@ -171,6 +171,7 @@ if __name__ == '__main__':
                 pred_vs_true.st_all_difference_measures(y_pred_traj=y_train_fit,
                                                         y_true_traj=y_train_true,
                                                         dt=dt,
+                                                        train_or_pred="train",
                                                         key="train")
         else:
             st.info('Activate [🦾 Train] checkbox to see something.')
@@ -194,6 +195,7 @@ if __name__ == '__main__':
                 pred_vs_true.st_all_difference_measures(y_pred_traj=y_pred,
                                                         y_true_traj=y_pred_true,
                                                         dt=dt,
+                                                        train_or_pred="predict",
                                                         key="predict")
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
@@ -221,17 +223,17 @@ if __name__ == '__main__':
             res_pred_dict_no_rgen = {k: v for k, v in res_pred_dict.items() if k != "r_gen"}
 
             with res_states_tab:
+                esnplot.st_reservoir_state_formula()
+
                 if st.checkbox("Node value histograms"):
                     act_fct = esn_obj.get_act_fct()
                     esnplot.st_reservoir_states_histogram(res_train_dict_no_rgen,
                                                           res_pred_dict_no_rgen,
                                                           act_fct)
-                # TODO: make nicer:
                 utils.st_line()
-                if st.checkbox("Trajectory", key=f"r_gen_train_dict"):
-                    st.markdown("**Plot individual dimensions:**")
-                    plot.st_plot_dim_selection(res_train_dict_no_rgen, key=f"res_train_key")
-                    plot.st_plot_dim_selection(res_pred_dict_no_rgen, key=f"res_pred_key")
+                if st.checkbox("Node value time series", key=f"res_train_dict_no_rgen__checkbox"):
+                    esnplot.st_reservoir_node_value_timeseries(res_train_dict_no_rgen,
+                                                               res_pred_dict_no_rgen, )
 
             with w_out_r_gen_tab:
                 if st.checkbox("W_out"):
@@ -267,9 +269,11 @@ if __name__ == '__main__':
 
             st.markdown("- Somehow split the fit to W_in input and internal input. To see which "
                         "output depends on which reservoir part. ")
-            st.markdown("- Somehow check with rc, which variable depends strongest on which other variables. "
-                        "Like mutual information, but with reservoir computing. ")
-            st.markdown("- Somehow drive the reservoir backwards in time? Train on previous time steps.")
+            st.markdown(
+                "- Somehow check with rc, which variable depends strongest on which other variables. "
+                "Like mutual information, but with reservoir computing. ")
+            st.markdown(
+                "- Somehow drive the reservoir backwards in time? Train on previous time steps.")
 
     #  Container code at the end:
     if build_bool:
@@ -278,6 +282,15 @@ if __name__ == '__main__':
             esnplot.st_plot_architecture(x_dim=x_dim, r_dim=r_dim, r_gen_dim=r_gen_dim,
                                          y_dim=y_dim)
 
+    # import plotly.express as px
+    #
+    # df = px.data.gapminder()
+    # st.dataframe(df)
+    # fig = px.scatter(df, x="gdpPercap", y="lifeExp", animation_frame="year",
+    #                  # animation_group="country",
+    #                  size="pop", color="continent", hover_name="country",
+    #                  log_x=True, size_max=55, range_x=[100, 100000], range_y=[25, 90])
+    # st.plotly_chart(fig)
     # st.markdown('###')
     # utils.st_line()
     # st.subheader("Checkbox values: ")

@@ -28,3 +28,15 @@ w_out_sum_over_r_gen_right = r"""
 & j: \text{R generalized index}\\
 \end{aligned}
 """
+
+y_true_and_fit = r"""
+\mathbf{y}: \text{True time series used for training}, \qquad \tilde{\mathbf{y}}: \text{Fitted time series}
+"""
+
+y_true_and_pred = r"""
+\mathbf{y}: \text{True time series to predict}, \qquad \tilde{\mathbf{y}}: \text{Predicted time series}
+"""
+
+error_1 = r"""
+E(t)=\frac{\|\mathbf{y}(t)-\tilde{\mathbf{y}}(t)\|}{\left\langle\|\mathbf{y}(t)\|^{2}\right\rangle^{1 / 2}}
+"""

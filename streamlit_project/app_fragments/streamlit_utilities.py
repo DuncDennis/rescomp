@@ -94,7 +94,7 @@ def st_seed(key: str | None = None) -> int:
         seed = get_random_int()
         st.session_state[f"{key}__st_seed__seed"] = seed
 
-    seed = st.number_input("Seed", max_value=1000000, key=f"{key}__st_seed__seed")
+    seed = int(st.number_input("Seed", max_value=1000000, key=f"{key}__st_seed__seed"))
     return seed
 
 

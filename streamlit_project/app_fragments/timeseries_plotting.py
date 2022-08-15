@@ -179,6 +179,6 @@ def st_all_timeseries_plots(time_series_dict: dict[str, np.ndarray],
     if st.checkbox("Attractor", key=f"{key}__st_all_plots__attr"):
         st_default_simulation_plot_dict(time_series_dict)
     utils.st_line()
-    if st.checkbox("Trajectory", key=f"{key}__st_all_plots__traj"):
+    if st.checkbox("Time series", key=f"{key}__st_all_plots__ts"):
         st.markdown("**Plot individual dimensions:**")
         st_plot_dim_selection(time_series_dict, key=f"{key}__st_all_plots")

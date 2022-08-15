@@ -13,6 +13,8 @@ import plotly.express as px
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import streamlit_utilities as utils
 from streamlit_project.app_fragments import timeseries_measures as meas_app
+from streamlit_project.app_fragments import esn_app_utilities as esnutils
+from streamlit_project.app_fragments import timeseries_plotting as plot
 import streamlit_project.latex_formulas.esn_formulas as esn_latex
 
 
@@ -99,6 +101,13 @@ def st_plot_architecture(x_dim: int, r_dim: int, r_gen_dim: int, y_dim: int) -> 
     utils.st_line()
 
 
+def st_reservoir_state_formula() -> None:
+    """Streamlit element to plot the reservoir update equation and describe the terms. """
+    st.markdown("**Reservoir update equation:**")
+    st.latex(esn_latex.w_in_and_network_update_equation_with_explanation)
+    utils.st_line()
+
+
 def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
                                   res_pred_dict: dict[str, np.ndarray],
                                   act_fct: Callable[[np.ndarray], np.ndarray] | None,
@@ -126,16 +135,13 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
 
     """
 
-    utils.st_line()
-    st.markdown("**Reservoir update equation:**")
-    st.latex(esn_latex.w_in_and_network_update_equation_with_explanation)
-    utils.st_line()
-
     st.markdown("**Histograms of terms in update equation:**")
     cols = st.columns(3)
     with cols[0]:
-        train_or_predict = st.selectbox("Train or predict", ["train", "predict"],
-                                        key=f"{key}__st_reservoir_states_histogram__top")
+        train_or_predict = esnutils.st_train_or_predict_select(
+            key=f"{key}__st_reservoir_states_histogram")
+        # train_or_predict = st.selectbox("Train or predict", ["train", "predict"],
+        #                                 key=f"{key}__st_reservoir_states_histogram__top")
     with cols[1]:
         bins = int(st.number_input("Bins", min_value=2, value=50,
                                    key=f"{key}__st_reservoir_states_histogram__bins"))
@@ -203,7 +209,32 @@ def st_reservoir_states_histogram(res_train_dict: dict[str, np.ndarray],
         yanchor="bottom",
         y=-0.15,
         xanchor="left")
-        )
+    )
     fig.update_layout(width=750, height=500)
 
     st.plotly_chart(fig)
+
+
+def st_reservoir_node_value_timeseries(res_train_dict: dict[str, np.ndarray],
+                                       res_pred_dict: dict[str, np.ndarray],
+                                       key: str | None = None) -> None:
+    """Streamlit element to plot reservoir node value time series.
+
+    # TODO: Make nicer?
+
+    One can select the dimension to plot for train and predict.
+
+    Args:
+        res_train_dict: A dictionary containing "r_input", "r_internal", "r_act_fct_inp", "r"
+                        corresponding to the reservoir state quantities during training.
+        res_pred_dict: A dictionary containing "r_input", "r_internal", "r_act_fct_inp", "r"
+                       corresponding to the reservoir state quantities during prediction.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+    st.markdown("**Training**")
+    plot.st_plot_dim_selection(res_train_dict,
+                               key=f"{key}__st_reservoir_node_value_timeseries__train")
+    st.markdown("**Prediction**")
+    plot.st_plot_dim_selection(res_pred_dict,
+                               key=f"{key}__st_reservoir_node_value_timeseries__predict")

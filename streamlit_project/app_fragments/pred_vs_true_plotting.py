@@ -7,6 +7,7 @@ import numpy as np
 
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import streamlit_utilities as utils
+from streamlit_project.latex_formulas import esn_formulas
 import rescomp.measures_new as meas
 
 
@@ -124,6 +125,7 @@ def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
 def st_all_difference_measures(y_pred_traj: np.ndarray,
                                y_true_traj: np.ndarray,
                                dt: float,
+                               train_or_pred: str,
                                key: str | None = None
                                ) -> None:
     """Streamlit element for all difference based measures.
@@ -136,17 +138,28 @@ def st_all_difference_measures(y_pred_traj: np.ndarray,
         y_pred_traj: The predicted time series with error.
         y_true_traj: The true, baseline time series.
         dt: The time step.
+        train_or_pred: Either "train" or "predict".
         key: Provide a unique key if this streamlit element is used multiple times.
 
     """
-    if st.checkbox("Trajectory", key=f"{key}__st_all_difference_measures__traj"):
+    if st.checkbox("True - Pred", key=f"{key}__st_all_difference_measures__tmp"):
+        if train_or_pred == "train":
+            st.markdown("Plotting the difference between the real data and the fitted data. ")
+        elif train_or_pred == "predict":
+            st.markdown("Plotting the difference between the real data and the predicted data. ")
         difference_dict = {"Difference": y_true_traj - y_pred_traj}
         figs = plpl.multiple_1d_time_series(difference_dict,
                                             subplot_dimensions_bool=False,
-                                            y_label="true - fit")
+                                            y_label="True - Pred")
         plpl.multiple_figs(figs)
     utils.st_line()
     if st.checkbox("Error", key=f"{key}__st_all_difference_measures__error"):
+        st.latex(esn_formulas.error_1)
+        if train_or_pred == "train":
+            st.latex(esn_formulas.y_true_and_fit)
+        elif train_or_pred == "predict":
+            st.latex(esn_formulas.y_true_and_pred)
+
         st_show_error(y_pred_traj, y_true_traj)
     utils.st_line()
     if st.checkbox("Valid time", key=f"{key}__st_all_difference_measures__vt"):

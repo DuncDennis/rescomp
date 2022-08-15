@@ -48,3 +48,16 @@ def st_main_checkboxes(key: str | None = None) -> tuple[bool, bool, bool, bool]:
     predict_bool = st.checkbox("🔮 Predict", disabled=disabled, key=f"{basic_key}__pred")
 
     return simulate_bool, build_bool, train_bool, predict_bool
+
+
+def st_train_or_predict_select(key: str | None = None) -> str:
+    """A select box to distinguish between train and predict.
+
+    Args:
+        key: A optional key if it's used multiple times.
+
+    Returns:
+        Either "train" or "predict".
+    """
+    return st.selectbox("Train or predict", ["train", "predict"],
+                        key=f"{key}__st_train_or_predict_select")
