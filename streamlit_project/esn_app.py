@@ -128,17 +128,26 @@ if __name__ == '__main__':
             # st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
             st.markdown("Explore the Echo State Network architecture.")
-            st.markdown("TODO: Show the bias, plot the network (maybe even some quantites), ")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
             with tabs[0]:
-                with st.expander("Show architecture: "):
-                    architecture_container = st.container()
+                st.markdown("**Layer dimensions:**")
+                architecture_container = st.container()
             with tabs[1]:
-                if st.checkbox("W_in matrix"):
-                    st.write(esn_obj._w_in)
+                w_in = esn_obj._w_in
+                if st.checkbox("Input matrix as heatmap"):
+                    esnplot.st_input_matrix_as_heatmap(w_in)
             with tabs[2]:
-                if st.checkbox("Network matrix"):
-                    st.write(esn_obj.return_network())
+                network = esn_obj.return_network()
+
+                if st.checkbox("Network matrix as heatmap"):
+                    esnplot.st_esn_network_as_heatmap(network)
+                utils.st_line()
+                if st.checkbox("Network degree"):
+                    esnplot.st_esn_network_measures(network)
+                utils.st_line()
+                if st.checkbox("Network eigenvalues"):
+                    esnplot.st_esn_network_eigenvalues(network)
+
         else:
             st.info('Activate [🛠️ Build] checkbox to see something.')
 

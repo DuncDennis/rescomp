@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Callable
 
 import numpy as np
+import networkx as nx
 import streamlit as st
+
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import plotly.express as px
@@ -238,3 +240,68 @@ def st_reservoir_node_value_timeseries(res_train_dict: dict[str, np.ndarray],
     st.markdown("**Prediction**")
     plot.st_plot_dim_selection(res_pred_dict,
                                key=f"{key}__st_reservoir_node_value_timeseries__predict")
+
+
+def st_esn_network_as_heatmap(network: np.ndarray) -> None:
+    """Streamlit element to plot the network matrix as a heatmap.
+
+    Args:
+        network: The numpy array of shape (reservoir dimension, reservoir dimension).
+    """
+    st.markdown("**The networks adjecency matrix:**")
+    fig = px.imshow(network)
+    fig.update_xaxes(title="reservoir dimension")
+    fig.update_yaxes(title="reservoir dimension")
+    st.plotly_chart(fig)
+
+
+def st_esn_network_measures(network: np.ndarray) -> None:
+    """Streamlit element to measure some network quantities of the provided network.
+
+    Args:
+        network: The numpy array of shape (reservoir dimension, reservoir dimension).
+    """
+    nw_nx = nx.from_numpy_matrix(network, create_using=nx.DiGraph)
+    indeg = np.mean([x[1] for x in nw_nx.in_degree])
+    outdeg = np.mean([x[1] for x in nw_nx.out_degree])
+
+    cols = st.columns(2)
+    with cols[0]:
+        st.markdown("**Mean network in-degree:**")
+        st.write(indeg)
+    with cols[1]:
+        st.markdown("**Mean network out-degree:**")
+        st.write(outdeg)
+
+
+def st_esn_network_eigenvalues(network: np.ndarray) -> None:
+    """Streamlit element to plot the network eigenvalues.
+
+    # TODO: Maybe add caching?
+
+    Args:
+        network: The numpy array of shape (reservoir dimension, reservoir dimension).
+    """
+    eigenvalues = np.linalg.eig(network)[0]
+    abs_eigenvalues = np.abs(eigenvalues)
+    # st.write(eigenvalues)
+
+    st.markdown(f"**Largest eigenvalue = {np.round(abs_eigenvalues[0], 4)}**")
+
+    fig = px.line(abs_eigenvalues)
+    fig.update_xaxes(title="eigenvalue number")
+    fig.update_yaxes(title="absoulte value of eigenvalue")
+    st.plotly_chart(fig)
+
+
+def st_input_matrix_as_heatmap(w_in: np.ndarray) -> None:
+    """Streamlit element to plot the input matrix as a heatmap.
+
+    Args:
+        w_in: The numpy array of shape (reservoir dimension, input dimension).
+    """
+    st.markdown("**The input matrix W_in:**")
+    fig = px.imshow(w_in, aspect="auto")
+    fig.update_xaxes(title="input dimension")
+    fig.update_yaxes(title="reservoir dimension")
+    st.plotly_chart(fig)

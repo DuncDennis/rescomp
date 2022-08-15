@@ -163,6 +163,7 @@ def st_all_difference_measures(y_pred_traj: np.ndarray,
         st_show_error(y_pred_traj, y_true_traj)
     utils.st_line()
     if st.checkbox("Valid time", key=f"{key}__st_all_difference_measures__vt"):
+        st.markdown("First time, when the error is bigger than the error threshold.")
         st_show_valid_times_vs_error_threshold(y_pred_traj, y_true_traj, dt=dt)
 
 
