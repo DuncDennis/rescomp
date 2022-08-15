@@ -22,7 +22,7 @@ from . import simulations
 from ._version import __version__
 
 
-class _ResCompCore(utilities._ESNLogging):
+class _ResCompCore(): #utilities._ESNLogging
     """
     TBD
     """
@@ -431,14 +431,14 @@ class _add_network_update_fct():
                 self._scale_network()
 
             except _ArpackNoConvergence:
-                self.logger.error(
-                    'Network Variaion failed! -> Try agin!')
+                # self.logger.error(
+                #     'Network Variaion failed! -> Try agin!')
                 continue
             break
         else:
             # TODO: Better logging of exceptions
-            self.logger.error("Network variation failed %d times"
-                              % network_variation_attempts)
+            # self.logger.error("Network variation failed %d times"
+            #                   % network_variation_attempts)
             raise _ArpackNoConvergence
 
     def _scale_network(self):
@@ -455,7 +455,7 @@ class _add_network_update_fct():
                 self._network, k=1, v0=np.ones(self._r_dim),
                 maxiter=1e3 * self._r_dim)[0]
         except _ArpackNoConvergence:
-            self.logger.error('Eigenvalue calculation in scale_network failed!')
+            # self.logger.error('Eigenvalue calculation in scale_network failed!')
             raise
 
         maximum = np.absolute(eigenvals).max()
@@ -921,7 +921,7 @@ class _add_w_in():
         self._w_in_flag_synonyms.add_synonyms(3, ["random_dense_gaussian"])
 
     def create_w_in(self, w_in_opt, w_in_scale=1.0):
-        self.logger.debug("Create w_in")
+        # self.logger.debug("Create w_in")
 
         if type(w_in_opt) == str:
             self._w_in_scale = w_in_scale
@@ -1001,7 +1001,7 @@ class _add_model_input_coupling():
         self._inp_coupling_fct = lambda x: self._w_in @ np.hstack((x, self.input_model(x)))
 
     def create_w_in(self, w_in_opt, w_in_scale=1.0):
-        self.logger.debug("Create w_in")
+        # self.logger.debug("Create w_in")
 
         if type(w_in_opt) == str:
             self._w_in_scale = w_in_scale
@@ -1092,7 +1092,7 @@ class _add_same_model_input_output():
         self._inp_coupling_fct = lambda x: self._w_in @ np.hstack((x, self.save_input_model_result(self.input_model, x)))
 
     def create_w_in(self, w_in_opt, w_in_scale=1.0):
-        self.logger.debug("Create w_in")
+        # self.logger.debug("Create w_in")
 
         if type(w_in_opt) == str:
             self._w_in_scale = w_in_scale
@@ -1255,7 +1255,7 @@ class _add_model_input_coupling_with_preprocess():
                                                                   (self.input_model(x) - self.preprocess_offset)/self.preprocess_scale_vector))
 
     def create_w_in(self, w_in_opt, w_in_scale=1.0):
-        self.logger.debug("Create w_in")
+        # self.logger.debug("Create w_in")
 
         if type(w_in_opt) == str:
             self._w_in_scale = w_in_scale
@@ -1328,7 +1328,7 @@ class ESN_normal(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _ad
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -1388,7 +1388,7 @@ class ESN_dynsys(_ResCompCore, _add_basic_defaults, _add_dyn_sys_update_fct, _ad
               r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0, w_in_opt="random_sparse",
               w_in_scale=1.0, default_res_state=None, reg_param=1e-8, bias_seed=None, w_in_seed=None, **dyn_sys_other_params):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -1446,7 +1446,7 @@ class ESN_difference(_ResCompCore, _add_basic_defaults, _add_network_update_fct,
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None, dt_difference=0.1):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -1525,7 +1525,7 @@ class ESN_output_hybrid(_ResCompCore, _add_basic_defaults, _add_network_update_f
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -1588,7 +1588,7 @@ class ESN_no_res(_ResCompCore, _add_basic_defaults, _add_no_res_update_fct, _add
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -1695,7 +1695,7 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         if pca_components is None:
             pca_components = r_dim
@@ -1809,7 +1809,7 @@ class ESN_pca_noise(_ResCompCore, _add_basic_defaults, _add_network_update_fct, 
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         if pca_components is None:
             pca_components = r_dim
@@ -1913,7 +1913,7 @@ class ESN_dynsys_pca(_ResCompCore, _add_basic_defaults, _add_dyn_sys_update_fct,
               r_to_r_gen_opt="linear", pca_components=5, pca_comps_to_skip=0, act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0, leak_factor=0.0, w_in_opt="random_sparse",
               w_in_scale=1.0, default_res_state=None, reg_param=1e-8, bias_seed=None, w_in_seed=None, **dyn_sys_other_params):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2007,7 +2007,7 @@ class ESN_normal_centered(_ResCompCore, _add_basic_defaults, _add_network_update
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2112,7 +2112,7 @@ class ESN_output_hybrid_pca(_ResCompCore, _add_basic_defaults, _add_network_upda
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
         self.set_output_model(output_model)
 
         if pca_components is None:
@@ -2181,7 +2181,7 @@ class ESN_input_hybrid(_ResCompCore, _add_basic_defaults, _add_network_update_fc
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2279,7 +2279,7 @@ class ESN_input_hybrid_pca(_ResCompCore, _add_basic_defaults, _add_network_updat
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         if pca_components is None:
             pca_components = r_dim
@@ -2350,7 +2350,7 @@ class ESN_full_hybrid(_ResCompCore, _add_basic_defaults, _add_network_update_fct
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2450,7 +2450,7 @@ class ESN_full_hybrid_pca(_ResCompCore, _add_basic_defaults, _add_network_update
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
         self.set_output_model(output_model)
 
         if pca_components is None:
@@ -2522,7 +2522,7 @@ class ESN_full_hybrid_same(_ResCompCore, _add_basic_defaults, _add_network_updat
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2594,7 +2594,7 @@ class ESN_pretrain_processing(_ResCompCore, _add_basic_defaults, _add_network_up
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None, noise_scale=0.0, noise_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2683,7 +2683,7 @@ class ESN_output_hybrid_preprocess(_ResCompCore, _add_basic_defaults, _add_netwo
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None, noise_scale=0.0, noise_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2784,7 +2784,7 @@ class ESN_outp_var_preproc(_ResCompCore, _add_basic_defaults, _add_network_updat
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None, noise_scale=0.0, noise_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._r_to_r_gen_opt = r_to_r_gen_opt
 
@@ -2893,7 +2893,7 @@ class ESN_pca_adv(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _a
 
         self._dims_to_drop = dims_to_drop
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -2987,7 +2987,7 @@ class ESN_deep(_ResCompCore, _add_basic_defaults, _add_basic_r_to_rgen,
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -3116,7 +3116,7 @@ class ESN_deep_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _
 
         self._dims_to_drop = dims_to_drop
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self._x_dim = x_dim
         self._y_dim = x_dim
@@ -3223,7 +3223,7 @@ class ESN_pca_old(_ResCompCore, _add_basic_defaults, _add_network_update_fct, # 
               w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8, network_seed=None,
               bias_seed=None, w_in_seed=None):
 
-        self.logger.debug("Building ESN Archtecture")
+        # self.logger.debug("Building ESN Archtecture")
 
         self.set_pca_settings(pca_components, pca_offset)
 
