@@ -78,7 +78,7 @@ if __name__ == '__main__':
         seed = utils.st_seed()
         utils.st_line()
         st.header("Clear cash: ")
-        utils.st_clear_all_cashes()
+        utils.st_clear_all_cashes_button()
         utils.st_line()
 
     sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, todo_tab = st.tabs(
@@ -202,13 +202,18 @@ if __name__ == '__main__':
         if predict_bool:
             # st.info("More esn visualizations.")
             st.markdown("Explore the ESN architecture and look under the hood. ")
-            st.markdown("TODO: structure: reservoir state: show hist, show image, plot individual dimensions")
+            st.markdown(
+                "TODO: structure: reservoir state: show hist, show image, plot individual dimensions")
             st.markdown("TODO: structure: w_out. Show how much everything is connected to what. ")
-            st.markdown("TODO: structure: Compare internal reservoir states for training and prediction (e.g. std(r_gen)")
-            st.markdown("TODO: calculate the lyapunov exponent for the reservoir update function???.")
+            st.markdown(
+                "TODO: structure: Compare internal reservoir states for training and prediction (e.g. std(r_gen)")
+            st.markdown(
+                "TODO: calculate the lyapunov exponent for the reservoir update function???.")
             st.markdown("TODO: Show correlations between input/output/reservoir states.")
-            st.markdown("TODO: Add free looping of reservoir states and see where the output goes to.")
-            st.markdown("TODO: Untick all does not work for every checkbox only for the ones with a key.")
+            st.markdown(
+                "TODO: Add free looping of reservoir states and see where the output goes to.")
+            st.markdown(
+                "TODO: Untick all does not work for every checkbox only for the ones with a key.")
 
             res_states_tab, w_out_r_gen_tab = st.tabs(["Reservoir states", "W_out and R_gen"])
 
@@ -255,6 +260,17 @@ if __name__ == '__main__':
         st.markdown("- Doc string and typehinting for all used code and new repo!")
         st.markdown("- A tab to explain the basic esn structure and how it works.")
 
+        with st.expander("More ideas: "):
+            st.markdown(
+                "- Reservoir area plot for the different input: input, internal and bias (and akt "
+                "fct?)")
+
+            st.markdown("- Somehow split the fit to W_in input and internal input. To see which "
+                        "output depends on which reservoir part. ")
+            st.markdown("- Somehow check with rc, which variable depends strongest on which other variables. "
+                        "Like mutual information, but with reservoir computing. ")
+            st.markdown("- Somehow drive the reservoir backwards in time? Train on previous time steps.")
+
     #  Container code at the end:
     if build_bool:
         x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()
@@ -268,3 +284,9 @@ if __name__ == '__main__':
     # true_checkboxes = {key: val for key, val in st.session_state.items() if
     #                    type(val) == bool and val is True}
     # true_checkboxes
+
+    # if st.button("reset esn"):
+    #     x_pred = x_pred + 2
+    #
+    # out = test(x_pred)
+    # st.write(out)

@@ -10,11 +10,20 @@ import streamlit as st
 import rescomp
 import rescomp.esn_new_update_code as esn
 
+
+def esn_hash(obj):
+    items = sorted(obj.__dict__.items(), key=lambda it: it[0])
+    return hash((type(obj),) + tuple(items))
+
+
 ESN_DICT = {"ESN_normal": esn.ESN_normal,
-            "ESN_pca": esn.ESN_pca
+            "ESN_pca": esn.ESN_pca,
+            "ESN_output_hybrid": esn.ESN_output_hybrid
             }
 
-ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
+# ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
+
+ESN_HASH_FUNC = {esn._ResCompCore: esn_hash}
 
 W_IN_TYPES = ["random_sparse", "ordered_sparse", "random_dense_uniform", "random_dense_gaussian"]
 BIAS_TYPES = ["no_bias", "random_bias", "constant_bias"]
@@ -29,7 +38,7 @@ R_TO_R_GEN_TYPES = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_
 ESN_TYPING = Any
 
 
-@st.cache(hash_funcs=ESN_HASH_FUNCS)
+@st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=True)
 def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     """Build the esn class.
 
@@ -42,6 +51,7 @@ def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     Returns:
         The build esn.
     """
+    print("Running build")
     if esn_type in ESN_DICT.keys():
         esn = ESN_DICT[esn_type]()
     else:
@@ -133,7 +143,7 @@ def st_network_build_args(key: str | None = None) -> dict[str, object]:
     return network_build_args
 
 
-@st.cache(hash_funcs=ESN_HASH_FUNCS)
+@st.cache(hash_funcs=ESN_HASH_FUNC)
 def train(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int,
           ) -> tuple[np.ndarray, np.ndarray]:
     """Train the esn_obj with a given x_train and t_train-sync.
@@ -156,7 +166,7 @@ def train(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int,
     return y_train_fit, y_train_true
 
 
-@st.cache(hash_funcs=ESN_HASH_FUNCS)
+@st.cache(hash_funcs=ESN_HASH_FUNC)
 def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int,
                      ) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
     """Train the esn_obj with a given x_train and t_train-sync and return internal reservoir states.
@@ -172,6 +182,7 @@ def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
         Tuple with the fitted output, the real output and reservoir dictionary containing states
         for r_act_fct_inp, r_internal, r_input, r, r_gen.
     """
+    print("Running train")
 
     esn_obj.train(x_train,
                   sync_steps=t_train_sync,
@@ -196,7 +207,7 @@ def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
     return y_train_fit, y_train_true, res_state_dict
 
 
-@st.cache(hash_funcs=ESN_HASH_FUNCS)
+@st.cache(hash_funcs=ESN_HASH_FUNC)
 def predict(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
             ) -> tuple[np.ndarray, np.ndarray]:
     """Predict with the esn_obj with a given x_pred and x_pred_sync.
@@ -215,7 +226,7 @@ def predict(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
     return y_pred, y_pred_true
 
 
-@st.cache(hash_funcs=ESN_HASH_FUNCS)
+@st.cache(hash_funcs=ESN_HASH_FUNC)
 def predict_return_res(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
                        ) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray]]:
     """Predict with the esn_obj with a given x_pred and x_pred_sync and return internal reservoir states.
@@ -231,6 +242,8 @@ def predict_return_res(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
         Tuple with the fitted output, the real output and reservoir dictionary containing states
         for r_act_fct_inp, r_internal, r_input, r, r_gen.
     """
+
+    print("Running predict")
 
     y_pred, y_pred_true = esn_obj.predict(x_pred,
                                           sync_steps=t_pred_sync,

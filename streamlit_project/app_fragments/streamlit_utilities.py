@@ -146,7 +146,16 @@ def st_reset_all_check_boxes(key: str | None = None) -> None:
                 st.session_state[k] = False
 
 
-def st_clear_all_cashes(key: str | None = None) -> None:
+def clear_all_cashes() -> None:
+    """Function to clear all cashed values.
+
+    TODO: Not really clearing all caches. st.cache is not cleared (but used in train and predict and build)
+    """
+    st.experimental_memo.clear()
+    st.experimental_singleton.clear()
+
+
+def st_clear_all_cashes_button(key: str | None = None) -> None:
     """Streamlit button to clear all cashed values.
 
     Args:
@@ -155,8 +164,7 @@ def st_clear_all_cashes(key: str | None = None) -> None:
     """
     help = "Clears all cashed values. Use if app gets too slow because of memory issues."
     if st.button("Clear cash", help=help, key=f"{key}__st_clear_all_cashes"):
-        st.experimental_memo.clear()
-        st.experimental_singleton.clear()
+        clear_all_cashes()
 
 
 if __name__ == '__main__':
