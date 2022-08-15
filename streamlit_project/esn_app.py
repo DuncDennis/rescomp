@@ -134,19 +134,11 @@ if __name__ == '__main__':
                 architecture_container = st.container()
             with tabs[1]:
                 w_in = esn_obj._w_in
-                if st.checkbox("Input matrix as heatmap"):
+                if st.checkbox("Input matrix as heatmap", key=f"build_tab__input_heatmap"):
                     esnplot.st_input_matrix_as_heatmap(w_in)
             with tabs[2]:
                 network = esn_obj.return_network()
-
-                if st.checkbox("Network matrix as heatmap"):
-                    esnplot.st_esn_network_as_heatmap(network)
-                utils.st_line()
-                if st.checkbox("Network degree"):
-                    esnplot.st_esn_network_measures(network)
-                utils.st_line()
-                if st.checkbox("Network eigenvalues"):
-                    esnplot.st_esn_network_eigenvalues(network)
+                esnplot.st_all_network_architecture_plots(network)
 
         else:
             st.info('Activate [🛠️ Build] checkbox to see something.')

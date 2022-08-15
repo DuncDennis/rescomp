@@ -305,3 +305,25 @@ def st_input_matrix_as_heatmap(w_in: np.ndarray) -> None:
     fig.update_xaxes(title="input dimension")
     fig.update_yaxes(title="reservoir dimension")
     st.plotly_chart(fig)
+
+
+def st_all_network_architecture_plots(network: np.ndarray,
+                                      key: str | None = None) -> None:
+    """Streamlit element to show all network architecture plots.
+
+    Args:
+        network: The numpy array of shape (reservoir dimension, reservoir dimension).
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+    if st.checkbox("Network matrix as heatmap",
+                   key=f"{key}__st_all_network_architecture_plots__hm"):
+        st_esn_network_as_heatmap(network)
+    utils.st_line()
+    if st.checkbox("Network degree",
+                   key=f"{key}__st_all_network_architecture_plots__deg"):
+        st_esn_network_measures(network)
+    utils.st_line()
+    if st.checkbox("Network eigenvalues",
+                   key=f"{key}__st_all_network_architecture_plots__eig"):
+        st_esn_network_eigenvalues(network)
