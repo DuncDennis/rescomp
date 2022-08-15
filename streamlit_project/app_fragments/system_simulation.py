@@ -8,6 +8,7 @@ import streamlit as st
 import numpy as np
 
 from streamlit_project.latex_formulas import systems as latexsys
+from streamlit_project.app_fragments import streamlit_utilities as utils
 import rescomp.simulations_new as sims
 import rescomp.data_preprocessing as datapre
 
@@ -42,6 +43,8 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
                      ) -> tuple[str, dict[str, Any]]:
     """Create streamlit elements to select the system to simulate and specify the parameters.
 
+    # TODO: Clear cash on change of system?
+
     Args:
         systems_sub_section: If None, take all in SYSTEM_DICT, else take only subsection.
         default_parameters: Define the default parameters that should be loaded for each
@@ -65,6 +68,10 @@ def st_select_system(systems_sub_section: tuple[str, ...] | None = None,
 
     system_name = st.selectbox('System', system_dict.keys(),
                                key=f"{key}__st_select_system__system")
+
+    # system_name = st.selectbox('System', system_dict.keys(),
+    #                            key=f"{key}__st_select_system__system",
+    #                            on_change=utils.clear_all_cashes)
 
     sim_class = system_dict[system_name]
 
@@ -290,7 +297,8 @@ def st_preprocess_simulation(key: str | None = None
         The scale, shift and noise_scale to be input into preprocess_simulation.
     """
     with st.expander("Preprocess:"):
-        if st.checkbox("Normalize and center"):
+        if st.checkbox("Normalize and center",
+                       key=f"{key}__st_preprocess_simulation__normcenter_check"):
             left, right = st.columns(2)
             with left:
                 scale = st.number_input("scale", value=1.0, min_value=0.0, step=0.1, format="%f",
@@ -301,7 +309,7 @@ def st_preprocess_simulation(key: str | None = None
         else:
             scale, shift = None, None
 
-        if st.checkbox("Add white noise"):
+        if st.checkbox("Add white noise", key=f"{key}__st_preprocess_simulation__noise_check"):
             noise_scale = st.number_input("noise scale", value=0.1, min_value=0.0, step=0.01,
                                           format="%f",
                                           key=f"{key}__st_preprocess_simulation__noise")
@@ -384,7 +392,7 @@ def st_show_latex_formula(system_name: str) -> None:
         st.warning("No latex formula for this system implemented.")
 
 
-def main() -> None:
+if __name__ == '__main__':
     st.header("System Simulation")
     with st.sidebar:
         st.header("System: ")
@@ -395,7 +403,3 @@ def main() -> None:
         time_series = st_preprocess_simulation(time_series)
 
     st.write(time_series)
-
-
-if __name__ == '__main__':
-    main()
