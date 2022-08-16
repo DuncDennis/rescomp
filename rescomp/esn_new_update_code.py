@@ -246,6 +246,23 @@ class _ResCompCore(): #utilities._ESNLogging
     def get_act_fct(self) -> None | Callable[[np.ndarray], np.ndarray]:
         return self._act_fct
 
+    def get_res_iterator_func(self) -> Callable[[np.ndarray], np.ndarray]:
+        """Return the reservoir update function, once everything is trained and specfified.
+
+        Note: Only works if the r_to_r_gen_fct does not depend on the input x.
+
+        Returns:
+            The reservoir update function.
+        """
+        def res_iterator(r):
+            last_out = self._r_gen_to_out_fct(self._r_to_r_gen_fct(r, None))
+            r_iplus1 = self._leak_factor * r + (1 - self._leak_factor) * self._act_fct(
+                self._inp_coupling_fct(last_out) +
+                self._res_internal_update_fct(r) + self._node_bias)
+            return r_iplus1
+
+        return res_iterator
+
 
 class _add_basic_defaults():
     """
