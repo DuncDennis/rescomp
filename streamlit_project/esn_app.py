@@ -91,8 +91,6 @@ if __name__ == '__main__':
 
     with sim_data_tab:
         if simulate_bool:
-            # TODO: add it all to a streamlit element function?
-            # st.info("Plot the simulated data and measure some quantites.")
             st.markdown(
                 "Plot and measure the **simulated data**, see which intervals are used for "
                 "**training and prediction** and determine the **Lyapunov exponent** of the "
@@ -125,7 +123,6 @@ if __name__ == '__main__':
 
     with build_tab:
         if build_bool:
-            # st.info("Diagrams and plots to visualize the esn architecture.")
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
             st.markdown("Explore the Echo State Network architecture.")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
@@ -145,8 +142,6 @@ if __name__ == '__main__':
 
     with train_tab:
         if train_bool:
-            # st.info("Plot and Measure some quantities regarding the training.")
-            # y_train_fit, y_train_true = esn.train(esn_obj, x_train, t_train_sync)
 
             y_train_fit, y_train_true, res_train_dict = esn.train_return_res(esn_obj,
                                                                              x_train,
@@ -203,22 +198,11 @@ if __name__ == '__main__':
 
     with other_vis_tab:
         if predict_bool:
-            # st.info("More esn visualizations.")
-            st.markdown("Explore the ESN architecture and look under the hood. ")
-            st.markdown(
-                "TODO: structure: reservoir state: show hist, show image, plot individual dimensions")
-            st.markdown("TODO: structure: w_out. Show how much everything is connected to what. ")
-            st.markdown(
-                "TODO: structure: Compare internal reservoir states for training and prediction (e.g. std(r_gen)")
-            st.markdown(
-                "TODO: calculate the lyapunov exponent for the reservoir update function???.")
-            st.markdown("TODO: Show correlations between input/output/reservoir states.")
-            st.markdown(
-                "TODO: Add free looping of reservoir states and see where the output goes to.")
-            st.markdown(
-                "TODO: Untick all does not work for every checkbox only for the ones with a key.")
+            st.markdown("Explore internal quantities of the Echo State Network. ")
 
-            res_states_tab, w_out_r_gen_tab = st.tabs(["Reservoir states", "W_out and R_gen"])
+            res_states_tab, w_out_r_gen_tab, res_time_tab, res_dyn = st.tabs(
+                ["Internal reservoir states", "W_out and R_gen",
+                 "Reservoir time series", "Pure reservoir dynamics"])
 
             res_train_dict_no_rgen = {k: v for k, v in res_train_dict.items() if k != "r_gen"}
             res_pred_dict_no_rgen = {k: v for k, v in res_pred_dict.items() if k != "r_gen"}
@@ -237,14 +221,60 @@ if __name__ == '__main__':
                                                                res_pred_dict_no_rgen, )
 
             with w_out_r_gen_tab:
-                if st.checkbox("W_out"):
-                    w_out = esn_obj.get_w_out()
-                    esnplot.st_plot_w_out_as_barchart(w_out)
+                w_out = esn_obj.get_w_out()
+                if st.checkbox("Output coupling", key="output_coupling_cb"):
+                    st.markdown("Sum the absolute value of the W_out matrix over all generalized "
+                                "reservoir indices, to see which output dimension has the "
+                                "strongest coupling to the reservoir states.")
                     esnplot.st_plot_output_w_out_strength(w_out)
                 utils.st_line()
-                if st.checkbox("R_gen std"):
-                    pass
+                if st.checkbox("W_out matrix as barchart", key="w_out_as_bar"):
+                    st.markdown(
+                        "Show the w_out matrix as a stacked barchart, where the x axis is the "
+                        "index of the generalized reservoir dimension.")
+                    esnplot.st_plot_w_out_as_barchart(w_out)
+                utils.st_line()
+                if st.checkbox("R_gen std", key="r_gen_std"):
+                    st.markdown(
+                        "Show the standard deviation of the generalized reservoir state (r_gen) "
+                        "during training and prediction.")
+                    esnplot.st_r_gen_std_barplot(r_gen_train=res_train_dict["r_gen"],
+                                                 r_gen_pred=res_pred_dict["r_gen"])
+                utils.st_line()
+                if st.checkbox("R_gen std times w_out", key="r_gen_std_wout"):
+                    st.markdown(
+                        "Show the standard deviation of the generalized reservoir state (r_gen) "
+                        "times w_out during training and prediction.")
+                    esnplot.st_r_gen_std_times_w_out_barplot(r_gen_train=res_train_dict["r_gen"],
+                                                             r_gen_pred=res_pred_dict["r_gen"],
+                                                             w_out=w_out)
+            with res_time_tab:
+                if st.checkbox("Reservoir states", key="r_states_3d"):
+                    time_series_dict = {"r_train": res_train_dict["r"],
+                                        "r_pred": res_pred_dict["r"]}
+                    plot.st_timeseries_as_three_dim_plot(time_series_dict)
+                utils.st_line()
+                if st.checkbox("Generalized reservoir states", key="r_gen_states_3d"):
+                    time_series_dict = {"r_gen_train": res_train_dict["r_gen"],
+                                        "r_gen_pred": res_pred_dict["r_gen"]}
+                    plot.st_timeseries_as_three_dim_plot(time_series_dict)
 
+            with res_dyn:
+                if st.checkbox("Largest lyapunov exponent of reservoir", key="lle_res"):
+                    st.markdown("Calculate the largest lyapunov exponent from the trained reservoir "
+                                "update equation, looping the output back into the reservoir.")
+                    # TODO: Say that the last training reservoir state is used.
+                    # TODO: Add Latex formula for reservoir update equation.
+                    res_update_func = esn_obj.get_res_iterator_func()
+                    res_starting_point = res_train_dict["r"][-1, :]
+                    sysmeas.st_largest_lyapunov_exponent_custom(res_update_func,
+                                                                res_starting_point,
+                                                                dt=dt,
+                                                                using_str="the reservoir update "
+                                                                          "equation")
+                utils.st_line()
+                if st.checkbox("Autonomously drive the reservoir", key="auto_res"):
+                    st.write("TBD")
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
@@ -276,6 +306,19 @@ if __name__ == '__main__':
             st.markdown(
                 "- Somehow drive the reservoir backwards in time? Train on previous time steps.")
 
+        with st.expander("More for lookunder hood: "):
+            st.markdown(
+                "TODO: structure: reservoir state: show hist, show image, plot individual dimensions")
+            st.markdown("TODO: structure: w_out. Show how much everything is connected to what. ")
+            st.markdown(
+                "TODO: structure: Compare internal reservoir states for training and prediction (e.g. std(r_gen)")
+            st.markdown(
+                "TODO: calculate the lyapunov exponent for the reservoir update function???.")
+            st.markdown("TODO: Show correlations between input/output/reservoir states.")
+            st.markdown(
+                "TODO: Add free looping of reservoir states and see where the output goes to.")
+            st.markdown(
+                "TODO: Untick all does not work for every checkbox only for the ones with a key.")
     #  Container code at the end:
     if build_bool:
         x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()

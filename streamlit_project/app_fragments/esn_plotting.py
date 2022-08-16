@@ -39,7 +39,7 @@ def st_plot_w_out_as_barchart(w_out: np.ndarray, key: str | None = None) -> None
 
 def st_plot_output_w_out_strength(w_out: np.ndarray, key: str | None = None) -> None:
     """Streamlit element to plot the strength of w_out for each output component.
-
+    TODO: remove key argument?
     Args:
         w_out: The w_out matrix of shape (output dimension, r_gen dimension).
         key: Provide a unique key if this streamlit element is used multiple times.
@@ -302,7 +302,7 @@ def st_input_matrix_as_heatmap(w_in: np.ndarray) -> None:
     """
     st.markdown("**The input matrix W_in:**")
     fig = px.imshow(w_in, aspect="auto")
-    fig.update_xaxes(title="input dimension")
+    fig.update_xaxes(title="input dimension", tickvals=np.arange(w_in.shape[1]))
     fig.update_yaxes(title="reservoir dimension")
     st.plotly_chart(fig)
 
@@ -327,3 +327,60 @@ def st_all_network_architecture_plots(network: np.ndarray,
     if st.checkbox("Network eigenvalues",
                    key=f"{key}__st_all_network_architecture_plots__eig"):
         st_esn_network_eigenvalues(network)
+
+
+def st_r_gen_std_barplot(r_gen_train: np.ndarray, r_gen_pred: np.ndarray, key: str | None = None
+                         ) -> None:
+    """Streamlit element to show the std of r_gen_train and r_gen_pred.
+
+    Args:
+        r_gen_train: The generalized reservoir states during training of shape (train time steps,
+                    r_gen dimension).
+        r_gen_pred: The generalized reservoir states during prediction of shape (predict time
+                    steps, r_gen dimension).
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+
+    log_y = st.checkbox("log y", key=f"{key}__st_r_gen_std_barplot__logy")
+    r_gen_dict = {"r_gen_train": r_gen_train, "r_gen_pred": r_gen_pred}
+    out = meas_app.get_statistical_measure(r_gen_dict, mode="std")
+
+    fig = px.bar(out, x="x_axis", y="std", color="label", log_y=log_y, barmode="group")
+    fig.update_xaxes(title="r_gen index")
+
+    if log_y:
+        fig.update_yaxes(type="log", exponentformat="E")
+    st.plotly_chart(fig)
+
+
+def st_r_gen_std_times_w_out_barplot(r_gen_train: np.ndarray, r_gen_pred: np.ndarray,
+                                     w_out: np.ndarray, key: str | None = None
+                                     ) -> None:
+    """Streamlit element to show the std of r_gen_train and r_gen_pred.
+
+    # TODO: add latex explanation.
+
+    Args:
+        r_gen_train: The generalized reservoir states during training of shape (train time steps,
+                    r_gen dimension).
+        r_gen_pred: The generalized reservoir states during prediction of shape (predict time
+                    steps, r_gen dimension).
+        w_out: The output matrix w_out of shape (output dimension, r_gen dimension).
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+
+    log_y = st.checkbox("log y", key=f"{key}__st_r_gen_std_times_w_out_barplot__logy")
+    abs_w_out_per_r_gen_dim = np.sum(np.abs(w_out), axis=0)
+
+    r_gen_times_wout_dict = {"r_gen_train_times_wout": r_gen_train * abs_w_out_per_r_gen_dim,
+                             "r_gen_pred_times_wout": r_gen_pred * abs_w_out_per_r_gen_dim}
+    out = meas_app.get_statistical_measure(r_gen_times_wout_dict, mode="std")
+
+    fig = px.bar(out, x="x_axis", y="std", color="label", log_y=log_y, barmode="group")
+    fig.update_xaxes(title="r_gen index")
+
+    if log_y:
+        fig.update_yaxes(type="log", exponentformat="E")
+    st.plotly_chart(fig)

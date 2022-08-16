@@ -182,3 +182,37 @@ def st_all_timeseries_plots(time_series_dict: dict[str, np.ndarray],
     if st.checkbox("Time series", key=f"{key}__st_all_plots__ts"):
         st.markdown("**Plot individual dimensions:**")
         st_plot_dim_selection(time_series_dict, key=f"{key}__st_all_plots")
+
+
+def st_timeseries_as_three_dim_plot(time_series_dict: dict[str, np.ndarray],
+                                    key: str | None = None
+                                    ) -> None:
+    """
+
+    Args:
+        time_series_dict:
+        key:
+
+    Returns:
+
+    """
+    sys_dim = list(time_series_dict.values())[0].shape[1]
+    cols = st.columns(4, gap="large")
+    with cols[0]:
+        x_dim = int(st.number_input("x", value=0, min_value=0, max_value=sys_dim - 1,
+                                    key=f"{key}__st_timeseries_as_three_dim_plot__x"))
+    with cols[1]:
+        y_dim = int(st.number_input("y", value=1, min_value=0, max_value=sys_dim - 1,
+                                    key=f"{key}__st_timeseries_as_three_dim_plot__y"))
+    with cols[2]:
+        z_dim = int(st.number_input("z", value=2, min_value=0, max_value=sys_dim - 1,
+                                    key=f"{key}__st_timeseries_as_three_dim_plot__z"))
+    with cols[3]:
+        scatter_or_line = st.selectbox("Mode", ["scatter", "line"],
+                                       key=f"{key}__st_timeseries_as_three_dim_plot__sl")
+
+    time_series_dict_dims = {key: val[:, [x_dim, y_dim, z_dim]] for key, val in
+                             time_series_dict.items()}
+
+    fig = plpl.multiple_3d_time_series(time_series_dict_dims, mode=scatter_or_line)
+    st.plotly_chart(fig)

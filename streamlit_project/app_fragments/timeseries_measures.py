@@ -404,7 +404,7 @@ def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key:
     if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures__ledata"):
 
         st.markdown("**Plot the logarithmic trajectory divergence from data.**")
-        with st.expander("More info ...", key=f"{key}__st_all_data_measures__moreinfo"):
+        with st.expander("More info ..."):
             st.write("The algorithm is based on the Rosenstein algorithm. Original Paper: Rosenstein et. al. (1992).")
             st.write("The sloap of the linear fit represents the largest Lyapunov exponent.")
         st_largest_lyapunov_from_data(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
