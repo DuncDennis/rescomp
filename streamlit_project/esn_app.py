@@ -248,16 +248,17 @@ if __name__ == '__main__':
                     esnplot.st_r_gen_std_times_w_out_barplot(r_gen_train=res_train_dict["r_gen"],
                                                              r_gen_pred=res_pred_dict["r_gen"],
                                                              w_out=w_out)
+
             with res_time_tab:
                 if st.checkbox("Reservoir states", key="r_states_3d"):
                     time_series_dict = {"r_train": res_train_dict["r"],
                                         "r_pred": res_pred_dict["r"]}
-                    plot.st_timeseries_as_three_dim_plot(time_series_dict)
+                    plot.st_timeseries_as_three_dim_plot(time_series_dict, key="r")
                 utils.st_line()
                 if st.checkbox("Generalized reservoir states", key="r_gen_states_3d"):
                     time_series_dict = {"r_gen_train": res_train_dict["r_gen"],
                                         "r_gen_pred": res_pred_dict["r_gen"]}
-                    plot.st_timeseries_as_three_dim_plot(time_series_dict)
+                    plot.st_timeseries_as_three_dim_plot(time_series_dict, key="r_gen")
 
             with res_dyn:
                 if st.checkbox("Largest lyapunov exponent of reservoir", key="lle_res"):
@@ -319,6 +320,7 @@ if __name__ == '__main__':
                 "TODO: Add free looping of reservoir states and see where the output goes to.")
             st.markdown(
                 "TODO: Untick all does not work for every checkbox only for the ones with a key.")
+
     #  Container code at the end:
     if build_bool:
         x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()
