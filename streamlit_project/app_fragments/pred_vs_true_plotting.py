@@ -11,7 +11,7 @@ from streamlit_project.latex_formulas import esn_formulas
 import rescomp.measures_new as meas
 
 
-@st.experimental_memo
+@st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
 def get_error(y_pred_traj: np.ndarray,
               y_true_traj: np.ndarray, ) -> np.ndarray:
     """Get the error between y_pred_traj and y_true_traj.
@@ -28,7 +28,7 @@ def get_error(y_pred_traj: np.ndarray,
     return error_series
 
 
-@st.experimental_memo
+@st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
 def get_valid_time_index(error_series: np.ndarray, error_threshold: float, ) -> int:
     """Get the valid time index from an error_series.
 

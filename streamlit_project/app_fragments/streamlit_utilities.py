@@ -1,10 +1,14 @@
 """Utlity streamlit fragments."""
 from __future__ import annotations
 
+import contextlib
 from typing import Any
 
 import numpy as np
 import streamlit as st
+
+
+MAX_CACHE_ENTRIES = 10
 
 
 def st_line() -> None:
@@ -96,6 +100,27 @@ def st_seed(key: str | None = None) -> int:
 
     seed = int(st.number_input("Seed", max_value=1000000, key=f"{key}__st_seed__seed"))
     return seed
+
+
+@contextlib.contextmanager
+def temp_seed(seed: int) -> None:
+    """For using a temporary random seed.
+
+    from https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    Use like:
+    with temp_seed(5):
+        <do_smth_that_uses_np.random>
+
+    Args:
+        seed: The random seed to use.
+    """
+
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
 
 
 def st_add_to_state(name: str, value: Any) -> None:
