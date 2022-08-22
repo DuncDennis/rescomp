@@ -15,6 +15,12 @@ import streamlit_project.app_fragments.timeseries_plotting as plot
 import streamlit_project.app_fragments.esn_build_train_predict as esn
 import streamlit_project.app_fragments.esn_plotting as esnplot
 
+# TODO: FOR EXPERIMENTAL:
+import streamlit_project.app_fragments.esn_experiments as esnexp
+import numpy as np
+import plotly.express as px
+import streamlit_project.generalized_plotting.plotly_plots as plpl
+
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
 
@@ -206,9 +212,9 @@ if __name__ == '__main__':
         if predict_bool:
             st.markdown("Explore internal quantities of the Echo State Network. ")
 
-            res_states_tab, w_out_r_gen_tab, res_time_tab, res_dyn = st.tabs(
+            res_states_tab, w_out_r_gen_tab, res_time_tab, res_dyn_tab, pca_tab = st.tabs(
                 ["Internal reservoir states", "W_out and R_gen",
-                 "Reservoir time series", "Pure reservoir dynamics"])
+                 "Reservoir time series", "Pure reservoir dynamics", "PCA esn stuff"])
 
             res_train_dict_no_rgen = {k: v for k, v in res_train_dict.items() if k != "r_gen"}
             res_pred_dict_no_rgen = {k: v for k, v in res_pred_dict.items() if k != "r_gen"}
@@ -266,7 +272,7 @@ if __name__ == '__main__':
                                         "r_gen_pred": res_pred_dict["r_gen"]}
                     plot.st_timeseries_as_three_dim_plot(time_series_dict, key="r_gen")
 
-            with res_dyn:
+            with res_dyn_tab:
                 if st.checkbox("Largest lyapunov exponent of reservoir", key="lle_res"):
                     st.markdown(
                         "Calculate the largest lyapunov exponent from the trained reservoir "
@@ -283,14 +289,18 @@ if __name__ == '__main__':
                 utils.st_line()
                 if st.checkbox("Autonomously drive the reservoir", key="auto_res"):
                     st.write("TBD maybe basin of attractor? ")
-                utils.st_line()
 
-                if st.checkbox("Remove generalized reservoir dimensions and see prediction: "):
-                    # Very experimental:
+            with pca_tab:
+                st.info("The following functionalities make sense for PCA_ens where the "
+                        "generalized reservoir states represent the PCA components.")
+                if st.checkbox("Remove generalized reservoir dimensions and see prediction"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+                    st.info("Take the trained PCA-ESN and set all w_out entries that correspond to "
+                            "r_gen states that lay between min r_gen_dim and max r_gen_dim to zero.")
+
                     esn_to_test = copy.deepcopy(esn_obj)
-                    # i_r_dim = 10
-                    r_gen_dim = list(res_pred_dict.values())[0].shape[
-                        1]
+                    r_gen_dim = res_pred_dict["r_gen"].shape[1]
                     cols = st.columns(2)
                     with cols[0]:
                         i_rgen_dim_min = int(
@@ -308,18 +318,216 @@ if __name__ == '__main__':
                     else:
                         esn_to_test._w_out[:, i_rgen_dim_min: i_rgen_dim_max] = 0.0
 
-                    y_pred, y_pred_true, res_pred_dict, esn_obj = esn.predict_return_res(
+                    y_pred_mod, y_pred_mod_true, _, _ = esn.predict_return_res(
                         esn_to_test,
                         x_pred,
                         t_pred_sync)
 
-                    pred_data_dict = {"true": y_pred_true,
-                                      "pred": y_pred}
-                    w_out = esn_to_test.get_w_out()
+                    pred_data_dict = {"true": y_pred_mod_true,
+                                      "pred": y_pred_mod}
+                    w_out_mod = esn_to_test.get_w_out()
 
-                    esnplot.st_plot_w_out_as_barchart(w_out, key="predict_rmv_r_gen")
-
+                    esnplot.st_plot_w_out_as_barchart(w_out_mod, key="predict_rmv_r_gen")
+                    st.info("Predict with the modified esn and plot the results.")
                     plot.st_all_timeseries_plots(pred_data_dict, key="predict_rmv_r_gen")
+
+                utils.st_line()
+                if st.checkbox(
+                        "Correlate generalized reservoir states with input during training"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+                    st.info("Take the input used for training (x_train[t_train_sync: -1, :])"
+                            "and calculate the dimension wise correlation with the driven "
+                            "generalized reservoir states, i.e. correlate every input dimension "
+                            "with every r_gen dimension. The time delay shifts the input "
+                            "dimension in the past, i.e. correlate r_gen[time_delay:] "
+                            "with inp[: - time_delay. "
+                            "For negative time_delays correlate r_gen with future inp states.")
+
+                    inp = x_train[t_train_sync:-1, :]
+                    r_gen = res_train_dict["r_gen"]
+
+                    time_delay = int(st.number_input("time_delay", value=0))
+
+                    correlation = esnexp.correlate_input_and_r_gen(inp, r_gen, time_delay)
+
+                    l, m, r = st.columns(3)
+                    with l:
+                        log_y = st.checkbox("log_y", key="log_123")
+                    with m:
+                        barmode = st.selectbox("barmode", ["relative", "group", "subplot"])
+                    with r:
+                        abs_bool = st.checkbox("abs", value=True)
+                    title = "correlation r_gen vs input"
+                    x_axis = "r_gen_dim"
+                    y_axis = "input_dim"
+                    value_name = "correlation"
+                    st.info("Plot correlation as a bar plot:")
+                    fig = plpl.matrix_as_barchart(correlation,
+                                                  log_y=log_y,
+                                                  barmode=barmode,
+                                                  abs_bool=abs_bool,
+                                                  title=title,
+                                                  x_axis=x_axis, y_axis=y_axis,
+                                                  value_name=value_name)
+                    st.plotly_chart(fig)
+                utils.st_line()
+
+                if st.checkbox(
+                        "Time delay sweep: Correlate generalized reservoir states with input "
+                        "during training"):
+                    # TODO: experimental
+                    st.warning("EXPERIMENTAL")
+                    st.info("Calculate the same correlation as in \"Correlate generalized reservoir "
+                            "states with input during training\". "
+                            "The time delay is sweeped on the x axis. For every time_delay "
+                            "calculate for every input dimension the \"mean r_gen dimension\", "
+                            "i.e. the \"center of gravity\" of the correlation barplot above. ")
+                    st.latex(r"\tilde{c}_{i, j} = |c_{i, j}| / \sum_i^{\text{r gen dim}} |c_{i, j}|, \qquad i: \text{r gen dim}, j: \text{input dim}")
+                    st.latex(r"\text{mean r gen dimension} = \sum_{i=1}^\text{r gen dim} \tilde{c}_{i, j} \times i")
+
+                    inp = x_train[t_train_sync:-1, :]
+                    r_gen = res_train_dict["r_gen"]
+                    r_gen_dim_temp = r_gen.shape[1]
+
+                    cols = st.columns(2)
+                    with cols[0]:
+                        min_time_delay = int(st.number_input("min time delay", value=-2))
+                    with cols[1]:
+                        max_time_delay = int(st.number_input("max time delay", value=10))
+                    time_delays = np.arange(start=min_time_delay, stop=max_time_delay, dtype=int)
+
+                    results = np.zeros((time_delays.size, x_dim))
+
+                    for i_t, time_delay in enumerate(time_delays):
+                        correlation = esnexp.correlate_input_and_r_gen(inp, r_gen, time_delay)
+                        correlation[np.isnan(correlation)] = 0
+                        correlation = np.abs(correlation)
+                        correlation = correlation / np.sum(correlation, axis=0)
+                        correlation_times_r_gen_index = (correlation.T * np.arange(1,
+                                                                                r_gen_dim_temp + 1)).T
+
+                        correlation_sum = np.sum(correlation_times_r_gen_index, axis=0)
+                        # total_sum = np.sum(correlation_sum)
+                        results[i_t, :] = correlation_sum
+
+                    fig = px.line(results)
+                    fig.update_yaxes(title="mean r gen dimension")
+                    fig.update_xaxes(title="time delay")
+                    fig.update_layout(
+                        xaxis=dict(
+                            tickmode='array',
+                            tickvals=np.arange(time_delays.size),
+                            ticktext=[str(x) for x in time_delays],
+                        )
+                    )
+                    st.plotly_chart(fig)
+                    st.info("The hope is, that the \"memory of the reservoir\" is saved in the "
+                            "higher pca components. As the \"mean r_gen dim\" increases with the "
+                            "time_delay, this might be correct. On the other hand it be another"
+                            "unaccounted effect. ")
+
+                utils.st_line()
+                if st.checkbox("Remove network and see differences"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+                    st.info("Take the same esn as used for the training and remove the internal "
+                            "reservoir update function, i.e. set the network to 0. "
+                            "Now train the modified reservoir again on the same data and see how "
+                            "the pca components change. This tests the conjecture, that the first, "
+                            "most important, pca states correspond mostly to input, and the higher "
+                            "ones are responsible for the \"memory\". ")
+                    esn_to_test = copy.deepcopy(esn_obj)
+                    esn_to_test._res_internal_update_fct = lambda r: 0
+
+                    y_train_mod_fit, y_train_mod_true, res_train_mod_dict, esn_to_test = esn.train_return_res(
+                        esn_to_test,
+                        x_train,
+                        t_train_sync,
+                    )
+                    esn_to_test = copy.deepcopy(esn_to_test)
+                    w_out_no_network = esn_to_test.get_w_out()
+
+                    r_gen_mod_dict = {"r_gen with network": res_train_dict["r_gen"],
+                                      "r_gen without network": res_train_mod_dict["r_gen"]}
+
+                    st.info("Plot the r_gen time series during training with and without the network: ")
+                    plot.st_plot_dim_selection(r_gen_mod_dict, key="rmv_network")
+
+                    st.info("Plot the different w_outs as barcharts: ")
+                    esnplot.st_plot_w_out_as_barchart(w_out, key="predict_rmv_network1")
+                    esnplot.st_plot_w_out_as_barchart(w_out_no_network, key="predict_rmv_network2")
+
+                    st.info("Calculate for each r gen dimension, the error between the true and "
+                            "the modified r_gen. ")
+                    st.latex(r"\text{error over time} = (\tilde{r}_i(t) - r_i(t))^2 / \sqrt{<r_i^2>_t}")
+                    st.latex(r"\tilde{r_i}: \text{gen res state i without network}")
+                    st.latex(r"r_i: \text{gen res state i with network}")
+                    st.latex(r"\text{Total error per r gen dim} = \sum_\text{time} \text{error over time}")
+
+                    st.info("Beware that sometimes the important pca states are actually nearly the same but flipped,"
+                            "resulting in a big error.")
+
+                    r_gen_difference = res_train_dict["r_gen"] - res_train_mod_dict["r_gen"]
+                    error_over_time = np.abs(r_gen_difference)/np.sqrt(np.mean(np.square(res_train_dict["r_gen"]), axis=0))
+
+                    error_over_r_dim = np.sum(error_over_time, axis=0)
+                    fig = px.line(error_over_r_dim)
+                    fig.update_xaxes(title="r gen index")
+                    fig.update_yaxes(title="Total error per r gen dim")
+                    st.plotly_chart(fig)
+
+                    st.info("We can see that the first components indeed are very similar, i.e. "
+                            "have a small error. ")
+
+                    st.info("Also predict with the modified esn and compare: ")
+                    y_pred_mod, y_pred_mod_true, _, _ = esn.predict_return_res(
+                        esn_to_test,
+                        x_pred,
+                        t_pred_sync)
+
+                    pred_data_dict = {"true": y_pred_mod_true,
+                                      "pred with network": y_pred,
+                                      "pred without network": y_pred_mod,
+                                      }
+                    plot.st_all_timeseries_plots(pred_data_dict, key="predict_rmv network")
+
+                utils.st_line()
+                if st.checkbox("Drive trained reservoir with fading signal"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+                    st.info("Drive a trained (pca) esn with a signal and gradually / fast turn of "
+                            "the signal and see the responds in the generalized reservoir states. ")
+                    esn_to_test = copy.deepcopy(esn_obj)
+
+                    x_pred_fade_out = copy.deepcopy(x_pred)
+                    x_pred_time_steps, x_dim = x_pred.shape
+                    cols = st.columns(2)
+                    with cols[0]:
+                        fade_out_start = int(st.number_input("Fade out start", value=300))
+                    with cols[1]:
+                        fade_out_mode = st.selectbox("fade out mode", ["instant", "exponential"])
+
+                    if fade_out_mode == "instant":
+                        x_pred_fade_out[fade_out_start:, :] = np.zeros(x_dim)
+                    elif fade_out_mode == "exponential":
+                        factor = 0.01
+                        x_pred_fade_out[fade_out_start:, :] = x_pred_fade_out[fade_out_start:, :] * \
+                                                              np.repeat(np.exp(-factor * np.arange(x_pred_time_steps - fade_out_start))[:, np.newaxis],
+                                                                        x_dim, axis=1
+                                                                        )
+                    st.info("Plot fading out signal: ")
+                    to_plot = {"true": x_pred, "faded out": x_pred_fade_out}
+                    plot.st_plot_dim_selection(to_plot, key="fading")
+
+                    st.info("Drive with fading signal: ")
+
+                    r_gen_fadeout, _ = esnexp.drive_reservoir(esn_to_test, x_pred_fade_out)
+                    r_gen_dim = r_gen_fadeout.shape[1]
+                    to_plot = {"r_gen fadeout": r_gen_fadeout, "x_pred fadeout": np.repeat(x_pred_fade_out[:, 0:1], r_gen_dim, axis=1)}
+
+                    plot.st_plot_dim_selection(to_plot)
+
 
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
