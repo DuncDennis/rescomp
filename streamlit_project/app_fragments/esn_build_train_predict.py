@@ -89,7 +89,7 @@ def st_select_esn_type(esn_sub_section: tuple[str, ...] | None = None,
     return esn_type
 
 
-def st_basic_esn_build(key: str | None = None) -> dict[str, object]:
+def st_basic_esn_build(key: str | None = None) -> dict[str, Any]:
     """Streamlit elements to specify the basic esn settings.
 
     Args:
