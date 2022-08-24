@@ -78,23 +78,33 @@ def add_noise(time_series: np.ndarray,
 def fourier_transform_surrogate(time_series: np.ndarray, seed: int = 0) -> np.ndarray:
     """Return simple Fourier transform surrogates.
 
-    Source: Haochun Ma.
+    The seeds for every dimension are constructed by seed_dim = seed + i_dim
+
+    Original source: Haochun Ma. Modified to also work for multidimensional data.
 
     Args:
-        time_series: The 1D input array of shape (timesteps, ).
+        time_series: The time series of shape (timesteps, x_dim).
         seed: The random seed used to randomize the phases.
 
     Returns:
-        A surrogate of the time_series of shape (timesteps, ).
+        A surrogate of the time_series of shape (timesteps, x_dim).
     """
 
-    rng = np.random.default_rng(seed)
+    time_steps, x_dim = time_series.shape
 
-    y = np.fft.rfft(time_series)
-    phi = 2 * np.pi * rng.random(len(y))
-    phi[0] = 0.0
-    if len(time_series) % 2 == 0:
-        phi[-1] = 0.0
-    y = y * np.exp(1j * phi)
+    surrogate_out = np.zeros((time_steps, x_dim))
 
-    return np.ascontiguousarray(np.real(np.fft.irfft(y, n=len(time_series))))
+    for i_x in range(x_dim):
+        dim_seed = seed + i_x
+
+        rng = np.random.default_rng(dim_seed)
+
+        y = np.fft.rfft(time_series[:, i_x])
+        phi = 2 * np.pi * rng.random(len(y))
+        phi[0] = 0.0
+        if time_steps % 2 == 0:
+            phi[-1] = 0.0
+        y = y * np.exp(1j * phi)
+        surrogate_out[:, i_x] = np.ascontiguousarray(np.real(np.fft.irfft(y, n=len(time_series))))
+
+    return surrogate_out
