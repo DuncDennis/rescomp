@@ -7,6 +7,7 @@ from typing import Callable
 import numpy as np
 import networkx as nx
 import streamlit as st
+from sklearn.decomposition import PCA
 
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -332,7 +333,7 @@ def st_all_network_architecture_plots(network: np.ndarray,
 def st_r_gen_std_barplot(r_gen_train: np.ndarray, r_gen_pred: np.ndarray, key: str | None = None
                          ) -> None:
     """Streamlit element to show the std of r_gen_train and r_gen_pred.
-
+    # TODO: maybe make more general?
     Args:
         r_gen_train: The generalized reservoir states during training of shape (train time steps,
                     r_gen dimension).
@@ -385,3 +386,98 @@ def st_r_gen_std_times_w_out_barplot(r_gen_train: np.ndarray, r_gen_pred: np.nda
     if log_y:
         fig.update_yaxes(type="log", exponentformat="E")
     st.plotly_chart(fig)
+
+
+def st_scatter_matrix_plot(res_train_dict: dict[str, np.ndarray],
+                           res_pred_dict: dict[str, np.ndarray],
+                           key: str | None = None) -> None:
+    """Streamlit element to produce a scatter matrix plot for train/pred reservoir states.
+
+    One can decide weather to plot the train or predict reservoir states.
+    One can decide which reservoir states to plot: "r_act_fct_inp", "r_internal", "r_input", "r"
+    or "r_gen".
+    One can decide weather to perform a pca on the data or not.
+
+    Args:
+        res_train_dict: The dictionary of train reservoir states with the keys: "r_act_fct_inp",
+                        "r_internal", "r_input", "r" and "r_gen".
+        res_pred_dict: The dictionary of prediction reservoir states with the keys:
+                        "r_act_fct_inp", "r_internal", "r_input", "r" and "r_gen".
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    """
+
+    st.markdown("Plot a selection of dimension (or pca dimensions) for a reservoir state type.")
+
+    cols = st.columns(2)
+    with cols[0]:
+        train_or_predict = st.selectbox("Train / predict", ["train", "predict"],
+                                        key=f"{key}__st_scatter_matrix_plot__train_pred")
+    with cols[1]:
+        res_type = st.selectbox("Reservoir state type", ["r", "r_input", "r_internal",
+                                                         "r_act_fct_inp", "r_gen"],
+                                key=f"{key}__st_scatter_matrix_plot__res_type")
+
+    if train_or_predict == "train":
+        res_dict = res_train_dict
+    elif train_or_predict == "predict":
+        res_dict = res_pred_dict
+    else:
+        raise ValueError("This train or predict option should not exist. ")
+
+    res_states = res_dict[res_type]
+    res_state_dim = res_states.shape[1]
+    cols = st.columns(2)
+    with cols[0]:
+        min_dim = st.number_input("Min dimension", value=0, min_value=0, max_value=res_state_dim-1,
+                                  key=f"{key}__st_scatter_matrix_plot__min_dim")
+    with cols[1]:
+        max_dim = st.number_input("Max dimension", value=min_dim + 4, min_value=min_dim + 1,
+                                  max_value=res_state_dim-1,
+                                  key=f"{key}__st_scatter_matrix_plot__max_dim")
+    pca_bool = st.checkbox("Perform pca", value=True,
+                           key=f"{key}__st_scatter_matrix_plot__pcabool")
+
+    fig = get_scatter_matrix_plot(states=res_states, min_dim=min_dim, max_dim=max_dim,
+                                  pca_bool=pca_bool)
+    st.plotly_chart(fig)
+
+
+@st.experimental_memo
+def get_scatter_matrix_plot(states: np.ndarray, min_dim: int = 0, max_dim: int = 4,
+                            pca_bool: bool = False) -> go.Figure:
+    """Function to produce a scatter matrix plot of a selection of dims/pca comps of states.
+
+    Args:
+        states: The input array of shape (time_steps, state_dimension).
+        min_dim: The minimal dimension to plot.
+        max_dim: The maximal dimension to plot.
+        pca_bool: Weather to perform PCA or not before plotting the dimensions.
+
+    Returns:
+        A plotly figure with (max_dim - min_dim)^2 subplots, each a 2D scatter plot.
+    """
+    if pca_bool:
+        pca = PCA()
+        components = pca.fit_transform(states)
+        labels = {
+            str(i): f"PC {i + 1} ({var:.1f}%)"
+            for i, var in enumerate(pca.explained_variance_ratio_ * 100)
+        }
+        to_plot = components
+
+    else:
+        labels = {
+            str(i): f"Dim {i+1}" for i in range(states.shape[1])
+        }
+        to_plot = states
+    dimensions = range(min_dim, max_dim)
+
+    fig = px.scatter_matrix(
+        to_plot,
+        labels=labels,
+        dimensions=dimensions,
+    )
+    fig.update_traces(marker={'size': 1})
+    fig.update_traces(diagonal_visible=False)
+    return fig

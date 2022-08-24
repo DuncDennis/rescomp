@@ -226,6 +226,12 @@ if __name__ == '__main__':
                     esnplot.st_reservoir_node_value_timeseries(res_train_dict_no_rgen,
                                                                res_pred_dict_no_rgen, )
 
+                utils.st_line()
+                if st.checkbox("Scatter matrix plot of reservoir states",
+                               key="scatter_matrix_plot__checkbox"):
+                    esnplot.st_scatter_matrix_plot(res_train_dict, res_pred_dict,
+                                                   key="scatter_matrix_plot")
+
             with w_out_r_gen_tab:
                 w_out = esn_obj.get_w_out()
                 if st.checkbox("Output coupling", key="output_coupling_cb"):
