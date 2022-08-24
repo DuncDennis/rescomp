@@ -19,6 +19,7 @@ import streamlit_project.app_fragments.esn_plotting as esnplot
 import streamlit_project.app_fragments.esn_experiments as esnexp
 import numpy as np
 import plotly.express as px
+import rescomp.data_preprocessing as datapre
 import streamlit_project.generalized_plotting.plotly_plots as plpl
 
 if __name__ == '__main__':
@@ -41,10 +42,6 @@ if __name__ == '__main__':
                                                  default_t_pred_disc=2500,
                                                  default_t_pred_sync=200,
                                                  default_t_pred=3000)
-        section_steps = [t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred]
-        section_names = ["train disc", "train sync", "train", "pred disc", "pred sync", "pred"]
-
-        time_steps = sum(section_steps)
 
         if "dt" in system_parameters.keys():
             dt = system_parameters["dt"]
@@ -52,6 +49,11 @@ if __name__ == '__main__':
             dt = 1.0
 
         scale, shift, noise_scale = syssim.st_preprocess_simulation()
+
+        x_dim_pre = syssim.get_x_dim(system_name, system_parameters)
+        embedding_out = syssim.st_embed_timeseries(x_dim_pre, key="embedding")
+        embedding_dims, embedding_delay, embedding_dim_selection = embedding_out
+        t_pred -= embedding_delay  # embedding makes the timeseries shorter.
         utils.st_line()
 
     with st.sidebar:
@@ -81,6 +83,9 @@ if __name__ == '__main__':
 
     with sim_data_tab:
         if simulate_bool:
+            section_steps = [t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred]
+            section_names = ["train disc", "train sync", "train", "pred disc", "pred sync", "pred"]
+            time_steps = sum(section_steps)
 
             time_series = syssim.simulate_trajectory(system_name, system_parameters,
                                                      time_steps)
@@ -89,6 +94,11 @@ if __name__ == '__main__':
                                                        scale=scale,
                                                        shift=shift,
                                                        noise_scale=noise_scale)
+
+            time_series = syssim.get_embedded_time_series(time_series,
+                                                          embedding_dimension=embedding_dims,
+                                                          delay=embedding_delay,
+                                                          dimension_selection=embedding_dim_selection)
             time_series_dict = {"time series": time_series}
 
             x_train, x_pred = syssim.split_time_series_for_train_pred(time_series,
@@ -231,6 +241,12 @@ if __name__ == '__main__':
                 if st.checkbox("Node value time series", key=f"res_train_dict_no_rgen__checkbox"):
                     esnplot.st_reservoir_node_value_timeseries(res_train_dict_no_rgen,
                                                                res_pred_dict_no_rgen, )
+
+                utils.st_line()
+                if st.checkbox("Scatter matrix plot of reservoir states",
+                               key="scatter_matrix_plot__checkbox"):
+                    esnplot.st_scatter_matrix_plot(res_train_dict, res_pred_dict,
+                                                   key="scatter_matrix_plot")
 
             with w_out_r_gen_tab:
                 w_out = esn_obj.get_w_out()
@@ -497,11 +513,16 @@ if __name__ == '__main__':
                     # TODO: EXPERIMENTAL
                     st.warning("EXPERIMENTAL")
                     st.info("Drive a trained (pca) esn with a signal and gradually / fast turn of "
-                            "the signal and see the responds in the generalized reservoir states. ")
+                            "the signal and see the response in the generalized reservoir states. "
+                            "Generally the reservoir state echo falls off really fast. "
+                            "The idea is, that the higher pca states fade out slower. ")
                     esn_to_test = copy.deepcopy(esn_obj)
 
                     x_pred_fade_out = copy.deepcopy(x_pred)
                     x_pred_time_steps, x_dim = x_pred.shape
+
+                    st.info("Specify and plot the fading out signal: ")
+
                     cols = st.columns(2)
                     with cols[0]:
                         fade_out_start = int(st.number_input("Fade out start", value=300))
@@ -511,24 +532,177 @@ if __name__ == '__main__':
                     if fade_out_mode == "instant":
                         x_pred_fade_out[fade_out_start:, :] = np.zeros(x_dim)
                     elif fade_out_mode == "exponential":
-                        factor = 0.01
+                        factor = 0.5
                         x_pred_fade_out[fade_out_start:, :] = x_pred_fade_out[fade_out_start:, :] * \
                                                               np.repeat(np.exp(-factor * np.arange(x_pred_time_steps - fade_out_start))[:, np.newaxis],
                                                                         x_dim, axis=1
                                                                         )
-                    st.info("Plot fading out signal: ")
                     to_plot = {"true": x_pred, "faded out": x_pred_fade_out}
                     plot.st_plot_dim_selection(to_plot, key="fading")
 
-                    st.info("Drive with fading signal: ")
+                    st.info("Drive the reservoir with the fading out signal and plot a response. "
+                            "The r_gen states are rescaled by their std, for better"
+                            " vizualization. ")
 
                     r_gen_fadeout, _ = esnexp.drive_reservoir(esn_to_test, x_pred_fade_out)
+                    r_gen_fadeout_scaled = r_gen_fadeout / np.std(r_gen_fadeout, axis=0)
+                    r_gen_fadeout_scaled[np.isinf(r_gen_fadeout_scaled)] = 0
                     r_gen_dim = r_gen_fadeout.shape[1]
-                    to_plot = {"r_gen fadeout": r_gen_fadeout, "x_pred fadeout": np.repeat(x_pred_fade_out[:, 0:1], r_gen_dim, axis=1)}
+                    to_plot = {"r_gen fadeout rescaled": r_gen_fadeout_scaled, "x_pred fadeout (axis=0)": np.repeat(x_pred_fade_out[:, 0:1], r_gen_dim, axis=1)}
+
+                    plot.st_plot_dim_selection(to_plot, key="r_gen fade")
+
+                    st.info("Calculate the difference of the scaled r_gen, i.e. r[1:] - r[:-1]")
+                    diff = np.diff(r_gen_fadeout_scaled, axis=0)
+                    to_plot = {"diff": diff}
+                    plot.st_plot_dim_selection(to_plot, key="r_gen fade diff")
+
+                    st.info("For each generalized reservoir dimension, starting from the \"fade out start\", "
+                            "calculate the min-max-spread in the difference for a sliding window. "
+                            "If the min-max-spread is smaller than a threshold, the reservoir is considered from "
+                            "this index on to be constant. The time index is saved. "
+                            "I.e. one saves the earliest time index, where the reservoirs echo is "
+                            "killed off. ")
+                    out = diff[fade_out_start:, :]
+                    # out = r_gen_fadeout_scaled[fade_out_start:, :]
+
+                    cols = st.columns(3)
+                    with cols[0]:
+                        time_steps_to_test = int(st.number_input("time steps to test", value=40, key="testimesteps"))
+                    with cols[1]:
+                        pnts_to_try = int(st.number_input("points in sliding window", value=5, key="pntswindow"))
+                    with cols[2]:
+                        threshhold = st.number_input("threshhold", value=0.00001, key="threshtest", step=0.001, format="%f")
+
+                    index_to_save = np.zeros(r_gen_dim)
+                    for i_r_dim in range(r_gen_dim):
+                        min_index_set = False
+                        for i in range(time_steps_to_test):  # time steps.
+                            slice = out[i: i + pnts_to_try, i_r_dim]
+                            min_max = np.ptp(slice)  # for each slice the
+                            if min_max < threshhold:
+                                min_index_set = True
+                                index_to_save[i_r_dim] = i  # + fade_out_start
+                                break
+
+                        if not min_index_set:
+                            index_to_save[i_r_dim] = time_steps_to_test
+
+                    fig = px.line(index_to_save)
+                    fig.update_yaxes(title="time_step after fade_out_start")
+                    fig.update_xaxes(title="r gen dimension")
+                    fig.update_layout(title="Echo in r gen dimensions")
+                    st.plotly_chart(fig)
+                    st.info("One can slightly see that the first pca components have on average a lower memory.")
+
+                utils.st_line()
+                if st.checkbox("Surrogate input as comparison"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+                    st.info("Create the Fourier transform surrogates of the original time series (actually of x_train), "
+                            "and drive the trained reservoir with it and see the r_gen and w_out distribution. ")
+
+                    st.info("Select the seed used for the surrogates, the seeds for each dimension "
+                            "will be seed + i_x_dim:")
+                    seed = int(st.number_input("seed for surrogates", value=0, key="surrogateseed"))
+
+                    surrogate_time_series = datapre.fourier_transform_surrogate(x_train, seed=seed)
+
+                    # x_train_steps, x_dim = x_train.shape
+                    # surrogate_time_series = np.zeros((x_train_steps, x_dim))
+                    #
+                    # for ix in range(x_dim):
+                    #     surrogate_time_series[:, ix] = datapre.fourier_transform_surrogate(
+                    #         x_train[:, ix],
+                    #         seed=seed+ix)
+
+                    st.info("Plot the power spectrum for the surrogate and real x_train time series. "
+                            "It will be the same, by definition. ")
+                    to_plot = {"surrogate": surrogate_time_series, "real": x_train}
+                    measures.st_power_spectrum(to_plot, key="surrogatepower")
+
+                    st.info("Plot the surrogate time series vs. the real time series. "
+                            "The surrogate time_series lost the structure.")
 
                     plot.st_plot_dim_selection(to_plot)
 
+                    st.info("Drive the reservoir")
 
+                    esn_to_test = copy.deepcopy(esn_obj)
+
+                    _, _, res_states_surrogate, esn_to_test = esn.train_return_res(esn_obj, surrogate_time_series, t_train_sync)
+                    w_out_surrogate = esn_to_test.get_w_out()
+                    st.info("Plot the different w_outs as barcharts: ")
+                    esnplot.st_plot_w_out_as_barchart(w_out, key="surrogate normal wout")
+                    esnplot.st_plot_w_out_as_barchart(w_out_surrogate, key="surrogate surrogate wout")
+
+                    st.info("Show the std of r_gen states for the surrogate and the normal train. "
+                            "Confusing labels: r_gen_train = real r_gen, r_gen_pred: surrogate r_gen. ")
+                    esnplot.st_r_gen_std_barplot(res_train_dict["r_gen"], res_states_surrogate["r_gen"])
+
+                utils.st_line()
+                if st.checkbox("Analyize which reservoir nodes go into the pca components"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+
+                    if hasattr(esn_obj, "_pca"):
+                        pca_components = esn_obj._pca.components_  # shape: [n_components, n_features]
+                    else:
+                        raise Exception("ESN object does not have _pca. ")
+                    st.info("Show pca components as an image: ")
+                    st.latex(r"\text{pca} = [a_1, a_2, ...] = \sum_i a_i \boldsymbol{r}_i")
+                    fig = px.imshow(pca_components)
+                    fig.update_xaxes(title="reservoir nodes")
+                    fig.update_yaxes(title="pca component")
+                    st.plotly_chart(fig)
+                    st.info("Calculate and plot a percentaged pca component image and individual components:")
+
+                    st.latex(r"\text{pca percentage of reservoir nodes} = [|a_1|, |a_2|, ...] / \sum|a_i|"
+                             r"= [c_1, c_2, ...]")
+                    pca_components_percentage = (np.abs(pca_components).T / np.sum(np.abs(pca_components), axis=1)).T
+                    fig = px.imshow(pca_components_percentage)
+                    fig.update_xaxes(title="reservoir nodes")
+                    fig.update_yaxes(title="pca component percentage")
+                    st.plotly_chart(fig)
+
+                    fig = px.line(pca_components_percentage.T)
+                    fig.update_xaxes(title="reservoir index")
+                    fig.update_yaxes(title="pca component percentage percentage")
+                    st.plotly_chart(fig)
+
+                    st.info("TBD: ")
+                    st.latex(r"W_{in} ")
+                    w_in = esn_obj._w_in
+                    combination = pca_components_percentage.T @ w_in
+                    esnplot.st_plot_w_out_as_barchart(combination.T, key="pca_comp_node_wout")
+
+                utils.st_line()
+                if st.checkbox("TESTING"):
+
+                    esnplot.st_scatter_matrix_plot(res_train_dict, res_pred_dict)
+
+                    # from sklearn.decomposition import PCA
+                    #
+                    # df = px.data.iris()
+                    # features = ["sepal_width", "sepal_length", "petal_width", "petal_length"]
+                    #
+                    # pca = PCA()
+                    # # components = pca.fit_transform(df[features])
+                    # components = pca.fit_transform(res_train_dict["r_gen"])
+                    # labels = {
+                    #     str(i): f"PC {i + 1} ({var:.1f}%)"
+                    #     for i, var in enumerate(pca.explained_variance_ratio_ * 100)
+                    # }
+                    #
+                    # fig = px.scatter_matrix(
+                    #     components,
+                    #     labels=labels,
+                    #     dimensions=range(4),
+                    #     # color=df["species"]
+                    # )
+                    # fig.update_traces(marker={'size': 1})
+                    # fig.update_traces(diagonal_visible=False)
+                    # st.plotly_chart(fig)
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
