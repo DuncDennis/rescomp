@@ -73,3 +73,28 @@ def add_noise(time_series: np.ndarray,
     rng = np.random.default_rng(seed)
     noise = rng.normal(size=shape, scale=noise_scale)
     return time_series + noise
+
+
+def fourier_transform_surrogate(time_series: np.ndarray, seed: int = 0) -> np.ndarray:
+    """Return simple Fourier transform surrogates.
+
+    Source: Haochun Ma.
+
+    Args:
+        time_series: The 1D input array of shape (timesteps, ).
+        seed: The random seed used to randomize the phases.
+
+    Returns:
+        A surrogate of the time_series of shape (timesteps, ).
+    """
+
+    rng = np.random.default_rng(seed)
+
+    y = np.fft.rfft(time_series)
+    phi = 2 * np.pi * rng.random(len(y))
+    phi[0] = 0.0
+    if len(time_series) % 2 == 0:
+        phi[-1] = 0.0
+    y = y * np.exp(1j * phi)
+
+    return np.ascontiguousarray(np.real(np.fft.irfft(y, n=len(time_series))))
