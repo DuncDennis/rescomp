@@ -16,19 +16,24 @@ def st_line() -> None:
     st.markdown("""---""")
 
 
-def st_selectbox_with_all(name: str, options: list[str], key: str | None = None) -> list[str]:
+def st_selectbox_with_all(name: str, options: list[str],
+                          default_select_all_bool: bool = False,
+                          key: str | None = None) -> list[str]:
     """A streamlit element for a multiselect with a "select all" checkbox.
 
     Args:
         name: The name of the multiselect.
         options: The options in the multiselect.
+        default_select_all_bool: A bool to indicate if select_all should be ticked or not by
+                                 default.
         key: A optional key if it's used multiple times.
 
     Returns:
         The selection.
     """
     container = st.container()
-    all = st.checkbox("Select all", key=f"{key}__select_all")
+    all = st.checkbox("Select all", value=default_select_all_bool,
+                      key=f"{key}__select_all")
     if all:
         default = options
     else:
@@ -54,11 +59,16 @@ def st_dimension_selection(dimension: int, key: str | None = None) -> int:
                            min_value=0, key=f"{key}__dim_selection")
 
 
-def st_dimension_selection_multiple(dimension: int, key: str | None = None) -> list[int]:
+def st_dimension_selection_multiple(dimension: int,
+                                    default_select_all_bool: bool = False,
+                                    key: str | None = None) -> list[int]:
     """Streamlit element to select multiple dimensions.
 
     Args:
         dimension: The maximal dimension that can be selected.
+        default_select_all_bool: A bool to indicate if select_all should be ticked or not by
+                                 default.
+        key: A optional key if it's used multiple times.
 
     Returns:
         A list of integers representing the selected dimensions.
@@ -66,6 +76,7 @@ def st_dimension_selection_multiple(dimension: int, key: str | None = None) -> l
 
     dim_select_opts = [f"{i}" for i in range(dimension)]
     dim_selection = st_selectbox_with_all("Dimensions", dim_select_opts,
+                                          default_select_all_bool=default_select_all_bool,
                                           key=f"{key}__dim_select_mult")
     dim_selection = [int(x) for x in dim_selection]
     return dim_selection
