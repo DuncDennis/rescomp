@@ -397,7 +397,7 @@ def st_show_latex_formula(system_name: str) -> None:
         st.warning("No latex formula for this system implemented.")
 
 
-def st_embed_timeseries(x_dim: int, key: str | None = None) -> tuple[int, int, list[int]]:
+def st_embed_timeseries(x_dim: int, key: str | None = None) -> tuple[int, int, list[int] | None]:
     """Streamlit element to specify the embedding settings.
 
     To be used with get_embedded_time_series.
@@ -412,22 +412,28 @@ def st_embed_timeseries(x_dim: int, key: str | None = None) -> tuple[int, int, l
     """
 
     with st.expander("Embedding:"):
-        cols = st.columns(2)
-        with cols[0]:
-            embedding_dim = int(st.number_input("Embed. dim.", value=0, min_value=0,
-                                                key=f"{key}__st_embed_timeseries__embdim"))
-        with cols[1]:
-            delay = int(st.number_input("Delay", value=1, min_value=1,
-                                        key=f"{key}__st_embed_timeseries__delay"))
-        dimension_selection = utils.st_dimension_selection_multiple(x_dim,
-                                                                    default_select_all_bool=True,
-                                                                    key=f"{key}__st_embed_timeseries")
-    return embedding_dim, delay, dimension_selection
+
+        embedding_bool = st.checkbox("Do embedding", key=f"{key}__st_embed_timeseries__embbool")
+
+        if embedding_bool:
+            cols = st.columns(2)
+            with cols[0]:
+                embedding_dim = int(st.number_input("Embed. dim.", value=0, min_value=0,
+                                                    key=f"{key}__st_embed_timeseries__embdim"))
+            with cols[1]:
+                delay = int(st.number_input("Delay", value=1, min_value=1,
+                                            key=f"{key}__st_embed_timeseries__delay"))
+            dimension_selection = utils.st_dimension_selection_multiple(x_dim,
+                                                                        default_select_all_bool=True,
+                                                                        key=f"{key}__st_embed_timeseries")
+            return embedding_dim, delay, dimension_selection
+        else:
+            return 0, 1, None  # Default values for no embedding.
 
 
 @st.experimental_memo
 def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
-                             delay: int, dimension_selection: list[int]):
+                             delay: int, dimension_selection: list[int] | None):
     """Embed the time series.
 
     Args:
@@ -435,6 +441,7 @@ def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
         embedding_dimension: The number of embedding dimensions to add.
         delay: The time delay to use.
         dimension_selection: A list of ints representing the index of the dimensions to consider.
+                             If None: Take all dimensions.
 
     Returns:
         The embedded time series of shape (timesteps - delay, len(dimension_selection)).
