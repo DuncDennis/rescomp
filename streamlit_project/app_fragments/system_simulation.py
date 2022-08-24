@@ -121,7 +121,8 @@ def st_get_model_system(system_name: str, system_parameters: dict[str, Any],
 
     modified_system_parameters = system_parameters.copy()
 
-    relative_change = st.checkbox("Relative change", key=f"{key}__st_get_model_system__rel_change_check")
+    relative_change = st.checkbox("Relative change",
+                                  key=f"{key}__st_get_model_system__rel_change_check")
 
     for i, (param_name, val) in enumerate(modified_system_parameters.items()):
         val_type = type(val)
@@ -154,8 +155,9 @@ def st_get_model_system(system_name: str, system_parameters: dict[str, Any],
                                               key=f"{key}__st_get_model_system__absint_{i}",
                                               step=1)
                 else:
-                    raise TypeError("Other default keyword arguments than float and int are currently"
-                                    "not supported.")
+                    raise TypeError(
+                        "Other default keyword arguments than float and int are currently"
+                        "not supported.")
             with right:
                 if system_parameters[param_name] == 0:
                     eps = np.nan
@@ -393,6 +395,68 @@ def st_show_latex_formula(system_name: str) -> None:
         st.latex(latex_str)
     else:
         st.warning("No latex formula for this system implemented.")
+
+
+def st_embed_timeseries(x_dim: int, key: str | None = None) -> tuple[int, int, list[int]]:
+    """Streamlit element to specify the embedding settings.
+
+    To be used with get_embedded_time_series.
+
+    Args:
+        x_dim: The dimension of the time series to be embedded.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        A tuple where the fist element is the embedding dimension (int), the second is the
+        time delay (int), and the third is a list of the selected dimensions.
+    """
+
+    with st.expander("Embedding:"):
+        cols = st.columns(2)
+        with cols[0]:
+            embedding_dim = int(st.number_input("Embed. dim.", value=0, min_value=0,
+                                                key=f"{key}__st_embed_timeseries__embdim"))
+        with cols[1]:
+            delay = int(st.number_input("Delay", value=1, min_value=1,
+                                        key=f"{key}__st_embed_timeseries__delay"))
+        dimension_selection = utils.st_dimension_selection_multiple(x_dim,
+                                                                    default_select_all_bool=True,
+                                                                    key=f"{key}__st_embed_timeseries")
+    return embedding_dim, delay, dimension_selection
+
+
+@st.experimental_memo
+def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
+                             delay: int, dimension_selection: list[int]):
+    """Embed the time series.
+
+    Args:
+        time_series: The input time series of shape (timesteps, x_dim).
+        embedding_dimension: The number of embedding dimensions to add.
+        delay: The time delay to use.
+        dimension_selection: A list of ints representing the index of the dimensions to consider.
+
+    Returns:
+        The embedded time series of shape (timesteps - delay, len(dimension_selection)).
+    """
+
+    return datapre.embedding(time_series,
+                             embedding_dimension=embedding_dimension,
+                             delay=delay,
+                             dimension_selection=dimension_selection)
+
+
+def get_x_dim(system_name: str, system_parameters: dict[str, Any]) -> int:
+    """Utility function to get the x_dimension of simulation after specified /w system_parameters.
+
+    Args:
+        system_name: The system name. Has to be implemented in SYSTEM_DICT.
+        system_parameters: The system parameters. Not every kwarg has to be specified.
+
+    Returns:
+        The system dimension
+    """
+    return SYSTEM_DICT[system_name](**system_parameters).sys_dim
 
 
 if __name__ == '__main__':
