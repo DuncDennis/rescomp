@@ -108,3 +108,43 @@ def fourier_transform_surrogate(time_series: np.ndarray, seed: int = 0) -> np.nd
         surrogate_out[:, i_x] = np.ascontiguousarray(np.real(np.fft.irfft(y, n=len(time_series))))
 
     return surrogate_out
+
+
+def embedding(time_series: np.ndarray,
+              embedding_dimension: int,
+              delay: int = 1,
+              dimension_selection: None | list[int] = None
+              ) -> np.ndarray:
+    """Embed a timeseries with, select the delay and the dimensions.
+
+    For each input dimension timeseries x(t), the output dimension is
+    y(t) = [x(t), x(t - 1 * delay), x(t - 2 * delay), x(t - embedding_dimension * delay)].
+
+
+    Args:
+        time_series: The input time series of shape (timesteps, x_dim).
+        embedding_dimension: The number of embedding dimensions to add.
+        delay: The time delay to use.
+        dimension_selection: A list of ints representing the index of the dimensions to consider.
+
+    Returns:
+        The embedded time series of shape (timesteps - delay * embedding_dimension,
+        len(dimension_selection)).
+    """
+
+    initial_time_steps = time_series.shape[0]
+
+    if dimension_selection is not None:
+        time_series = time_series[:, dimension_selection]
+
+    output_time_steps = initial_time_steps - delay * embedding_dimension
+
+    time_series_to_stack = [time_series[:output_time_steps, :], ]
+    for i_emb_dim in range(1, embedding_dimension + 1):
+        if i_emb_dim * delay + output_time_steps == initial_time_steps:
+            time_series_to_stack.append(time_series[i_emb_dim * delay:, :])
+        else:
+            time_series_to_stack.append(time_series[i_emb_dim * delay: i_emb_dim * delay +
+                                                                     output_time_steps, :])
+
+    return np.hstack(time_series_to_stack)
