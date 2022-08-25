@@ -21,6 +21,7 @@ import numpy as np
 import plotly.express as px
 import rescomp.data_preprocessing as datapre
 import streamlit_project.generalized_plotting.plotly_plots as plpl
+import streamlit_project.latex_formulas.esn_pca_formulas as pcalatex
 
 if __name__ == '__main__':
     st.set_page_config("Basic ESN Viewer", page_icon="⚡")
@@ -312,8 +313,9 @@ if __name__ == '__main__':
                 if st.checkbox("Remove generalized reservoir dimensions and see prediction"):
                     # TODO: EXPERIMENTAL
                     st.warning("EXPERIMENTAL")
-                    st.info("Take the trained PCA-ESN and set all w_out entries that correspond to "
-                            "r_gen states that lay between min r_gen_dim and max r_gen_dim to zero.")
+                    st.info(
+                        "Take the trained PCA-ESN and set all w_out entries that correspond to "
+                        "r_gen states that lay between min r_gen_dim and max r_gen_dim to zero.")
 
                     esn_to_test = copy.deepcopy(esn_obj)
                     r_gen_dim = res_pred_dict["r_gen"].shape[1]
@@ -394,13 +396,16 @@ if __name__ == '__main__':
                         "during training"):
                     # TODO: experimental
                     st.warning("EXPERIMENTAL")
-                    st.info("Calculate the same correlation as in \"Correlate generalized reservoir "
-                            "states with input during training\". "
-                            "The time delay is sweeped on the x axis. For every time_delay "
-                            "calculate for every input dimension the \"mean r_gen dimension\", "
-                            "i.e. the \"center of gravity\" of the correlation barplot above. ")
-                    st.latex(r"\tilde{c}_{i, j} = |c_{i, j}| / \sum_i^{\text{r gen dim}} |c_{i, j}|, \qquad i: \text{r gen dim}, j: \text{input dim}")
-                    st.latex(r"\text{mean r gen dimension} = \sum_{i=1}^\text{r gen dim} \tilde{c}_{i, j} \times i")
+                    st.info(
+                        "Calculate the same correlation as in \"Correlate generalized reservoir "
+                        "states with input during training\". "
+                        "The time delay is sweeped on the x axis. For every time_delay "
+                        "calculate for every input dimension the \"mean r_gen dimension\", "
+                        "i.e. the \"center of gravity\" of the correlation barplot above. ")
+                    st.latex(
+                        r"\tilde{c}_{i, j} = |c_{i, j}| / \sum_i^{\text{r gen dim}} |c_{i, j}|, \qquad i: \text{r gen dim}, j: \text{input dim}")
+                    st.latex(
+                        r"\text{mean r gen dimension} = \sum_{i=1}^\text{r gen dim} \tilde{c}_{i, j} \times i")
 
                     inp = x_train[t_train_sync:-1, :]
                     r_gen = res_train_dict["r_gen"]
@@ -421,7 +426,7 @@ if __name__ == '__main__':
                         correlation = np.abs(correlation)
                         correlation = correlation / np.sum(correlation, axis=0)
                         correlation_times_r_gen_index = (correlation.T * np.arange(1,
-                                                                                r_gen_dim_temp + 1)).T
+                                                                                   r_gen_dim_temp + 1)).T
 
                         correlation_sum = np.sum(correlation_times_r_gen_index, axis=0)
                         # total_sum = np.sum(correlation_sum)
@@ -467,7 +472,8 @@ if __name__ == '__main__':
                     r_gen_mod_dict = {"r_gen with network": res_train_dict["r_gen"],
                                       "r_gen without network": res_train_mod_dict["r_gen"]}
 
-                    st.info("Plot the r_gen time series during training with and without the network: ")
+                    st.info(
+                        "Plot the r_gen time series during training with and without the network: ")
                     plot.st_plot_dim_selection(r_gen_mod_dict, key="rmv_network")
 
                     st.info("Plot the different w_outs as barcharts: ")
@@ -476,16 +482,20 @@ if __name__ == '__main__':
 
                     st.info("Calculate for each r gen dimension, the error between the true and "
                             "the modified r_gen. ")
-                    st.latex(r"\text{error over time} = (\tilde{r}_i(t) - r_i(t))^2 / \sqrt{<r_i^2>_t}")
+                    st.latex(
+                        r"\text{error over time} = (\tilde{r}_i(t) - r_i(t))^2 / \sqrt{<r_i^2>_t}")
                     st.latex(r"\tilde{r_i}: \text{gen res state i without network}")
                     st.latex(r"r_i: \text{gen res state i with network}")
-                    st.latex(r"\text{Total error per r gen dim} = \sum_\text{time} \text{error over time}")
+                    st.latex(
+                        r"\text{Total error per r gen dim} = \sum_\text{time} \text{error over time}")
 
-                    st.info("Beware that sometimes the important pca states are actually nearly the same but flipped,"
-                            "resulting in a big error.")
+                    st.info(
+                        "Beware that sometimes the important pca states are actually nearly the same but flipped,"
+                        "resulting in a big error.")
 
                     r_gen_difference = res_train_dict["r_gen"] - res_train_mod_dict["r_gen"]
-                    error_over_time = np.abs(r_gen_difference)/np.sqrt(np.mean(np.square(res_train_dict["r_gen"]), axis=0))
+                    error_over_time = np.abs(r_gen_difference) / np.sqrt(
+                        np.mean(np.square(res_train_dict["r_gen"]), axis=0))
 
                     error_over_r_dim = np.sum(error_over_time, axis=0)
                     fig = px.line(error_over_r_dim)
@@ -534,7 +544,9 @@ if __name__ == '__main__':
                     elif fade_out_mode == "exponential":
                         factor = 0.5
                         x_pred_fade_out[fade_out_start:, :] = x_pred_fade_out[fade_out_start:, :] * \
-                                                              np.repeat(np.exp(-factor * np.arange(x_pred_time_steps - fade_out_start))[:, np.newaxis],
+                                                              np.repeat(np.exp(-factor * np.arange(
+                                                                  x_pred_time_steps - fade_out_start))[
+                                                                        :, np.newaxis],
                                                                         x_dim, axis=1
                                                                         )
                     to_plot = {"true": x_pred, "faded out": x_pred_fade_out}
@@ -548,7 +560,9 @@ if __name__ == '__main__':
                     r_gen_fadeout_scaled = r_gen_fadeout / np.std(r_gen_fadeout, axis=0)
                     r_gen_fadeout_scaled[np.isinf(r_gen_fadeout_scaled)] = 0
                     r_gen_dim = r_gen_fadeout.shape[1]
-                    to_plot = {"r_gen fadeout rescaled": r_gen_fadeout_scaled, "x_pred fadeout (axis=0)": np.repeat(x_pred_fade_out[:, 0:1], r_gen_dim, axis=1)}
+                    to_plot = {"r_gen fadeout rescaled": r_gen_fadeout_scaled,
+                               "x_pred fadeout (axis=0)": np.repeat(x_pred_fade_out[:, 0:1],
+                                                                    r_gen_dim, axis=1)}
 
                     plot.st_plot_dim_selection(to_plot, key="r_gen fade")
 
@@ -557,22 +571,26 @@ if __name__ == '__main__':
                     to_plot = {"diff": diff}
                     plot.st_plot_dim_selection(to_plot, key="r_gen fade diff")
 
-                    st.info("For each generalized reservoir dimension, starting from the \"fade out start\", "
-                            "calculate the min-max-spread in the difference for a sliding window. "
-                            "If the min-max-spread is smaller than a threshold, the reservoir is considered from "
-                            "this index on to be constant. The time index is saved. "
-                            "I.e. one saves the earliest time index, where the reservoirs echo is "
-                            "killed off. ")
+                    st.info(
+                        "For each generalized reservoir dimension, starting from the \"fade out start\", "
+                        "calculate the min-max-spread in the difference for a sliding window. "
+                        "If the min-max-spread is smaller than a threshold, the reservoir is considered from "
+                        "this index on to be constant. The time index is saved. "
+                        "I.e. one saves the earliest time index, where the reservoirs echo is "
+                        "killed off. ")
                     out = diff[fade_out_start:, :]
                     # out = r_gen_fadeout_scaled[fade_out_start:, :]
 
                     cols = st.columns(3)
                     with cols[0]:
-                        time_steps_to_test = int(st.number_input("time steps to test", value=40, key="testimesteps"))
+                        time_steps_to_test = int(
+                            st.number_input("time steps to test", value=40, key="testimesteps"))
                     with cols[1]:
-                        pnts_to_try = int(st.number_input("points in sliding window", value=5, key="pntswindow"))
+                        pnts_to_try = int(
+                            st.number_input("points in sliding window", value=5, key="pntswindow"))
                     with cols[2]:
-                        threshhold = st.number_input("threshhold", value=0.00001, key="threshtest", step=0.001, format="%f")
+                        threshhold = st.number_input("threshhold", value=0.00001, key="threshtest",
+                                                     step=0.001, format="%f")
 
                     index_to_save = np.zeros(r_gen_dim)
                     for i_r_dim in range(r_gen_dim):
@@ -593,18 +611,22 @@ if __name__ == '__main__':
                     fig.update_xaxes(title="r gen dimension")
                     fig.update_layout(title="Echo in r gen dimensions")
                     st.plotly_chart(fig)
-                    st.info("One can slightly see that the first pca components have on average a lower memory.")
+                    st.info(
+                        "One can slightly see that the first pca components have on average a lower memory.")
 
                 utils.st_line()
                 if st.checkbox("Surrogate input as comparison"):
                     # TODO: EXPERIMENTAL
                     st.warning("EXPERIMENTAL")
-                    st.info("Create the Fourier transform surrogates of the original time series (actually of x_train), "
-                            "and drive the trained reservoir with it and see the r_gen and w_out distribution. ")
+                    st.info(
+                        "Create the Fourier transform surrogates of the original time series (actually of x_train), "
+                        "and drive the trained reservoir with it and see the r_gen and w_out distribution. ")
 
-                    st.info("Select the seed used for the surrogates, the seeds for each dimension "
-                            "will be seed + i_x_dim:")
-                    seed = int(st.number_input("seed for surrogates", value=0, key="surrogateseed"))
+                    st.info(
+                        "Select the seed used for the surrogates, the seeds for each dimension "
+                        "will be seed + i_x_dim:")
+                    seed = int(
+                        st.number_input("seed for surrogates", value=0, key="surrogateseed"))
 
                     surrogate_time_series = datapre.fourier_transform_surrogate(x_train, seed=seed)
 
@@ -616,8 +638,9 @@ if __name__ == '__main__':
                     #         x_train[:, ix],
                     #         seed=seed+ix)
 
-                    st.info("Plot the power spectrum for the surrogate and real x_train time series. "
-                            "It will be the same, by definition. ")
+                    st.info(
+                        "Plot the power spectrum for the surrogate and real x_train time series. "
+                        "It will be the same, by definition. ")
                     to_plot = {"surrogate": surrogate_time_series, "real": x_train}
                     measures.st_power_spectrum(to_plot, key="surrogatepower")
 
@@ -630,15 +653,146 @@ if __name__ == '__main__':
 
                     esn_to_test = copy.deepcopy(esn_obj)
 
-                    _, _, res_states_surrogate, esn_to_test = esn.train_return_res(esn_obj, surrogate_time_series, t_train_sync)
+                    _, _, res_states_surrogate, esn_to_test = esn.train_return_res(esn_obj,
+                                                                                   surrogate_time_series,
+                                                                                   t_train_sync)
                     w_out_surrogate = esn_to_test.get_w_out()
                     st.info("Plot the different w_outs as barcharts: ")
                     esnplot.st_plot_w_out_as_barchart(w_out, key="surrogate normal wout")
-                    esnplot.st_plot_w_out_as_barchart(w_out_surrogate, key="surrogate surrogate wout")
+                    esnplot.st_plot_w_out_as_barchart(w_out_surrogate,
+                                                      key="surrogate surrogate wout")
 
                     st.info("Show the std of r_gen states for the surrogate and the normal train. "
                             "Confusing labels: r_gen_train = real r_gen, r_gen_pred: surrogate r_gen. ")
-                    esnplot.st_r_gen_std_barplot(res_train_dict["r_gen"], res_states_surrogate["r_gen"])
+                    esnplot.st_r_gen_std_barplot(res_train_dict["r_gen"],
+                                                 res_states_surrogate["r_gen"])
+
+                utils.st_line()
+                if st.checkbox("Analyize which input dimensions go into the pca components"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+
+                    if hasattr(esn_obj, "_pca"):
+                        pca_components = esn_obj._pca.components_  # shape: [n_components, n_features]
+                    else:
+                        raise Exception("ESN object does not have _pca. ")
+
+                    st.info("Idea: It seems like the first pca components are dominated by the "
+                            "input coupling in the reservoir nodes. Here we try to quantify how "
+                            "much of the individual input dimensions go into the pca components. ")
+
+                    st.info("The PCA transformation is substraction by a constant vector, and the "
+                            "multiplication of a unitary matrix: ")
+                    st.latex(pcalatex.pca_transformation)
+                    st.latex(pcalatex.pca_transformation_definition)
+                    st.info("The reservoir state in its own coordinate system can be written as: ")
+                    st.latex(pcalatex.reservoir_states)
+                    st.latex(pcalatex.res_state_unit_vectors_explanation)
+
+                    st.info("The inverse pca transformation is given as: ")
+                    st.latex(pcalatex.pca_inverse_transformation)
+
+                    st.info(
+                        "Then the pca components in the resrevoir state coordinate system are given as: ")
+                    st.latex(pcalatex.pca_components)
+
+                    if st.checkbox("Show pca components as an image: ", key="pca_comp_as_image"):
+                        fig = px.imshow(pca_components)
+                        fig.update_xaxes(title="reservoir nodes")
+                        fig.update_yaxes(title="pca component")
+                        st.plotly_chart(fig)
+                    if st.checkbox("Show pca components as line plots: ",
+                                   key="pca_comp_as_lineplot"):
+                        fig = px.line(pca_components)
+                        fig.update_xaxes(title="reservoir index")
+                        fig.update_yaxes(title="m_j")
+                        fig.for_each_trace(lambda t: t.update(name=f"PC: {t.name}",
+                                                              legendgroup=f"PC: {t.name}",
+                                                              hovertemplate=t.hovertemplate.replace(
+                                                                  t.name, f"PC: {t.name}")
+                                                              )
+                                           )
+                        st.plotly_chart(fig)
+                    st.info(
+                        "If we approximate the reservoir states just as a function of the input: ")
+                    st.latex(pcalatex.reservoir_as_function_of_input_approx)
+
+                    st.info("We can write the pca transformed vector approximately as: ")
+                    st.latex(pcalatex.pca_vector_as_fct_of_input)
+
+                    st.info("If the input vector is given as: ")
+                    st.latex(pcalatex.input_states)
+
+                    st.info("The resulting modified pca component vectors are given as:")
+                    st.latex(pcalatex.pca_components_as_fct_of_input)
+
+                    st.info("Now we can estimate how much of each input dimension goes into a "
+                            "pca components. For a three dimensional input the modified pca "
+                            "component would be a three dimensional vector: ")
+
+                    st.latex(r"\boldsymbol{n}_j = [n_{j, 1}, n_{j, 2}, n_{j, 3}]^\intercal")
+
+                    w_in = esn_obj._w_in
+                    if st.checkbox(
+                            "Show absolute values of n_j as a matrix barplot, compare with w_out, "
+                            "and input-r_gen correlation (timedelay=0).",
+                            key="w_in_pca_n_j_barplot"):
+
+                        # get n:
+                        n = pca_components @ w_in
+
+                        # get w_out:
+                        w_out = esn_obj.get_w_out()
+
+                        # get correlation:
+                        inp = x_train[t_train_sync:-1, :]
+                        r_gen = res_train_dict["r_gen"]
+                        correlation = esnexp.correlate_input_and_r_gen(inp, r_gen, time_delay=0)
+
+                        max_index = int(st.number_input("max index to show: ", value=5, step=1,
+                                                        key="w_in_pca_n_j_barplot__max_index"))
+
+                        abs_bool = st.checkbox("Absolute values", value=True,
+                                               key="w_in_pca_n_j_barplot__absbool")
+
+                        normalize_by_sum = st.checkbox("Normalize matrix by sum",
+                                                       key="w_in_pca_n_j_barplot__normalize",
+                                                       disabled=not abs_bool)
+
+                        log_y = st.checkbox("log y", key=f"w_in_pca_n_j_barplot__logy",
+                                                       disabled=not abs_bool)
+
+                        if normalize_by_sum:
+                            n = (np.abs(n).T / np.sum(np.abs(n), axis=1)).T
+                            w_out = (np.abs(w_out) / np.sum(np.abs(w_out), axis=0))
+                            correlation = (np.abs(correlation).T / np.sum(np.abs(correlation),
+                                                                          axis=1)).T
+
+                        st.markdown("**n plot:**")
+
+                        fig = plpl.matrix_as_barchart(n[:max_index, :], x_axis="pca component",
+                                                      y_axis="input dim",
+                                                      value_name="n", log_y=log_y, abs_bool=abs_bool)
+                        st.plotly_chart(fig)
+
+                        st.markdown("**w_out plot:**")
+
+                        fig = plpl.matrix_as_barchart(w_out[:, :max_index].T, x_axis="r_gen index",
+                                                      y_axis="out dim",
+                                                      value_name="w_out", log_y=log_y,
+                                                      abs_bool=abs_bool)
+                        st.plotly_chart(fig)
+
+                        st.markdown("**Correlation:**")
+
+                        fig = plpl.matrix_as_barchart(correlation[:max_index, :], x_axis="r_gen index",
+                                                      y_axis="input dim",
+                                                      value_name="correlation", log_y=log_y,
+                                                      abs_bool=abs_bool)
+                        st.plotly_chart(fig)
+                        st.info("We can see clearly that the first pca nodes get the input dimensions "
+                                "in the same relations as w_out fitting the output dimensions. ")
+
 
                 utils.st_line()
                 if st.checkbox("Analyize which reservoir nodes go into the pca components"):
@@ -655,54 +809,26 @@ if __name__ == '__main__':
                     fig.update_xaxes(title="reservoir nodes")
                     fig.update_yaxes(title="pca component")
                     st.plotly_chart(fig)
-                    st.info("Calculate and plot a percentaged pca component image and individual components:")
+                    st.info(
+                        "Calculate and plot a percentaged pca component image and individual components:")
 
-                    st.latex(r"\text{pca percentage of reservoir nodes} = [|a_1|, |a_2|, ...] / \sum|a_i|"
-                             r"= [c_1, c_2, ...]")
-                    pca_components_percentage = (np.abs(pca_components).T / np.sum(np.abs(pca_components), axis=1)).T
+                    st.latex(
+                        r"\text{pca percentage of reservoir nodes} = [|a_1|, |a_2|, ...] / \sum|a_i|"
+                        r"= [c_1, c_2, ...]")
+                    pca_components_percentage = (
+                                np.abs(pca_components).T / np.sum(np.abs(pca_components),
+                                                                  axis=1)).T
                     fig = px.imshow(pca_components_percentage)
                     fig.update_xaxes(title="reservoir nodes")
                     fig.update_yaxes(title="pca component percentage")
                     st.plotly_chart(fig)
 
-                    fig = px.line(pca_components_percentage.T)
-                    fig.update_xaxes(title="reservoir index")
-                    fig.update_yaxes(title="pca component percentage percentage")
-                    st.plotly_chart(fig)
-
-                    st.info("TBD: ")
-                    st.latex(r"W_{in} ")
-                    w_in = esn_obj._w_in
-                    combination = pca_components_percentage.T @ w_in
-                    esnplot.st_plot_w_out_as_barchart(combination.T, key="pca_comp_node_wout")
-
-                utils.st_line()
-                if st.checkbox("TESTING"):
-
-                    esnplot.st_scatter_matrix_plot(res_train_dict, res_pred_dict)
-
-                    # from sklearn.decomposition import PCA
-                    #
-                    # df = px.data.iris()
-                    # features = ["sepal_width", "sepal_length", "petal_width", "petal_length"]
-                    #
-                    # pca = PCA()
-                    # # components = pca.fit_transform(df[features])
-                    # components = pca.fit_transform(res_train_dict["r_gen"])
-                    # labels = {
-                    #     str(i): f"PC {i + 1} ({var:.1f}%)"
-                    #     for i, var in enumerate(pca.explained_variance_ratio_ * 100)
-                    # }
-                    #
-                    # fig = px.scatter_matrix(
-                    #     components,
-                    #     labels=labels,
-                    #     dimensions=range(4),
-                    #     # color=df["species"]
-                    # )
-                    # fig.update_traces(marker={'size': 1})
-                    # fig.update_traces(diagonal_visible=False)
-                    # st.plotly_chart(fig)
+                    if st.checkbox("Plot pca component percentage vs. reservoir index: ",
+                                   key="pcaperc_vs_res"):
+                        fig = px.line(pca_components_percentage.T)
+                        fig.update_xaxes(title="reservoir index")
+                        fig.update_yaxes(title="pca component percentage")
+                        st.plotly_chart(fig)
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
