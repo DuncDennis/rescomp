@@ -18,6 +18,7 @@ import streamlit_project.app_fragments.esn_plotting as esnplot
 # TODO: FOR EXPERIMENTAL:
 import streamlit_project.app_fragments.esn_experiments as esnexp
 import numpy as np
+import pandas as pd
 import plotly.express as px
 import rescomp.data_preprocessing as datapre
 import streamlit_project.generalized_plotting.plotly_plots as plpl
@@ -630,14 +631,6 @@ if __name__ == '__main__':
 
                     surrogate_time_series = datapre.fourier_transform_surrogate(x_train, seed=seed)
 
-                    # x_train_steps, x_dim = x_train.shape
-                    # surrogate_time_series = np.zeros((x_train_steps, x_dim))
-                    #
-                    # for ix in range(x_dim):
-                    #     surrogate_time_series[:, ix] = datapre.fourier_transform_surrogate(
-                    #         x_train[:, ix],
-                    #         seed=seed+ix)
-
                     st.info(
                         "Plot the power spectrum for the surrogate and real x_train time series. "
                         "It will be the same, by definition. ")
@@ -793,7 +786,6 @@ if __name__ == '__main__':
                         st.info("We can see clearly that the first pca nodes get the input dimensions "
                                 "in the same relations as w_out fitting the output dimensions. ")
 
-
                 utils.st_line()
                 if st.checkbox("Analyize which reservoir nodes go into the pca components"):
                     # TODO: EXPERIMENTAL
@@ -829,6 +821,259 @@ if __name__ == '__main__':
                         fig.update_xaxes(title="reservoir index")
                         fig.update_yaxes(title="pca component percentage")
                         st.plotly_chart(fig)
+
+                utils.st_line()
+                if st.checkbox("Split the output of the generalized reservoir nodes and see driving "
+                               "with x_train: ", key="splitoutput_rgen"):
+                    # TODO: EXPERIMENTAL
+                    st.warning("EXPERIMENTAL")
+                    st.info(
+                        "Take the esn r_gen states used for training and split the states at some "
+                        "r_gen dimensions. For each side of the split (The first and the last r_gen "
+                        "states) calculate the partial output that they produce. ")
+
+                    esn_to_test = copy.deepcopy(esn_obj)
+                    r_gen_states = res_train_dict["r_gen"]
+                    r_gen_dim = r_gen_states.shape[1]
+                    w_out = esn_to_test.get_w_out()
+
+                    i_rgen_dim_split = int(
+                        st.number_input("split r_gen_dim", value=50, min_value=0,
+                                        max_value=r_gen_dim - 1,
+                                        key="r_gen_dim split"))
+
+                    r_gen_first = r_gen_states[:, :i_rgen_dim_split]
+                    r_gen_last = r_gen_states[:, i_rgen_dim_split:]
+
+                    esn_output_first = (w_out[:, :i_rgen_dim_split] @ r_gen_first.T).T
+                    esn_output_last = (w_out[:, i_rgen_dim_split:] @ r_gen_last.T).T
+                    to_corr_y_dict = {"esn output first": esn_output_first,
+                                      "esn output last": esn_output_last}
+
+                    st.write("nr of first r_gen dims", r_gen_first.shape[1],
+                             "nr of last r_gen dims", r_gen_last.shape[1])
+                    plot.st_default_simulation_plot_dict(to_corr_y_dict)
+
+                    st.info("As a comparison plot the real input (the data the esn was driven with), "
+                            "The real output (what the r_gen states were fitted to)"
+                            "and the difference to the next time step. ")
+
+                    inp = x_train[t_train_sync:-1, :]
+                    out = x_train[t_train_sync + 1:, :]
+                    to_corr_x_dict = {"real input": inp,
+                                      "real output": out,
+                                      "real difference": out - inp}
+                    plot.st_default_simulation_plot_dict(to_corr_x_dict)
+
+                    st.info("Now compare the first esn output with the real input and real output: ")
+                    to_plot = {"esn_output_first": esn_output_first,
+                               "real input": inp,
+                               "real output": out}
+
+                    plot.st_default_simulation_plot_dict(to_plot)
+                    plot.st_plot_dim_selection(to_plot, key="output split input")
+
+                    st.info("Now compare the esn output last with the real difference: ")
+                    to_plot = {"esn_output_last": esn_output_last, "real difference": out - inp}
+                    plot.st_default_simulation_plot_dict(to_plot)
+                    plot.st_plot_dim_selection(to_plot, key="output split")
+
+                    st.info("Now correlate both partial esn outputs with the real input and the "
+                            "real difference. The correlation value is the sum of the diagonal "
+                            "elements of the correlation matrix. "
+                            "I.e. Only a dimension is correlated with the same dimension.")
+
+                    corr_data_summed_dict = {  # type: ignore
+                        "correlation x": [],
+                        "correlation y": [],
+                        "correlation value": []
+                    }
+
+                    for x_name, x_data in to_corr_x_dict.items():
+                        for y_name, y_data in to_corr_y_dict.items():
+                            corr_multidim = esnexp.correlate_input_and_r_gen(x_data,
+                                                                             y_data,
+                                                                             time_delay=0)
+                            # corr_summed = np.sum(corr_multidim)
+                            corr_summed = np.sum(np.diag(corr_multidim))
+                            # corr_summed = np.sum(np.abs(corr_multidim))
+                            corr_data_summed_dict["correlation x"].append(x_name)
+                            corr_data_summed_dict["correlation y"].append(y_name)
+                            corr_data_summed_dict["correlation value"].append(corr_summed)
+                    fig = px.bar(corr_data_summed_dict, x="correlation x", y="correlation value",
+                                 color="correlation y", barmode="group")
+                    st.plotly_chart(fig)
+
+                    with st.expander("Findings: "):
+                        st.info("When using a linear activation function: "
+                                "The dimensionwise first_esn_output vs. input vs. output plot "
+                                "shows, that: "
+                                "For linear dimensions (i.e. linear term in the system "
+                                "equation) the first_esn_output plot is synchronized with the output. "
+                                "probably because its easier to predict. "
+                                "For the non-linear dimensions (i.e. non-linear terms in the "
+                                "system equations) first_esn_output is synchronized with the input "
+                                "(probably since the other nodes are needed to fit the output. ")
+
+                    st.write(r_gen_states.shape, x_train.shape, inp.shape)
+
+                    # Dimension wise correlation (no cross correlation between dimension).
+                    if st.checkbox("Dimension wise correlation: ",
+                                   key="dimwise correlation split rgen"):
+                        corr_data_dict = {"correlation x": [], "correlation y": [],
+                                          "correlation value": [], "dimension": []}
+                        for x_name, x_data in to_corr_x_dict.items():
+                            for y_name, y_data in to_corr_y_dict.items():
+                                corr_multidim = esnexp.correlate_input_and_r_gen(x_data,
+                                                                                 y_data,
+                                                                                 time_delay=0)
+
+                                for i_dim in range(corr_multidim.shape[0]):
+                                    corr_value = corr_multidim[i_dim, i_dim]
+                                    corr_data_dict["dimension"].append(i_dim)
+                                    corr_data_dict["correlation x"].append(x_name)
+                                    corr_data_dict["correlation y"].append(y_name)
+                                    corr_data_dict["correlation value"].append(corr_value)
+                        df_corr = pd.DataFrame.from_dict(corr_data_dict)
+
+                        fig = px.bar(df_corr, x="correlation x",
+                                     y="correlation value",
+                                     color="correlation y",
+                                     barmode="group",
+                                     facet_row="dimension")
+                        st.plotly_chart(fig)
+                        st.write(df_corr)
+
+                    if st.checkbox("Dimension wise correlation (also cross dimensions): ",
+                                   key="dimwise cross-correlation split rgen"):
+                        # Multidimensional correlation:
+                        corr_data_dict = {"correlation x": [], "correlation y": [],
+                                          "correlation value": [], "x_dim": [], "y_dim": []}
+                        for x_name, x_data in to_corr_x_dict.items():
+                            for y_name, y_data in to_corr_y_dict.items():
+                                corr_multidim = esnexp.correlate_input_and_r_gen(x_data,
+                                                                                 y_data,
+                                                                                 time_delay=0)
+
+                                for i_x in range(corr_multidim.shape[0]):
+                                    for i_y in range(corr_multidim.shape[1]):
+                                        corr_value = corr_multidim[i_x, i_y]
+                                        corr_data_dict["x_dim"].append(i_x)
+                                        corr_data_dict["y_dim"].append(i_y)
+                                        corr_data_dict["correlation x"].append(x_name)
+                                        corr_data_dict["correlation y"].append(y_name)
+                                        corr_data_dict["correlation value"].append(corr_value)
+                        df_corr = pd.DataFrame.from_dict(corr_data_dict)
+                        fig = px.bar(df_corr, x="correlation x",
+                                     y="correlation value",
+                                     color="correlation y",
+                                     barmode="group",
+                                     facet_row="x_dim",
+                                     facet_col="y_dim")
+                        st.plotly_chart(fig)
+                        st.write(df_corr)
+                utils.st_line()
+                if st.checkbox("W_out pca vs W_out normal ESN: ", key="w_out_pca vs_ w_out normal"):
+                    # TODO: Experimental
+                    st.warning("EXPERIMENTAL")
+                    st.info("This experiment assumes that the specified esn on the right is a ESN_pca.")
+                    if esn_type != "ESN_pca":
+                        st.warning("ESN type must be \"ESN_pca\"")
+
+                    esn_to_test = copy.deepcopy(esn_obj)
+                    if hasattr(esn_to_test, "_pca"):
+                        pca_components = esn_to_test._pca.components_  # shape: [n_components, n_features]
+                    else:
+                        raise Exception("ESN object does not have _pca. ")
+
+                    r_dim = build_args["r_dim"]
+                    r_gen_dim = res_train_dict["r_gen"].shape[1]
+
+                    w_out_pca = esn_to_test.get_w_out()
+                    if r_dim < r_gen_dim:
+                        w_out_pca = w_out_pca[:, :r_dim]
+
+                    esn_type_comparison = st.selectbox("ESN normal or normal centered: ", ["ESN_normal", "ESN_normal_centered"])
+
+                    esn_normal = esn.build(esn_type=esn_type_comparison, seed=seed, x_dim=x_dim,
+                                           **build_args)
+
+                    esn_normal = copy.deepcopy(esn_normal)
+                    y_train_fit_normal, y_train_true_normal, res_train_dict_normal, esn_normal = \
+                        esn.train_return_res(
+                            esn_normal,
+                            x_train,
+                            t_train_sync,
+                        )
+
+                    w_out_normal = esn_normal.get_w_out()
+                    if r_dim < r_gen_dim:
+                        w_out_normal = w_out_normal[:, :r_dim]
+
+                    w_out_pca_times_pca = w_out_pca @ pca_components
+
+                    w_out_pca_from_normal = w_out_normal @ np.linalg.inv(pca_components)
+
+                    st.info("Both as PCA w_out (first real pca, second from normal and pca_components):")
+                    st.markdown("**w_out_pca:**")
+                    esnplot.st_plot_w_out_as_barchart(w_out_pca, key="pca original")
+                    st.markdown("**w_out_normal @ pca_components:**")
+                    esnplot.st_plot_w_out_as_barchart(w_out_pca_from_normal, key="pca from normal")
+                    st.markdown("**Difference:**")
+                    esnplot.st_plot_w_out_as_barchart(w_out_pca - w_out_pca_from_normal,
+                                                      key="pca vs pca from normal difference")
+
+                    st.info("Both as normal w_out (first real normal, second from pca and pca_components):")
+                    st.markdown("**w_out_normal**")
+                    esnplot.st_plot_w_out_as_barchart(w_out_normal, key="normal original")
+                    st.markdown("**w_out_pca @ pca_components ^(-1)**")
+                    esnplot.st_plot_w_out_as_barchart(w_out_pca_times_pca, key="normal from pca")
+                    st.markdown("**Difference:**")
+                    esnplot.st_plot_w_out_as_barchart(w_out_normal - w_out_pca_times_pca,
+                                                      key="normal vs pca normal difference")
+
+                    st.write("ESN offset: ", esn_to_test._input_data_mean)
+
+                utils.st_line()
+                if st.checkbox("R_Gen std deviation plots during training: ", key="r_gen std plots"):
+                    # TODO: Experimental
+                    st.warning("EXPERIMENTAL")
+                    st.info("Plot the logarithmic standard deviaiton plot of r_gen for different "
+                            "activation functions: ")
+
+                    results_dict = {"activation function": [],  # type: ignore
+                                    "var of rgen": [],
+                                    "std of rgen": [],
+                                    "rgen index": []}
+
+                    for act_fct in ["tanh", "sigmoid", "relu", "linear"]:
+                        build_args["act_fct_opt"] = act_fct
+                        esn_pca_test = esn.build(esn_type="ESN_pca", seed=seed,
+                                                 x_dim=x_dim,
+                                                 **build_args)
+                        esn_pca_test = copy.deepcopy(esn_pca_test)
+                        _, _, res_train_dict_pca, _ = esn.train_return_res(
+                            esn_pca_test,
+                            x_train,
+                            t_train_sync,
+                        )
+
+                        r_gen = res_train_dict_pca["r_gen"]
+                        std = np.std(r_gen, axis=0)
+                        var = np.var(r_gen, axis=0)
+                        rgendims = std.shape[0]
+                        results_dict["rgen index"] += np.arange(rgendims).tolist()
+                        results_dict["var of rgen"] += var.tolist()
+                        results_dict["std of rgen"] += std.tolist()
+                        results_dict["activation function"] += [act_fct, ] * rgendims
+
+                    df_to_plot = pd.DataFrame.from_dict(results_dict)  # type: ignore
+                    fig = px.line(df_to_plot,
+                                  x="rgen index",
+                                  y="var of rgen",
+                                  color="activation function", log_y=True)
+                    st.plotly_chart(fig)
+
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
