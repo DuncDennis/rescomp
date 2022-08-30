@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from sklearn.decomposition import PCA
 
 
 def scale_and_shift(time_series: np.ndarray, scale: float | np.ndarray | None = None,
@@ -148,3 +149,16 @@ def embedding(time_series: np.ndarray,
                                                                      output_time_steps, :])
 
     return np.hstack(time_series_to_stack)
+
+
+def pca_transform(time_series: np.ndarray) -> np.ndarray:
+    """Perform a pca transform the time_series.
+
+    Args:
+        time_series: The input time series of shape (timesteps, x_dim).
+
+
+    Returns:
+        The pca transformed time series of shape (timesteps, x_dim).
+    """
+    return PCA().fit_transform(time_series)
