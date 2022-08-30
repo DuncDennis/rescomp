@@ -433,7 +433,7 @@ def st_embed_timeseries(x_dim: int, key: str | None = None) -> tuple[int, int, l
 
 @st.experimental_memo
 def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
-                             delay: int, dimension_selection: list[int] | None):
+                             delay: int, dimension_selection: list[int] | None) -> np.ndarray:
     """Embed the time series.
 
     Args:
@@ -451,6 +451,34 @@ def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
                              embedding_dimension=embedding_dimension,
                              delay=delay,
                              dimension_selection=dimension_selection)
+
+
+def st_pca_transform_time_series(key: str | None = None) -> bool:
+    """Streamlit element to specify whether to perform the pca transformation or not.
+
+    To be used with "get_pca_transformed_time_series".
+
+    Args:
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        A bool whether to perform the pca transform or not.
+    """
+    with st.expander("PCA transform:"):
+        return st.checkbox("Do pca transform", key=f"{key}__st_pca_transform_time_series")
+
+
+@st.experimental_memo
+def get_pca_transformed_time_series(time_series: np.ndarray) -> np.ndarray:
+    """Perform a pca transform the time_series.
+
+    Args:
+        time_series: The input time series of shape (timesteps, x_dim).
+
+    Returns:
+        The pca transformed time series of shape (timesteps, x_dim).
+    """
+    return datapre.pca_transform(time_series)
 
 
 def get_x_dim(system_name: str, system_parameters: dict[str, Any]) -> int:
