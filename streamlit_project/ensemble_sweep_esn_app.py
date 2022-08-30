@@ -26,7 +26,7 @@ import streamlit_project.latex_formulas.esn_pca_formulas as pcalatex
 import rescomp.measures_new as rescompmeasures
 
 if __name__ == '__main__':
-    st.set_page_config("Basic ESN Viewer", page_icon="⚡")
+    st.set_page_config("Ensemble ESN Viewer", page_icon="⚡")
 
     with st.sidebar:
         st.header("ESN Viewer")
@@ -73,17 +73,14 @@ if __name__ == '__main__':
         st.header("Seed: ")
         seed = utils.st_seed()
         utils.st_line()
-        # st.header("Clear cash: ")
-        # utils.st_clear_all_cashes_button()
-        # utils.st_line()
 
-    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, todo_tab = st.tabs(
+    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, sweep_tab = st.tabs(
         ["🌀 Simulated data",
          "🛠️ Architecture",
          "🦾 Training",
          "🔮 Prediction",
          "🔬 Look-under-hood",
-         "✅ TODO"])  # "🔬 Other visualizations"
+         "🧹 Sweeping"])
 
     with sim_data_tab:
         if simulate_bool:
@@ -1126,47 +1123,81 @@ if __name__ == '__main__':
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
-    with todo_tab:
-        st.markdown("- Surrogate as preprocessing.")
-        st.markdown("- 1D time-series embedding as preprocessing.")
-        # st.markdown("- Main architecture with dimensions. ")
-        st.markdown("- Network properties and plots. ")
-        st.markdown("- Train and Predict: Reservoir value histograms.")
-        st.markdown(
-            "- Measure for w_out distribution: how is w_out spread over the output dimensions. ")
-        st.markdown("- Weird Input systems.")
-        st.markdown("- Custom Input.")
-        st.markdown("- More helping text.")
-        st.markdown("- Autocorrelation between reservoir nodes and input.")
-        st.markdown("- Doc string and typehinting for all used code and new repo!")
-        st.markdown("- A tab to explain the basic esn structure and how it works.")
+    with sweep_tab:
+        if predict_bool:
+            tabs = st.tabs(["PCA on reservoir states"])
+            with tabs[0]:  # PCA on reservoir states
+                if st.checkbox("Explained var of PCA comps for sweep",
+                               key="sweep__pca_expl_var"):
+                    from sklearn.decomposition import PCA
 
-        with st.expander("More ideas: "):
-            st.markdown(
-                "- Reservoir area plot for the different input: input, internal and bias (and akt "
-                "fct?)")
+                    N_ens = 3
+                    r_or_r_gen = "r"  # or "r_gen"
 
-            st.markdown("- Somehow split the fit to W_in input and internal input. To see which "
-                        "output depends on which reservoir part. ")
-            st.markdown(
-                "- Somehow check with rc, which variable depends strongest on which other variables. "
-                "Like mutual information, but with reservoir computing. ")
-            st.markdown(
-                "- Somehow drive the reservoir backwards in time? Train on previous time steps.")
+                    sweep_name = "n_rad"
+                    # sweep_vals = [0.0, 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.5, 1.0, 2.0]
+                    sweep_vals = [0.0, 0.00001, 0.0001, 0.001, 0.01, 0.1, 0.5, 0.9]
 
-        with st.expander("More for lookunder hood: "):
-            st.markdown(
-                "TODO: structure: reservoir state: show hist, show image, plot individual dimensions")
-            st.markdown("TODO: structure: w_out. Show how much everything is connected to what. ")
-            st.markdown(
-                "TODO: structure: Compare internal reservoir states for training and prediction (e.g. std(r_gen)")
-            st.markdown(
-                "TODO: calculate the lyapunov exponent for the reservoir update function???.")
-            st.markdown("TODO: Show correlations between input/output/reservoir states.")
-            st.markdown(
-                "TODO: Add free looping of reservoir states and see where the output goes to.")
-            st.markdown(
-                "TODO: Untick all does not work for every checkbox only for the ones with a key.")
+                    # sweep_vals = ["linear_r", "linear_and_square_r"]
+                    # sweep_name = "r_to_r_gen_opt"
+
+                    # sweep_name = "w_in_scale"
+                    # sweep_vals = [0.01, 0.1, 1, 10, 100, 1000]
+
+                    # sweep_vals = ["tanh", "sigmoid", "relu", "linear"]
+                    # # # # sweep_vals = ["tanh", "sigmoid"]
+                    # sweep_name = "act_fct_opt"
+
+                    results_dict = {sweep_name: [],  # type: ignore
+                                    "explained variance": [],
+                                    # "var": [],
+                                    # "std": [],
+                                    "pca index": [],
+                                    "ensemble": []}
+
+                    for sweep_value in sweep_vals:
+                        sweep_build_args = copy.deepcopy(build_args)
+                        sweep_build_args[sweep_name] = sweep_value
+                        for i_ens in range(N_ens):
+                            sweep_seed = seed + i_ens
+                            sweep_esn = esn.build(esn_type=esn_type,
+                                                  seed=sweep_seed,
+                                                  x_dim=x_dim,
+                                                  **sweep_build_args)
+                            sweep_esn = copy.deepcopy(sweep_esn)
+                            _, _, res_train_dict_sweep, _ = esn.train_return_res(
+                                sweep_esn,
+                                x_train,
+                                t_train_sync,
+                            )
+                            res_states_sweep = res_train_dict_sweep[r_or_r_gen]
+
+                            pca = PCA()
+                            res_states_pca = pca.fit_transform(res_states_sweep)
+                            res_states_pca_dims = res_states_pca.shape[1]
+
+                            results_dict["pca index"] += np.arange(res_states_pca_dims).tolist()
+
+                            # var = np.var(res_states_pca, axis=0)
+                            # results_dict["var"] += var.tolist()
+
+                            results_dict[sweep_name] += [sweep_value, ] * res_states_pca_dims
+
+                            results_dict["ensemble"] += [i_ens, ] * res_states_pca_dims
+                            results_dict["explained variance"] += pca.explained_variance_.tolist()
+                    df = pd.DataFrame.from_dict(results_dict)
+
+                    fig = px.line(df,
+                                  x="pca index",
+                                  y="explained variance",
+                                  color=sweep_name,
+                                  line_group="ensemble",
+                                  log_y=True)
+                    fig.update_yaxes(type="log", exponentformat="E")
+                    st.plotly_chart(fig)
+                    st.write(df)
+        else:
+            st.info('Activate [🔮 Predict] checkbox to see something.')
 
     #  Container code at the end:
     if build_bool:
@@ -1174,30 +1205,3 @@ if __name__ == '__main__':
         with architecture_container:
             esnplot.st_plot_architecture(x_dim=x_dim, r_dim=r_dim, r_gen_dim=r_gen_dim,
                                          y_dim=y_dim)
-
-    # st.write(time_series[-1, 0])
-    # st.write("wout")
-    # st.write(esn_obj.get_w_out()[0, 0])
-
-    # st.write(y_pred[-1, 0])
-    # import plotly.express as px
-    #
-    # df = px.data.gapminder()
-    # st.dataframe(df)
-    # fig = px.scatter(df, x="gdpPercap", y="lifeExp", animation_frame="year",
-    #                  # animation_group="country",
-    #                  size="pop", color="continent", hover_name="country",
-    #                  log_x=True, size_max=55, range_x=[100, 100000], range_y=[25, 90])
-    # st.plotly_chart(fig)
-    # st.markdown('###')
-    # utils.st_line()
-    # st.subheader("Checkbox values: ")
-    # true_checkboxes = {key: val for key, val in st.session_state.items() if
-    #                    type(val) == bool and val is True}
-    # true_checkboxes
-
-    # if st.button("reset esn"):
-    #     x_pred = x_pred + 2
-    #
-    # out = test(x_pred)
-    # st.write(out)
