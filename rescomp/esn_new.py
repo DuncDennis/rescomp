@@ -6,7 +6,7 @@ from abc import ABC, abstractmethod
 
 import numpy as np
 
-from rescomp import utilities
+from rescomp import esn_new_utilities as esn_utils
 
 
 class ESNCore(ABC):
@@ -27,8 +27,11 @@ class ESNCore(ABC):
         """Abstract method for the element wise activation function"""
 
     @abstractmethod
-    def output_to_input_fct(self, x: np.ndarray) -> np.ndarray:
-        """Abstract method to connect the output back to the next input."""
+    def output_to_input_fct(self, y: np.ndarray, x: np.ndarray) -> np.ndarray:
+        """Abstract method to connect the output back to the next input.
+
+        There is a possibility to also use the previous input x.
+        """
 
     @abstractmethod
     def input_to_reservoir_fct(self, x: np.ndarray) -> np.ndarray:
@@ -39,8 +42,26 @@ class ESNCore(ABC):
         """Abstract method to internally update the reservoir state."""
 
     @abstractmethod
-    def r_to_r_gen_fct(self, r: np.ndarray) -> np.ndarray:
-        """Abstract method for the reservoir to generalized reservoir state function. """
+    def r_to_r_gen_fct(self, r: np.ndarray, x: np.ndarray) -> np.ndarray:
+        """Abstract method for the reservoir to generalized reservoir state function.
+
+        There is a possibility to use the input x.
+        """
+
+    def train(self, use_for_train: np.ndarry, sync_steps: int = 0, reset_res_state: bool = True):
+        sync, x_train, y_train = self.split_use_for_train(use_for_train)
+
+        if reset_res_state:
+            self.reset_r()
+
+        # synchronize:
+        self.drive(sync)
+
+        # drive for train:
+        self.drive(x_train)
+
+        # layer after drive:
+        self.do_after_drive()
 
     def set_dimensions(self, x_dim: int, y_dim: int, r_dim: int) -> None:
         """Set the input, reservoir and output_dimension. """
@@ -72,53 +93,11 @@ class ESNCore(ABC):
         return output
 
 
-# class ActivationFunctionMixin(ABC):
-#     """An abstract base class for all activation function mixins. """
-#
-#     @abstractmethod
-#     def activation_fct(self, r: np.ndarray) -> np.ndarray:
-#         """Abstract method for the element wise activation function"""
-
-
-class OutputToInputMixin(ABC):
-    """An abstract base class for all outout to input mixins. """
-
-    @abstractmethod
-    def output_to_input_fct(self, x: np.ndarray) -> np.ndarray:
-        """Abstract method to connect the output back to the next input."""
-
-
-class InputToReservoirMixin(ABC):
-    """An abstract base class for all input to reservoir mixins. """
-
-    @abstractmethod
-    def input_to_reservoir_fct(self, x: np.ndarray) -> np.ndarray:
-        """Abstract method to connect the input with the reservoir."""
-
-
-class InternalReservoirMixin(ABC):
-    """An abstract base class for all internal reservoir mixins. """
-
-    @abstractmethod
-    def internal_reservoir_fct(self, r: np.ndarray) -> np.ndarray:
-        """Abstract method to internally update the reservoir state."""
-
-
-class RRGenMixin(ABC):
-    """An abstract base class for all r to r_gen mixins. """
-
-    @abstractmethod
-    def r_to_r_gen_fct(self, r: np.ndarray) -> np.ndarray:
-        """Abstract method for the reservoir to generalized reservoir state function. """
-
-
 class NodeBiasMixin:
-    """Mixin class to set the node_bias. """
+    """Mixin class to set the node_bias.
 
-    _node_bias_flag_synonyms = utilities._SynonymDict()
-    _node_bias_flag_synonyms.add_synonyms(0, ["no_bias"])
-    _node_bias_flag_synonyms.add_synonyms(1, ["random_bias"])
-    _node_bias_flag_synonyms.add_synonyms(2, ["constant_bias"])
+    In build call self.set_node_bias.
+    """
 
     def set_node_bias(self, r_dim: int, node_bias_opt: str = "no_bias", bias_scale: float = 1.0
                       ) -> None:
@@ -128,20 +107,24 @@ class NodeBiasMixin:
             r_dim: The reservoir dimension.
             node_bias_opt: The node bias option being either "no_bias", "random_bias" or
                            "constant_bias".
-            bias_scale:
+            bias_scale: A float defining the scale of the bias. If "random_bias", the
+                        random numbers go from -bias_scale to bias_scale. If "constant_bias" the
+                        constant is bias_scale.
 
         """
-        node_bias_flag = self._node_bias_flag_synonyms.get_flag(node_bias_opt)
-        if node_bias_flag == 0:
+        if node_bias_opt == "no_bias":
             self.node_bias = np.zeros(0)
-        elif node_bias_flag == 1:
+        elif node_bias_opt == "random_bias":
             self.node_bias = bias_scale * np.random.uniform(low=-1.0, high=1.0, size=r_dim)
-        elif node_bias_flag == 2:
+        elif node_bias_opt == "constant_bias":
             self.node_bias = bias_scale * np.ones(r_dim)
 
 
 class LeakFactorMixin:
-    """Mixin class to set the leak factor (self.leak_factor) of the ESN. """
+    """Mixin class to set the leak factor (self.leak_factor) of the ESN.
+
+    In build, call self.set_leak_factor.
+    """
     def set_leak_factor(self, leak_factor: float = 0.0) -> None:
         """Set the leak factor of the ESN.
 
@@ -155,12 +138,10 @@ class LeakFactorMixin:
 
 
 class ActivationFunctionMixin:
-    """Mixin to define the reservoir node activation functions. """
-    _act_fct_flag_synonyms = utilities._SynonymDict()
-    _act_fct_flag_synonyms.add_synonyms(0, ["tanh"])
-    _act_fct_flag_synonyms.add_synonyms(1, ["sigmoid"])
-    _act_fct_flag_synonyms.add_synonyms(2, ["relu"])
-    _act_fct_flag_synonyms.add_synonyms(3, ["linear"])
+    """Mixin to define the standard reservoir node activation functions.
+
+    In build, call self.set_activation_function.
+    """
 
     def set_activation_function(self, act_fct_opt: str = "tanh") -> None:
         """Set the reservoir node activation function.
@@ -169,34 +150,67 @@ class ActivationFunctionMixin:
             act_fct_opt: The activation function option: "tanh", "sigmoid", "relu", "linear".
 
         """
-        act_fct_flag = self._act_fct_flag_synonyms.get_flag(act_fct_opt)
-        if act_fct_flag == 0:
-            self._act_fct = utilities.tanh
-        elif act_fct_flag == 1:
-            self._act_fct = utilities.sigmoid
-        elif act_fct_flag == 2:
-            self._act_fct = utilities.relu
-        elif act_fct_flag == 3:
-            self._act_fct = utilities.linear
-        else:
-            raise ValueError
+        self._act_fct = esn_utils.ACT_FCT_DICT[act_fct_opt]
 
     def activation_fct(self, x: np.ndarray) -> np.ndarray:
+        """ The activation function of the reservoir nodes.
+
+        Args:
+            x: The input x.
+
+        Returns:
+            The output.
+        """
         return self._act_fct(x)
 
 
 class RRgenMixin:
-    _r_to_r_gen_synonyms = utilities._SynonymDict()
-    _r_to_r_gen_synonyms.add_synonyms(0, ["linear_r", "simple", "linear"])
-    _r_to_r_gen_synonyms.add_synonyms(1, "linear_and_square_r")
-    _r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
-    _r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
-    _r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
-    _r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
-    _r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
+    """Mixin to define the r to r gen function. """
 
-    def set_r_to_r_gen_fct(self, r_to_r_gen_opt: str = "linear"):
-        pass
+    def set_r_to_r_gen_fct(self, r_to_r_gen_opt: str = "linear") -> None:
+        """Set the r to r gen fct.
+
+        Args:
+            r_to_r_gen_opt: The option, has to be "linear", "output_bias", "linear_and_square",
+                            "linear_square_and_bias" or "linear_square_alternate".
+        """
+        self._r_to_r_gen_fct = esn_utils.RRGEN_FCT_DICT[r_to_r_gen_opt]
+
+    def r_to_r_gen_fct(self, r: np.ndarray, x: np.ndarray) -> np.ndarray:
+        """ The r to r_gen function.
+
+        Args:
+            r: The input reservoir state r.
+
+        Returns:
+            The generalized reservoir state r_gen.
+        """
+        return self._r_to_r_gen_fct(r)
+
+
+class OutputToInputMixin:
+    """Mixin to connect the output to input. """
+
+    def set_output_to_input_fct(self, out_to_inp_option: str = "identity", dt: float = 1.0
+                                ) -> None:
+        """Set the output to input function.
+
+        Args:
+            out_to_inp_option: Either "identity" or "difference". Use difference if you train on
+                               difference.
+
+        """
+
+        self.dt_difference = dt
+        self._out_to_inp_fct = esn_utils.OUT_TO_INP_FCT_DICT[out_to_inp_option]
+
+    def output_to_input_fct(self, y: np.ndarray, x: np.ndarray) -> np.ndarray:
+        """Function to connect the previous output to the next input. """
+        return x
+
+
+
+
 
 class SimpleOutputToInputMixin(OutputToInputMixin):
     """The standard output to input option where the last output becomes the next input."""
