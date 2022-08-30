@@ -6,16 +6,10 @@ from streamlit_project.app_fragments import streamlit_utilities as utils
 from streamlit_project.app_fragments import esn_build_train_predict as esnbuild
 
 
-
-def st_remove_r_gen_and_drive(esn_obj,):
-    # TBD:
-    options = list(np.arange())
-    st.multiselect("R_gen dims", options)
-
-
 def correlate_input_and_r_gen(inp: np.ndarray, r_gen: np.ndarray, time_delay: int
                               ) -> np.ndarray:
-    """Correlate the reservoir input with the driven r_gen states. Add a timedelay. """
+    """Correlate the reservoir input with the driven r_gen states. Add a timedelay.
+    # TODO: proper docstring """
     if time_delay == 0:
         r_gen_slice = r_gen
         inp = inp
