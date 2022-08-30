@@ -461,9 +461,23 @@ def get_x_dim(system_name: str, system_parameters: dict[str, Any]) -> int:
         system_parameters: The system parameters. Not every kwarg has to be specified.
 
     Returns:
-        The system dimension
+        The system dimension.
     """
     return SYSTEM_DICT[system_name](**system_parameters).sys_dim
+
+
+def get_iterator_func(system_name: str, system_parameters: dict[str, Any]
+                      ) -> Callable[[np.ndarray], np.ndarray]:
+    """Utility function to get the iterator function of the specified system.
+
+    Args:
+        system_name: The system name. Has to be implemented in SYSTEM_DICT.
+        system_parameters: The system parameters. Not every kwarg has to be specified.
+
+    Returns:
+        The iterator function of the specfied simulation.
+    """
+    return SYSTEM_DICT[system_name](**system_parameters).iterate
 
 
 if __name__ == '__main__':
