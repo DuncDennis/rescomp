@@ -117,7 +117,7 @@ st.subheader("Issue of multicollinearity")
 
 st.markdown(
     r"""
-    **How multicollinearity can be detected:**:
+    ##### How multicollinearity can be detected:
     - **Condition of moment matrix** $R^TR$ (or of design matrix $R$?) ([Condition number](https://en.wikipedia.org/wiki/Condition_number)):
         - The conditioning of a matrix $A$ is defined as: $\text{cond}(A) = \|A\| \|A^{+}\|$, 
             where $A^+$ is the pseudo-inverse of $A$ and $\|\cdot\|$ can be any matrix norm. 
@@ -133,49 +133,110 @@ st.markdown(
             dimension of the matrix. 
         - Links: [Rank of matrix](https://en.wikipedia.org/wiki/Rank_(linear_algebra)), 
             [NumPy rank function](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html).
+    - **Large linear correlations between varaibles**
     """
 )
 
+# REGULARIZATIONS TO TACKLE MULTICOLLINEARITY
+# ridge regression
 st.markdown(
     r"""
-    **How to tackle multicollineariy:** 
-    - Mean center the predictor variables (?)
-    - Standardize your independent variables
-    - Shapley value? [Shapley value](https://en.wikipedia.org/wiki/Shapley_value)
-    - Tikhonov regularization / ridge regression [Ridge regression](https://en.wikipedia.org/wiki/Ridge_regression)
-    - Principal component regression [Principal_component_regression](https://en.wikipedia.org/wiki/Principal_component_regression) 
+    ##### Regularization to tackle multicollinearity: 
+    
+    **1. Tikhonov regularization / [Ridge regression](https://en.wikipedia.org/wiki/Ridge_regression):**
+    
+    The aim is to find the $W^*_\text{out}$, that minimizes: 
     """
 )
 
+st.latex(r""" 
+\begin{aligned}
+    \gamma\text{Trace}(W_\text{out}^*W_\text{out}^{*T}) + 
+    \sum_{\text{sample: }i} \|\boldsymbol{y}_i& - W_\text{out}^* \boldsymbol{r}_i^*\|^2
+\end{aligned}
+""")
+
 st.markdown(
     r"""
-    **Principal component regression (PCR):**
-    - Instead of using the explanatory variables directly, the principal components are used as
-        the regressors. 
-    - If one uses only a subset of PCs, PCR is a kind of regularized linear regression. 
-    - Major use case is: overcoming multicollinearity. 
-    - Steps: 
-        - Perform pca on the data matrix. (maybe only select a subset of components). 
-        - Perform linear regression (or ridge regression?). 
-        - Transform w_out back to get the w_out for the original features. 
-    - Steps in detail: 
-        - Datapreprocessing: Assume Y and X have been centered. 
-        - Perform PCA on centered $X$. 
-            - $X = U \Delta V^T$ is the singular value decomposition. With \Delta are the singular
-                values (only on diagonal). $U$ and $V$ are both orthonormal sets of vectors, 
-                denoting the left and right singular vectors of $X$. 
-            - $V \Lambda V^T = V \Delta^2 V^T$ gives the spectral decomposition of $X^T X$. $\Lambda$ 
-                contains the principal values on the diagonal. 
-        - PCA Estimator: $W_\text{out, pca} = (R_\text{pca}^TR_\text{pca})^{-1} R_\text{pca}^TY$ 
-            is the regressor for the pca transformed variables. $W_\text{out}$ for the original 
-            variables can be estimated via $W_\text{out} = VW_\text{out, pca}$
-    - Notes: 
-        - If all components are considered, the PCA estimator is the same as the OLS estimate. 
-    - Applications: 
-        - Adressing multicollinearity: Exclude the columns that are multicollinear. 
-        - Regularization effect: 
+    The additional term tackles the issue of the moment matrix $R^TR$ not being invertable. 
+    The minimizing $W^*_\text{out}$ can be calculated with: 
     """
 )
+
+st.latex(r""" 
+\begin{aligned}
+    W_\text{out}^* = (R^T R + \gamma 1)^{-1} R^T Y
+\end{aligned}
+""")
+
+# Adding noise:
+st.markdown(
+    r"""
+    **2. Adding noise to the training data:**
+    
+    By adding low amplitude random noise to the training data, the multicollinearity can be 
+    overcome, without disturbing the system too much. 
+    """
+)
+
+# Principal component regression:
+st.markdown(
+    r"""
+    **3. [Principal component regression](https://en.wikipedia.org/wiki/Principal_component_regression):**
+
+    Instead of using the explanatory variables directly, the principal components are used as
+    the regressors. 
+    
+    Steps: 
+    - Perform pca on the data matrix. (maybe only select a subset of components). 
+    - Perform linear regression on the subset of pca components (or use ridge regression). 
+    - Optional: Transform $W^*_\text{out, pca}$ back to get the $W^*_\text{out}$ of the original 
+        explanatory variables. 
+    """
+)
+
+# st.markdown(
+#     r"""
+#     The
+#     - Link: [Ridge regression](https://en.wikipedia.org/wiki/Ridge_regression):
+#
+#     - Mean center the predictor variables (?)
+#     - Standardize your independent variables
+#     - Shapley value? [Shapley value](https://en.wikipedia.org/wiki/Shapley_value)
+#     - Tikhonov regularization / ridge regression
+#     - Principal component regression [Principal_component_regression](https://en.wikipedia.org/wiki/Principal_component_regression)
+#     """
+# )
+
+# st.markdown(
+#     r"""
+#     **Principal component regression (PCR):**
+#     - Instead of using the explanatory variables directly, the principal components are used as
+#         the regressors.
+#     - If one uses only a subset of PCs, PCR is a kind of regularized linear regression.
+#     - Major use case is: overcoming multicollinearity.
+#     - Steps:
+#         - Perform pca on the data matrix. (maybe only select a subset of components).
+#         - Perform linear regression (or ridge regression?).
+#         - Transform w_out back to get the w_out for the original features.
+#     - Steps in detail:
+#         - Datapreprocessing: Assume Y and X have been centered.
+#         - Perform PCA on centered $X$.
+#             - $X = U \Delta V^T$ is the singular value decomposition. With \Delta are the singular
+#                 values (only on diagonal). $U$ and $V$ are both orthonormal sets of vectors,
+#                 denoting the left and right singular vectors of $X$.
+#             - $V \Lambda V^T = V \Delta^2 V^T$ gives the spectral decomposition of $X^T X$. $\Lambda$
+#                 contains the principal values on the diagonal.
+#         - PCA Estimator: $W_\text{out, pca} = (R_\text{pca}^TR_\text{pca})^{-1} R_\text{pca}^TY$
+#             is the regressor for the pca transformed variables. $W_\text{out}$ for the original
+#             variables can be estimated via $W_\text{out} = VW_\text{out, pca}$
+#     - Notes:
+#         - If all components are considered, the PCA estimator is the same as the OLS estimate.
+#     - Applications:
+#         - Adressing multicollinearity: Exclude the columns that are multicollinear.
+#         - Regularization effect:
+#     """
+# )
 
 
 def get_r_states(r_dim: int, n_samples: int, seed: int = 0) -> np.ndarray:
@@ -190,7 +251,7 @@ def get_r_states(r_dim: int, n_samples: int, seed: int = 0) -> np.ndarray:
         The r_states of shape (n_samples, r_dim).
     """
     rng = np.random.default_rng(seed)
-    r_states = rng.random((n_samples, r_dim))
+    r_states = rng.random((n_samples, r_dim)) # + 1
     return r_states
 
 
@@ -287,6 +348,27 @@ def ridge_regression(r_gen_states: np.ndarray, out_states: np.ndarray,
         r_gen_states.T @ out_states).T
 
 
+def noisy_linear_regression(r_gen_states: np.ndarray, out_states: np.ndarray,
+                            noise_scale: float = 1e-2,
+                            seed: int = 0) -> np.ndarray:
+    """Perform ordinary linear regression where noise is added to the input.
+
+    Args:
+        r_gen_states: Matrix of explanatory variables of shape (n_samples, r_gen_dim).
+        out_states: Matrix of dependent variables of shape (n_samples, out_dim).
+        noise_scale: The scale of the white noise added to the training data.
+        seed: The random seed used for the white noise.
+
+    Returns:
+        The W_out matrix that fits out_states = W_out @ r_gen_states of shape (y_dim, r_gen_dim).
+    """
+    rng = np.random.default_rng(seed)
+    r_gen_states_w_noise = r_gen_states + rng.standard_normal(r_gen_states.shape) * noise_scale
+    return np.linalg.solve(
+        r_gen_states_w_noise.T @ r_gen_states_w_noise,
+        r_gen_states_w_noise.T @ out_states).T
+
+
 def test_for_multicollinearity(moment_matrix: np.ndarray,
                                title: str | None = None) -> None:
     """Perform some tests to check for multicollinearity and show streamlit elements.
@@ -310,7 +392,7 @@ def test_for_multicollinearity(moment_matrix: np.ndarray,
 
 
 def train_on_subset(r_states: np.ndarray, out_states: np.ndarray, seed: int = 1,
-                    n_samples_subset: int = 100, n_ens: int = 100):
+                    n_samples_subset: int = 100, n_ens: int = 100) -> np.ndarray:
     """Perform the linear regression on random subsets of r_states and out_states.
 
     Args:
@@ -346,6 +428,52 @@ def train_on_subset(r_states: np.ndarray, out_states: np.ndarray, seed: int = 1,
         w_out_subsets[i, :, :] = linear_regression(r_gen_states_subset, out_states_subset)
 
     return w_out_subsets
+
+
+def transform_pca_w_out_back(w_out_pca: np.ndarray,
+                             r_states: np.ndarray,
+                             pca_component_matrix: np.ndarray,
+                             ) -> np.ndarray:
+    """Transform the w_out matrix after pca transform back to the normal w_out matrix.
+
+    Args:
+        w_out_pca: The w_out matrix of the linear regression of r_gen(pca(r_states)) of shape
+                   (y_dim, pca_components + 1).
+        r_states: The states used to fit the pca of shape (n_samples, r_dim).
+        pca_component_matrix: The pca component matrix of shape (pca_components, r_dim).
+
+    Returns:
+        The back transformed w_out of shape (y_dim, r_gen_dim).
+    """
+
+    r_mean = np.mean(r_states, axis=0)
+
+    w_out_no_bias = w_out_pca[:, :-1] @ pca_component_matrix
+    w_out_only_bias = (w_out_pca[:, -1] - w_out_no_bias @ r_mean)[np.newaxis].T
+
+    w_out = np.hstack((w_out_no_bias, w_out_only_bias))
+    return w_out
+
+# def do_pcr(r_states: np.ndarray,
+#            out_states: np.ndarray,
+#            pca_components: int | None = None) -> object:
+#     pca = PCA()
+#     r_states_pca = pca.fit_transform(r_states)
+#     r_gen_states_pca = get_r_gen_states(r_states_pca)
+#     moment_matrix_pca = get_moment_matrix(r_gen_states_pca)
+#
+#     test_for_multicollinearity(moment_matrix_pca)
+#
+#     w_out_pca = linear_regression(r_gen_states_pca, out_states)
+#     st.write(w_out_pca)
+#
+#     P = pca.components_
+#     r_mean = np.mean(r_states, axis=0)
+#
+#     return w_out_pca, P, r_mean, r_states_pca
+#
+#     w_out[:, :-1] - w_out_pca[:, :-1] @ P
+#     w_out[:, -1] - (w_out_pca[:, -1] - w_out_pca[:, :-1] @ P @ r_mean)
 
 
 # def add_noise_and_do_reg(r_states: np.ndarray, out_states: np.ndarray,
@@ -439,9 +567,9 @@ st.markdown(
     """
 )
 
-w_out_bias = linear_regression(r_gen_states, out_states)
+w_out = linear_regression(r_gen_states, out_states)
 st.markdown(r"$W^*_\text{out}$ (The last entry is the offset $\boldsymbol{w}$):")
-st.write(w_out_bias)
+st.write(w_out)
 
 st.markdown(
     r"""
@@ -552,3 +680,127 @@ st.markdown(
     multicollinear columns. 
     """
 )
+
+# ADD REGULARIZATION:
+# Ridge regression:
+st.markdown(
+    r"""
+    ##### Adding regularization
+    """
+)
+
+data_selection = st.selectbox("Data", ["Multicollinear data", "Non-multicollinear data"])
+r_states_to_use = r_states.copy() if data_selection == "Non-multicollinear data" else \
+    r_states_m_col.copy()
+out_states_to_use = out_states.copy() if data_selection == "Non-multicollinear data" else \
+    out_states_m_col.copy()
+r_gen_states_to_use = get_r_gen_states(r_states_to_use)
+
+
+st.markdown(
+    r"""
+    **Ridge Regression**: 
+    
+    Choose the regularization parameter, and perform the same tests as above:
+    """
+)
+
+log_reg_param = st.number_input("Log reg. param", value=-7)
+reg_param = 10**(log_reg_param)
+
+w_out_ridge = ridge_regression(r_gen_states_to_use,
+                               out_states_to_use,
+                               reg_param=reg_param)
+
+st.write(w_out_ridge)
+
+# Adding noise:
+st.markdown(
+    r"""
+    **Adding noise**: 
+    """
+)
+noise_scale = st.number_input("Noise scale", value=0.01, format="%f")
+w_out_noise = noisy_linear_regression(r_gen_states_to_use,
+                                      out_states_to_use,
+                                      noise_scale=noise_scale)
+
+st.write(w_out_noise)
+
+# PCR:
+st.markdown(
+    r"""
+    **Principal component regression**: 
+    
+    First demonstrate that PCR on non-multicollinear data, with all components is the same 
+    as normal linear regression:  
+    """
+)
+
+st.markdown(
+    r"""
+    PCR on the non-multicollinear dataset. Show the condition and the rank of the PCA transformed
+    moment matrix: $R_\text{pca}^T R_\text{pca}$:
+    """
+)
+
+# The PCA r_states:
+
+pca_comps = int(st.number_input("PCA components", value=r_dim, min_value=1, max_value=r_dim))
+
+
+pca = PCA(n_components=pca_comps)
+r_states_pca = pca.fit_transform(r_states_to_use)
+r_gen_states_pca = get_r_gen_states(r_states_pca)
+moment_matrix_pca = get_moment_matrix(r_gen_states_pca)
+
+st.markdown(
+    r"""
+    Test the condition and rank of the pca moment matrix: 
+    """
+)
+test_for_multicollinearity(moment_matrix_pca)
+
+
+st.markdown(
+    r"""
+    Show $W^*_\text{out, pca}$:
+    """
+)
+
+w_out_pca = linear_regression(r_gen_states_pca, out_states_to_use)
+
+w_out_pca_ridge = ridge_regression(r_gen_states_pca, out_states_to_use, reg_param=reg_param)
+w_out_pca = w_out_pca_ridge
+
+st.write(w_out_pca)
+
+st.markdown(
+    r"""
+    Show $W^*_\text{out}$ backtransformed from $W^*_\text{out, pca}$:
+    """
+)
+
+pca_component_matrix = pca.components_
+w_out_from_pca = transform_pca_w_out_back(w_out_pca, r_states_to_use,
+                                          pca_component_matrix)
+st.write(w_out_from_pca)
+
+
+fig = go.Figure()
+fig.add_trace(
+    go.Bar(x=[f"PC {x+1}" for x in range(pca_comps)], y=pca.explained_variance_)
+)
+fig.update_xaxes(title="Principal components")
+fig.update_yaxes(title="Variance")
+fig.update_layout(title="Variance of data points along principle components")
+st.plotly_chart(fig)
+
+fig = go.Figure()
+fig.add_trace(
+    go.Bar(y=np.sum(np.abs(w_out_pca), axis=0))
+)
+fig.update_xaxes(title="pca_comps + 1")
+fig.update_yaxes(title="w_out summed")
+fig.update_layout(title="W_out_pca plot")
+st.plotly_chart(fig)
