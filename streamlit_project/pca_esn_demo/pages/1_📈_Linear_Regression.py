@@ -1,9 +1,12 @@
 """A streamlit app to demonstrate PCA is conjunction with Echo State Networks - Linear Reg."""
+from __future__ import annotations
+
 import numpy as np
 from sklearn.decomposition import PCA
 import plotly.graph_objects as go
 
 import streamlit as st
+from streamlit_project.app_fragments import streamlit_utilities as utils
 
 st.set_page_config("Linear Regression", page_icon="📈")
 
@@ -49,7 +52,7 @@ st.markdown(
 
 st.latex(r""" 
 \begin{aligned}
-    \sum_{\text{sample: }i} ||\boldsymbol{y}_i& - W_\text{out}^* \boldsymbol{r}_i^*||^2
+    \sum_{\text{sample: }i} \|\boldsymbol{y}_i& - W_\text{out}^* \boldsymbol{r}_i^*\|^2
 \end{aligned}
 """)
 
@@ -91,7 +94,7 @@ st.markdown(
     r"""
     It turns out, $R^T R$ is only nicely invertible, if all features (dimensions of $r^*$) are
     not linear combinations of each other 
-    (no [Multicollinearity](https://en.wikipedia.org/wiki/Moment_matrix)), e.g. if: 
+    (no [Multicollinearity](https://en.wikipedia.org/wiki/Multicollinearity)), e.g. if: 
     """
 )
 
@@ -103,8 +106,10 @@ st.latex(r"""
 
 st.markdown(
     r"""
-    holds for some dimensions $k, j$ in $\boldsymbol{r}$, there is multicollinearity and the the moment
-    matrix can not be inverted. 
+    holds for some dimensions $k, j$ in $\boldsymbol{r}$, there is multicollinearity and the the 
+    moment matrix can not be inverted. The above equation shows a *perfect* multicollinearity. 
+    Alternatively multicollinearity can be seen in a loose sense, where the there is only an 
+    approximate linear relationship between two or more variables. 
     """
 )
 
@@ -112,15 +117,28 @@ st.subheader("Issue of multicollinearity")
 
 st.markdown(
     r"""
-    **How multicollinearity can be detected:** 
-    - **Condition of data matrix** $X$: [Condition number](https://en.wikipedia.org/wiki/Condition_number)
+    **How multicollinearity can be detected:**:
+    - **Condition of moment matrix** $R^TR$ (or of design matrix $R$?) ([Condition number](https://en.wikipedia.org/wiki/Condition_number)):
+        - The conditioning of a matrix $A$ is defined as: $\text{cond}(A) = \|A\| \|A^{+}\|$, 
+            where $A^+$ is the pseudo-inverse of $A$ and $\|\cdot\|$ can be any matrix norm. 
+        - Links: [different matrix norms](https://en.wikipedia.org/wiki/Matrix_norm), 
+            [NumPy function](https://numpy.org/doc/stable/reference/generated/numpy.linalg.cond.html)
+        - If the data shows multi-collinearity, the conditioning is very large! 
     - **Perturbing the data with noise and see how much the coefficients change**:
+        - If the coefficients change a lot, the data is likely to contain multicollinearity. 
+        - Note: Perturbing the data with noise already adds a sort of regularization! 
+    - **Train on different subsets of the data, and see how the coefficients change**
+    - **Rank of moment matrix:** 
+        - When perfect multicollinearity exists, the rank of the moment matrix is less than the 
+            dimension of the matrix. 
+        - Links: [Rank of matrix](https://en.wikipedia.org/wiki/Rank_(linear_algebra)), 
+            [NumPy rank function](https://numpy.org/doc/stable/reference/generated/numpy.linalg.matrix_rank.html).
     """
 )
 
 st.markdown(
     r"""
-    What to do against multicollinearity: 
+    **How to tackle multicollineariy:** 
     - Mean center the predictor variables (?)
     - Standardize your independent variables
     - Shapley value? [Shapley value](https://en.wikipedia.org/wiki/Shapley_value)
@@ -158,8 +176,6 @@ st.markdown(
         - Regularization effect: 
     """
 )
-
-st.subheader("Demonstration: ")
 
 
 def get_r_states(r_dim: int, n_samples: int, seed: int = 0) -> np.ndarray:
@@ -271,6 +287,123 @@ def ridge_regression(r_gen_states: np.ndarray, out_states: np.ndarray,
         r_gen_states.T @ out_states).T
 
 
+def test_for_multicollinearity(moment_matrix: np.ndarray,
+                               title: str | None = None) -> None:
+    """Perform some tests to check for multicollinearity and show streamlit elements.
+
+    Args:
+        moment_matrix: 2D numpy array being the moment matrix R^TR of the data matrix R.
+        title: Optional title.
+    """
+    rank = np.linalg.matrix_rank(moment_matrix)
+
+    cond = np.linalg.cond(moment_matrix)
+    if title is not None:
+        st.markdown(f"**{title}**")
+    cols = st.columns(2)
+    with cols[0]:
+        st.write("Condition: ")
+        st.write(cond)
+    with cols[1]:
+        st.write("Rank: ")
+        st.write(rank)
+
+
+def train_on_subset(r_states: np.ndarray, out_states: np.ndarray, seed: int = 1,
+                    n_samples_subset: int = 100, n_ens: int = 100):
+    """Perform the linear regression on random subsets of r_states and out_states.
+
+    Args:
+        r_states: The original r_states of shape (n_samples, r_dim).
+        out_states: Matrix of dependent variables of shape (n_samples, out_dim).
+        seed: Seed for random number generator.
+        n_samples_subset: Nr of samples per subset.
+        n_ens: Nr of different subsets.
+
+    Returns:
+        W_out for each subset in the shape (n_ens, y_dim, r_gen_dim).
+    """
+
+    # Get parameters:
+    n_samples, r_dim = r_states.shape
+    if n_samples_subset > n_samples:
+        raise ValueError("Nr of samples in subset can not be larger than total number of "
+                         "samples. ")
+    r_gen_dim = r_dim + 1
+    out_dim = out_states.shape[1]
+
+    # Configureate rng:
+    rng = np.random.default_rng(seed)
+
+    # Calculate w_out for each subset:
+    w_out_subsets = np.zeros((n_ens, out_dim, r_gen_dim))
+    total_list_of_indices = np.arange(n_samples)
+    for i in range(n_ens):
+        indices = rng.choice(total_list_of_indices, size=n_samples_subset, replace=False)
+        r_states_subset = r_states[indices, :]
+        r_gen_states_subset = get_r_gen_states(r_states_subset)
+        out_states_subset = out_states[indices, :]
+        w_out_subsets[i, :, :] = linear_regression(r_gen_states_subset, out_states_subset)
+
+    return w_out_subsets
+
+
+# def add_noise_and_do_reg(r_states: np.ndarray, out_states: np.ndarray,
+#                          error_scale: float = 0.1, n_ens: int = 100,
+#                          seed: int = 10):
+#
+#     # Get parameters:
+#     n_samples, r_dim = r_states.shape
+#     r_gen_dim = r_dim + 1
+#     out_dim = out_states.shape[1]
+#
+#     # Create rng:
+#     rng = np.random.default_rng(seed)
+#
+#     # add error to r_states and transform to r_gen:
+#     r_gen_states_w_error = np.zeros((n_ens, n_samples, r_gen_dim))
+#     for i in range(n_ens):
+#         error = rng.standard_normal((n_samples, r_dim)) * error_scale
+#         r_gen_states_w_error[i, :, :] = get_r_gen_states(r_states + error)
+#
+#     # For each realization do the fit and save w_out:
+#     w_out_esn = np.zeros((n_ens, out_dim, r_gen_dim))
+#     for i in range(n_ens):
+#         r_gen_states = r_gen_states_w_error[i, :, :]
+#         # out_states_w_error = out_states + rng.standard_normal(out_dim)
+#         out_states_w_error = out_states
+#         w_out_esn[i, :, :] = linear_regression(r_gen_states, out_states_w_error)
+#
+#     return w_out_esn
+#     w_out_std = np.std(w_out_esn, axis=0)
+#     return w_out_std
+#     w_out_avg = np.mean(w_out_esn, axis=0)
+#     return w_out_avg
+
+
+st.header("Demonstration: ")
+
+
+# NO MULTICOLINEARITY
+st.markdown(
+    r"""
+    ##### No multicollinearity: 
+    
+    Get explanatory variables $\boldsymbol{r}$ and dependent variables $\boldsymbol{y}$. 
+    Specify the number of sampels and the dimension of $\boldsymbol{r}$. 
+    $R$ will be random generated by:
+    
+    `np.hstack((np.random((n_sampels, r_dim)), np.ones(n_samples)[:, np.newaxis]))`
+    
+    The dependent variables $y$ is one-dimensional and the sum of all expl. variables plus an 
+    offset, i.e. 
+    
+    $\boldsymbol{y} = [\text{offset} + \sum_{\text{dim}: i} r_i, ]^T$. 
+    
+    The code is: `out_states = np.sum(r_states, axis=-1)[:, np.newaxis] + offset`
+    """
+)
+
 # Get R states:
 cols = st.columns(2)
 with cols[0]:
@@ -278,50 +411,144 @@ with cols[0]:
 with cols[1]:
     r_dim = st.number_input("r_dim", value=10)
 
-seed = 0
+seed = 1
 r_states = get_r_states(r_dim, n_samples, seed=seed)
 r_gen_states = get_r_gen_states(r_states)
 out_states = get_out_states(r_states)
 moment_matrix = get_moment_matrix(r_gen_states)
+# utils.st_line()
 
-cond = np.linalg.cond(r_states)
-cond
+st.markdown(
+    r"""
+    Since all explanatory variables are created randomly, they don't show any correlation or 
+    multicollinearity. 
+    This can be seen by calculating the **rank** and **condition** of the moment matrix $R^TR$:
+    """
+)
 
-rank = np.linalg.matrix_rank(r_states)
-rank
+test_for_multicollinearity(moment_matrix)
+# utils.st_line()
+
+# cond = np.linalg.cond(r_states)
+# st.write("cond of r_states: ", cond)
+
+st.markdown(
+    r"""
+    The rank of the moment matrix is $r_{dim} + 1$ (the $+1$ coming from the offset in the linear 
+    fit.) Thus we can perform the linear fit without any problems. The output matrix is given as: 
+    """
+)
+
+w_out_bias = linear_regression(r_gen_states, out_states)
+st.markdown(r"$W^*_\text{out}$ (The last entry is the offset $\boldsymbol{w}$):")
+st.write(w_out_bias)
+
+st.markdown(
+    r"""
+    We can further investigate the multicollinearity, by training the system on random subsets 
+    of the training data $X, Y$. The $W^*_\text{out}$ will vary between the subsets. The elements
+    belonging to multicollinear columns will vary the most. Thus we can calculate the standard
+    deviation of the $W^*_\text{out}$ elements over the different subsets. We use $100$ samples 
+    per subset and a number of $100$ different subsets.  
+    """
+)
+
+st.markdown(r"$\text{standard deviation of } W^*_\text{out}$:")
+
+w_out_subset = train_on_subset(r_states, out_states, n_samples_subset=100, n_ens=100)
+st.write(np.std(w_out_subset, axis=0, ))
+
+st.markdown(
+    r"""
+    The standard deviation in $W^*_\text{out}$ is very low between the different subsets. 
+    """
+)
+
+# Add noise
+# st.markdown(
+#     r"""
+#     We can further investigate the multicollinearity, by adding noise to the design matrix $R$,
+#     and observe how much the weights change during training. For an ensemble of $n_\text{ens} = 100$
+#     $R$ and $Y$ pairs, with a noise scale (normal noise) of $0.01$, the **standard deviation**
+#     within the w_out indices is calculated as:
+#     """
+# )
+# st.markdown(r"$\text{standard deviation of } W^*_\text{out}$:")
+# w_out_std = add_noise_and_do_reg(r_states, out_states, error_scale=0.01, n_ens=100)
+# st.write(w_out_std)
+# st.markdown(
+#     r"""
+#     The standard deviation in $W^*_\text{out}$ is very low.
+#     """
+# )
+
+# WITH MULTICOLINEARITY
+st.markdown(
+    r"""
+    ##### With multicollinearity: 
+    
+    Now we will introduce artificial multicollinearity into the trainings data, by overwriting a
+    number variables as a linear function of other variables. 
+    
+    One can specify the number of variables that are supposed to be written as a linear combination
+    of other variables. For imitating non-perfect multicolinearity one can add noise to the linear
+    combination. 
+    """
+)
 
 # Get multi-colinearity:
 cols = st.columns(2)
 with cols[0]:
-    nr_of_colinear_cols = st.number_input("Nr of multi-colinear columns",
+    nr_of_colinear_cols = st.number_input("Nr of collinear columns",
                                           value=1,
                                           min_value=0,
                                           max_value=r_dim-1)
 with cols[1]:
     error_scale = st.number_input("Error scale",
-                                  value=0.0,
+                                  value=0.01,
                                   step=0.01,
-                                  min_value=0.0)
+                                  min_value=0.0, format="%f")
 
 r_states_m_col = get_multicol_r_states(r_states, nr_of_colinear_cols,
                                        error_scale, seed=seed)
-
 out_states_m_col = get_out_states(r_states_m_col)
-
-cond_m_col = np.linalg.cond(r_states_m_col)
-cond_m_col
-
-rank_m_col = np.linalg.matrix_rank(r_states_m_col)
-rank_m_col
-
 r_gen_states_m_col = get_r_gen_states(r_states_m_col)
 moment_matrix_m_col = get_moment_matrix(r_gen_states_m_col)
 
+test_for_multicollinearity(moment_matrix_m_col)
 
-# Fit the data:
-# 1. Ordinarly linear Regression:
-w_out_bias = linear_regression(r_gen_states, out_states)
-w_out_bias
+st.markdown(
+    r"""
+    We can see a huge condition and a rank of: $\text{rank} = r_\text{dim} - 
+    \text{nr collinear var}$.
+    """
+)
 
-w_out_bias_m_col = linear_regression(r_gen_states_m_col, out_states_m_col)
-w_out_bias_m_col
+w_out_m_col_bias = linear_regression(r_gen_states_m_col, out_states_m_col)
+st.markdown(r"$W^*_\text{out}$ (The last entry is the offset $\boldsymbol{w}$):")
+st.write(w_out_m_col_bias)
+
+st.markdown(
+    r"""
+    We can already see that the $W^*_\text{out}$ values for the multicollinear columns are 
+    different, than the values for the non-multicollinear columns. 
+    
+    As before by performing the linear regression on many subsets of $X$ and $Y$, we can 
+    observe the standard deviation for each $W^*_\text{out}$ value: 
+    """
+)
+
+st.markdown(r"$\text{standard deviation of } W^*_\text{out}$:")
+w_out_subset_m_col = train_on_subset(r_states_m_col,
+                                     out_states_m_col,
+                                     n_samples_subset=100,
+                                     n_ens=100)
+
+st.write(np.std(w_out_subset_m_col, axis=0))
+
+st.markdown(
+    r"""
+    We can clearly see, that the standard deviation is very large for entries corresponding to the 
+    multicollinear columns. 
+    """
+)
