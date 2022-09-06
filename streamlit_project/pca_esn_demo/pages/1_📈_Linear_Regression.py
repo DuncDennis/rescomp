@@ -192,6 +192,28 @@ st.markdown(
     - Perform linear regression on the subset of pca components (or use ridge regression). 
     - Optional: Transform $W^*_\text{out, pca}$ back to get the $W^*_\text{out}$ of the original 
         explanatory variables. 
+        
+    The $W^*_\text{out, pca}$ can be transformed back to $W^*_\text{out}$ by comparing the 
+    following: 
+    
+    The output of the linear regression without PCA-transformation is fitted to: 
+    
+    $\boldsymbol{y} = W^*_\text{out}[\boldsymbol{r}, 1] =  W_\text{out} \boldsymbol{r} + 
+    \boldsymbol{w}$
+    
+    With PCA the output changes to: 
+    
+    $\boldsymbol{y} = W^*_\text{out, pca}[\boldsymbol{r}_\text{pca}, 1] = 
+    W_\text{out, pca} \boldsymbol{r}_\text{pca} + \boldsymbol{w}_\text{pca}
+     = W_\text{out, pca} P \boldsymbol{r} + (\boldsymbol{w}_\text{pca} - 
+    W_\text{out, pca} P \boldsymbol{r}_\text{mean})$
+    
+    Thus, we can compare both matrices in front of $\boldsymbol{r}$ and both constant vector. 
+    
+    $W_\text{out} = W_\text{out, pca} P$
+    
+    $\boldsymbol{w} = (\boldsymbol{w}_\text{pca} - W_\text{out, pca} P 
+    \boldsymbol{r}_\text{mean})$
     """
 )
 
@@ -426,8 +448,56 @@ def train_on_subset(r_states: np.ndarray, out_states: np.ndarray, seed: int = 1,
         r_gen_states_subset = get_r_gen_states(r_states_subset)
         out_states_subset = out_states[indices, :]
         w_out_subsets[i, :, :] = linear_regression(r_gen_states_subset, out_states_subset)
-
     return w_out_subsets
+
+
+def train_on_subset_pca(r_states: np.ndarray,
+                        out_states: np.ndarray,
+                        seed: int = 1,
+                        n_samples_subset: int = 100,
+                        n_ens: int = 100,
+                        n_pc: int | None = None
+                        ) -> np.ndarray:
+    """Perform the linear regression on random subsets of r_states and out_states.
+
+    Args:
+        r_states: The original r_states of shape (n_samples, r_dim).
+        out_states: Matrix of dependent variables of shape (n_samples, out_dim).
+        seed: Seed for random number generator.
+        n_samples_subset: Nr of samples per subset.
+        n_ens: Nr of different subsets.
+        n_pc: Nr of principal components; if None, take n_pc = r_dim.
+    Returns:
+        W_out for each subset in the shape (n_ens, y_dim, n_pc + 1).
+    """
+
+    # Get parameters:
+    n_samples, r_dim = r_states.shape
+    if n_samples_subset > n_samples:
+        raise ValueError("Nr of samples in subset can not be larger than total number of "
+                         "samples. ")
+    if n_pc is None:
+        n_pc = r_dim
+
+    r_gen_dim = n_pc + 1
+    out_dim = out_states.shape[1]
+
+    # Configureate rng:
+    rng = np.random.default_rng(seed)
+
+    # Calculate w_out for each subset:
+    w_out_pca_subsets = np.zeros((n_ens, out_dim, r_gen_dim))
+    total_list_of_indices = np.arange(n_samples)
+    for i in range(n_ens):
+        indices = rng.choice(total_list_of_indices, size=n_samples_subset, replace=False)
+        r_states_subset = r_states[indices, :]
+        pca = PCA(n_components=n_pc)
+        r_states_pca_subset = pca.fit_transform(r_states_subset)
+        r_gen_states_pca_subset = get_r_gen_states(r_states_pca_subset)
+        out_states_subset = out_states[indices, :]
+        w_out_pca_subsets[i, :, :] = linear_regression(r_gen_states_pca_subset,
+                                                       out_states_subset)
+    return w_out_pca_subsets
 
 
 def transform_pca_w_out_back(w_out_pca: np.ndarray,
@@ -712,6 +782,12 @@ w_out_ridge = ridge_regression(r_gen_states_to_use,
                                out_states_to_use,
                                reg_param=reg_param)
 
+st.markdown(
+    r"""
+    $W^*_\text{out, ridge}$: 
+    """
+)
+
 st.write(w_out_ridge)
 
 # Adding noise:
@@ -724,7 +800,11 @@ noise_scale = st.number_input("Noise scale", value=0.01, format="%f")
 w_out_noise = noisy_linear_regression(r_gen_states_to_use,
                                       out_states_to_use,
                                       noise_scale=noise_scale)
-
+st.markdown(
+    r"""
+    $W^*_\text{out, noise}$: 
+    """
+)
 st.write(w_out_noise)
 
 # PCR:
@@ -732,31 +812,32 @@ st.markdown(
     r"""
     **Principal component regression**: 
     
-    First demonstrate that PCR on non-multicollinear data, with all components is the same 
-    as normal linear regression:  
-    """
+    Choose the number of principal components: """
 )
+
+pca_comps = int(st.number_input("PCA components", value=r_dim, min_value=1, max_value=r_dim))
 
 st.markdown(
     r"""
-    PCR on the non-multicollinear dataset. Show the condition and the rank of the PCA transformed
-    moment matrix: $R_\text{pca}^T R_\text{pca}$:
+    Perform PCA on the dataset, add the offset (the additional dimension of value $1$), and 
+    perform the regression. 
+
+    By definition, the moment matrix $R_\text{pca}^T R_\text{pca}$ for the PCA-states, becomes
+    diagonal: 
     """
 )
 
 # The PCA r_states:
-
-pca_comps = int(st.number_input("PCA components", value=r_dim, min_value=1, max_value=r_dim))
-
-
 pca = PCA(n_components=pca_comps)
 r_states_pca = pca.fit_transform(r_states_to_use)
 r_gen_states_pca = get_r_gen_states(r_states_pca)
 moment_matrix_pca = get_moment_matrix(r_gen_states_pca)
 
+st.write(moment_matrix_pca)
+
 st.markdown(
     r"""
-    Test the condition and rank of the pca moment matrix: 
+    The rank of the new moment matrix is the same as before, but the condition decreases:
     """
 )
 test_for_multicollinearity(moment_matrix_pca)
@@ -770,8 +851,8 @@ st.markdown(
 
 w_out_pca = linear_regression(r_gen_states_pca, out_states_to_use)
 
-w_out_pca_ridge = ridge_regression(r_gen_states_pca, out_states_to_use, reg_param=reg_param)
-w_out_pca = w_out_pca_ridge
+# w_out_pca_ridge = ridge_regression(r_gen_states_pca, out_states_to_use, reg_param=reg_param)
+# w_out_pca = w_out_pca_ridge
 
 st.write(w_out_pca)
 
@@ -796,11 +877,6 @@ fig.update_yaxes(title="Variance")
 fig.update_layout(title="Variance of data points along principle components")
 st.plotly_chart(fig)
 
-fig = go.Figure()
-fig.add_trace(
-    go.Bar(y=np.sum(np.abs(w_out_pca), axis=0))
-)
-fig.update_xaxes(title="pca_comps + 1")
-fig.update_yaxes(title="w_out summed")
-fig.update_layout(title="W_out_pca plot")
-st.plotly_chart(fig)
+# w_out_pca_subset = train_on_subset_pca(r_states, out_states, seed=0, n_samples_subset=1000,
+#                                        n_ens=100, n_pc=pca_comps)
+# st.write(np.std(w_out_pca_subset, axis=0))

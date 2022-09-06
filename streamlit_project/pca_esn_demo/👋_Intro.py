@@ -13,7 +13,8 @@ st.markdown(
     
     **Summary of the pages:** 
     - 📐: Explain PCA, and demonstrate it on an example. 
-    - 📈: Explain multiple linear regression in conjunction with pca, demonstrate it on an example.
+    - 📈: Explain multiple linear regression and the problems of multicollinearity and how ridge 
+        regression or pca can be used to tackle multicollinearity. 
     - 💫: Apply PCA and on the ESN and see its effects. 
     """
 )
