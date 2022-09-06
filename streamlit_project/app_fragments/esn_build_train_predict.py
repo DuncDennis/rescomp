@@ -9,7 +9,6 @@ import streamlit as st
 
 import rescomp
 import rescomp.esn_new_update_code as esn
-
 from streamlit_project.app_fragments import streamlit_utilities as utils
 
 
@@ -20,7 +19,12 @@ def esn_hash(obj):
 
 ESN_DICT = {"ESN_normal": esn.ESN_normal,
             "ESN_pca": esn.ESN_pca,
-            "ESN_output_hybrid": esn.ESN_output_hybrid
+            "ESN_pca_after_rgen": esn.ESN_pca_after_rgen,
+            "ESN_normal_centered": esn.ESN_normal_centered,
+            # "ESN_factor_analysis": esn.ESN_factor_analysis,
+            # "ESN_fast_ica": esn.ESN_fast_ica,
+            "ESN_output_hybrid": esn.ESN_output_hybrid,
+            "ESN_strong": esn.ESN_strong
             }
 
 # ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
@@ -64,6 +68,80 @@ def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     with utils.temp_seed(seed):
         esn.build(x_dim, **build_kwargs)
     return esn
+
+
+@st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=False,
+          max_entries=utils.MAX_CACHE_ENTRIES)
+def build_with_seed(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
+    """Build the esn class.
+    # TODO: This is more or less for pca_esn_demo app! But the seeding is also good for normal build.
+
+    Args:
+        esn_type: One of the esn types defined in ESN_DICT.
+        seed: Set the seed to create the other seeds.
+        x_dim: The x_dimension of the data to be predicted.
+        **kwargs: All other build args.
+
+    Returns:
+        The build esn.
+    """
+    if esn_type in ESN_DICT.keys():
+        esn = ESN_DICT[esn_type]()
+    else:
+        raise Exception("This esn_type is not accounted for")
+
+    rng = np.random.default_rng(seed)
+    seeds = rng.integers(0, 1000000, 5)
+    kwargs["input_noise_seed"] = seeds[0]
+    kwargs["r_train_noise_seed"] = seeds[1]
+    kwargs["network_seed"] = seeds[2]
+    kwargs["bias_seed"] = seeds[3]
+    kwargs["w_in_seed"] = seeds[4]
+
+    build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, kwargs)
+
+    with utils.temp_seed(seed):
+        esn.build(x_dim, **build_kwargs)
+    return esn
+
+
+def st_esn_strong_args(key: str | None = None) -> dict[str, object]:
+    """Streamlit elements to specify the additional settings of esn_strong.
+
+    Args:
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        A dictionary containing the esn_strong build args.
+    """
+    esn_strong_build_args = {}
+    esn_strong_build_args["perform_pca_bool"] = st.checkbox('perform_pca_bool',
+                                                            value=False,
+                                                            key=f"{key}__st_esn_strong_build_args__pca")
+
+    esn_strong_build_args["w_out_from_w_out_pca_bool"] = st.checkbox('w_out_from_w_out_pca_bool',
+                                                                     value=False,
+                                                                     key=f"{key}__st_esn_strong_build_args__pcawoutback")
+
+    esn_strong_build_args["n_pcr_comps"] = int(st.number_input('n_pcr_comps',
+                                                               value=500,
+                                                               step=1,
+                                                               key=f"{key}__st_esn_strong_build_args__n_pcr_comps"))
+
+    esn_strong_build_args["input_noise_scale"] = st.number_input('input_noise_scale',
+                                                                 value=0.0,
+                                                                 step=0.01,
+                                                                 min_value=0.0,
+                                                                 key=f"{key}__st_esn_strong_build_args__in_noise",
+                                                                 format="%f")
+
+    esn_strong_build_args["r_train_noise_scale"] = st.number_input('r_train_noise_scale',
+                                                                   value=0.0,
+                                                                   step=0.01,
+                                                                   min_value=0.0,
+                                                                   key=f"{key}__st_esn_strong_build_args__r_noise",
+                                                                   format="%f")
+    return esn_strong_build_args
 
 
 def st_select_esn_type(esn_sub_section: tuple[str, ...] | None = None,
@@ -162,6 +240,7 @@ def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
         Tuple with the fitted output, the real output and reservoir dictionary containing states
         for r_act_fct_inp, r_internal, r_input, r, r_gen, and the esn_obj.
     """
+    print("training", esn_obj._act_fct_opt)
     esn_obj.train(x_train,
                   sync_steps=t_train_sync,
                   save_y_train=True,
@@ -194,7 +273,7 @@ def predict_return_res(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
     TODO: check when to use this func and when to use predict.
 
     Args:
-        esn_obj: The esn_obj, that has a predict method.
+        esn_obj: The esn_obj, that has a predict method.500
         x_pred: The np.ndarray of shape (t_pred_sync_steps + t_pred_steps, sys_dim)
         t_pred_sync: The number of time steps used for syncing the esn before prediction.
 
