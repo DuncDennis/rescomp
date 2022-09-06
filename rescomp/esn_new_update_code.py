@@ -13,13 +13,13 @@ import networkx as nx
 from sklearn import decomposition
 from statsmodels.tsa.vector_ar.var_model import VAR
 
-import pickle
-from copy import deepcopy
-import gc
-import pandas.io.pickle
+# import pickle
+# from copy import deepcopy
+# import gc
+# import pandas.io.pickle
 from . import utilities
 from . import simulations
-from ._version import __version__
+# from ._version import __version__
 
 
 class _ResCompCore():  # utilities._ESNLogging
@@ -269,6 +269,11 @@ class _ResCompCore():  # utilities._ESNLogging
         return self._saved_y_train
 
     def get_w_out(self):
+        """Return w_out matrix.
+
+        Returns: w_out matrix of shape (y_dim, r_gen_dim).
+
+        """
         return self._w_out
 
     def get_dimensions(self) -> tuple[int, int, int, int]:
@@ -373,6 +378,38 @@ class _add_basic_defaults():
 
     def set_reg_param(self, reg_param=1e-8):
         self._reg_param = reg_param
+
+#
+# class _add_regression():
+#     """Set the _fit_w_out function.
+#     """
+#     def __init__(self):
+#         pass
+#
+#     def set_regression_type(self,
+#                             pcr_bool: bool = False,
+#                             noise_bool: bool = False,
+#                             reg_param: float = 1e-7,
+#                             n_pcr_comps: int | None = None,
+#                             noise_scale: float = 1e-5,
+#                             noise_seed: int | None = None
+#                             ):
+#         self._pcr_bool = pcr_bool
+#         self._noise_bool = noise_bool
+#         self._reg_param = reg_param
+#         self._n_pcr_comps = n_pcr_comps
+#         self._noise_scale = noise_scale
+#         self._noise_seed = noise_seed
+#
+#     def _fit_w_out(self, y_train, r_gen_train):
+#
+#         if self._noise_bool:
+#             if self._noise_seed is not None:
+#                 r_gen_train = r_gen_train + np.random.standard_normal(r_gen_train.shape)
+#
+#         self._w_out = np.linalg.solve(
+#             r_gen_train.T @ r_gen_train + self._reg_param * np.eye(r_gen_train.shape[1]),
+#             r_gen_train.T @ y_train).T
 
 
 class _add_network_update_fct():
@@ -3596,6 +3633,262 @@ class ESN_pca_after_rgen(_ResCompCore, _add_basic_defaults, _add_network_update_
 
         self.set_default_res_state(default_res_state=default_res_state)
         self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_strong(_ResCompCore,
+                 _add_basic_defaults,
+                 _add_network_update_fct,
+                 _add_w_in,
+                 _add_standard_input_coupling,
+                 _add_standard_y_to_x):
+
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        _add_w_in.__init__(self)
+        _add_standard_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+        # Fields to fill:
+        self._input_noise_scale = None
+        self._input_noise_seed = None
+
+        self._r_train_noise_scale = None
+        self._r_train_noise_seed = None
+
+        self._perform_pca_bool = None
+        self._w_out_from_w_out_pca_bool = None
+        self._pca = None
+
+        self._n_pcr_comps = None
+
+        self._r_to_r_gen_opt = None
+        self._r_to_r_gen_synonyms = utilities._SynonymDict()
+        self._r_to_r_gen_synonyms.add_synonyms(0, ["linear_r", "simple", "linear"])
+        self._r_to_r_gen_synonyms.add_synonyms(1, "linear_and_square_r")
+        self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
+        self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
+
+
+    def set_r_to_r_gen_fct_pre_pca(self, r_to_r_gen_opt="linear"):
+        if type(r_to_r_gen_opt) == str:
+            self._r_to_r_gen_opt = r_to_r_gen_opt
+            r_to_r_gen_flag = self._r_to_r_gen_synonyms.get_flag(r_to_r_gen_opt)
+            if r_to_r_gen_flag == 0:
+                _r_to_r_gen_fct_pre_pca = lambda r, x: r
+            elif r_to_r_gen_flag == 1:
+                _r_to_r_gen_fct_pre_pca = lambda r, x: np.hstack((r, r ** 2))
+            elif r_to_r_gen_flag == 2:
+                _r_to_r_gen_fct_pre_pca = lambda r, x: np.hstack((r, 1))
+            elif r_to_r_gen_flag == 3:
+                _r_to_r_gen_fct_pre_pca = lambda r, x: np.hstack((np.hstack((r, r ** 2)), 1))
+            elif r_to_r_gen_flag == 4:
+                def temp(r, x):
+                    r_gen = np.copy(r).T
+                    r_gen[::2] = r.T[::2] ** 2
+                    return r_gen.T
+
+                _r_to_r_gen_fct_pre_pca = temp
+            elif r_to_r_gen_flag == 5:
+                _r_to_r_gen_fct_pre_pca = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                _r_to_r_gen_fct_pre_pca = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
+        else:
+            self._r_to_r_gen_opt = "CUSTOM"
+            _r_to_r_gen_fct_pre_pca = r_to_r_gen_opt
+
+        self._r_to_r_gen_fct_pre_pca = _r_to_r_gen_fct_pre_pca
+        self._r_gen_dim_pre_pca = \
+        self._r_to_r_gen_fct_pre_pca(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[0]
+
+    def transform_pca_w_out_back(self,
+                                 w_out_pca: np.ndarray,
+                                 r_states: np.ndarray,
+                                 pca_component_matrix: np.ndarray,
+                                 ) -> np.ndarray:
+        """Transform the w_out matrix after pca transform back to the normal w_out matrix.
+
+        Args:
+            w_out_pca: The w_out matrix of the linear regression of r_gen(pca(r_states)) of shape
+                       (y_dim, pca_components + 1).
+            r_states: The states used to fit the pca of shape (n_samples, r_dim).
+            pca_component_matrix: The pca component matrix of shape (pca_components, r_dim).
+
+        Returns:
+            The back transformed w_out of shape (y_dim, r_gen_dim).
+        """
+
+        r_mean = np.mean(r_states, axis=0)
+
+        w_out_no_bias = w_out_pca[:, :-1] @ pca_component_matrix
+        w_out_only_bias = (w_out_pca[:, -1] - w_out_no_bias @ r_mean)[np.newaxis].T
+
+        w_out = np.hstack((w_out_no_bias, w_out_only_bias))
+        return w_out
+
+    def train(self,
+              use_for_train: np.ndarray,
+              sync_steps: int = 0,
+              reset_res_state: bool = True,
+              save_y_train: bool = False,
+              **kwargs):
+
+        # Split the use_for_train data in sync and train data:
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        # Further split the train data into x_train and y_train (input and output).
+        x_train = train[:-1]
+        y_train = train[1:]
+
+        # If you want to save the output:
+        if save_y_train:
+            self._saved_y_train = y_train
+
+        # For a clear states, reset the reservoir.
+        if reset_res_state:
+            self.reset_r()
+
+        # Possibility to add noise to x_train and y_train.
+        if self._input_noise_scale is not None:
+            with utilities.temp_seed(self._input_noise_seed):
+                x_train = x_train + np.random.standard_normal(x_train.shape) * self._input_noise_scale
+
+        # Synchronize the reservoir with the training data.
+        self.drive(sync)
+
+        # Drive the reservoir with the training data and save r_train.
+        kwargs["save_r"] = True
+        kwargs["save_r_gen"] = False
+        save_out = False
+        if "save_out" in kwargs.keys():
+            if kwargs["save_out"]:  # can not save out during training before w_out is calculated
+                save_out = True
+                kwargs["save_out"] = False
+        self.drive(x_train, **kwargs)
+        r_train = self.get_r()
+
+        # Add noise to r_train:
+        if self._r_train_noise_scale is not None:
+            with utilities.temp_seed(self._r_train_noise_seed):
+                r_train = r_train + np.random.standard_normal(r_train.shape) * self._r_train_noise_scale
+
+        # Perform r_to_r_gen_pre_pca on the r_states_w_noise.
+        train_steps = r_train.shape[0]
+        r_gen_pre_pca = np.zeros((train_steps, self._r_gen_dim_pre_pca))
+        for i in range(train_steps):
+            r_gen_pre_pca[i, :] = self._r_to_r_gen_fct_pre_pca(r_train[i, :], None)
+
+        # Optionally perform pca:
+        if self._perform_pca_bool:
+            self._pca = decomposition.PCA(self._n_pcr_comps)
+            r_gen_post_pca = self._pca.fit_transform(r_gen_pre_pca)
+        else:
+            r_gen_post_pca = r_gen_pre_pca
+
+        # Add output bias:
+        n_samples = r_gen_post_pca.shape[0]
+        r_gen_states = np.hstack((r_gen_post_pca, np.ones(n_samples)[:, np.newaxis]))
+
+        # Fit w_out using ridge regression.
+        self._fit_w_out(y_train, r_gen_states)
+
+        if self._perform_pca_bool:
+            if self._w_out_from_w_out_pca_bool:
+                w_out_pca = self.get_w_out()
+                self._w_out = self.transform_pca_w_out_back(w_out_pca,
+                                                            r_gen_pre_pca,
+                                                            self._pca.components_)
+                self._r_to_r_gen_fct = lambda r, x: np.hstack((self._r_to_r_gen_fct_pre_pca(r, x), 1))
+                n_samples = r_gen_pre_pca.shape[0]
+                self._saved_r_gen = np.hstack((r_gen_pre_pca, np.ones(n_samples)[:, np.newaxis]))
+            else:
+                r_to_r_gen_fct_with_pca = lambda r, x: self._pca.transform(self._r_to_r_gen_fct_pre_pca(r, x)[np.newaxis, :])[0, :]
+                self._r_to_r_gen_fct = lambda r, x: np.hstack((r_to_r_gen_fct_with_pca(r, x), 1))
+                self._saved_r_gen = r_gen_states
+        else:
+            self._r_to_r_gen_fct = lambda r, x: np.hstack((self._r_to_r_gen_fct_pre_pca(r, x), 1))
+            self._saved_r_gen = r_gen_states
+        self._r_gen_dim = self._saved_r_gen.shape[1]
+        # Save the fitted output.
+        if save_out:
+            self._saved_out = (self._w_out @ self._saved_r_gen.T).T
+
+    def build(self,
+              x_dim: int,
+              r_dim: int = 500,
+              n_rad: float = 0.1,
+              n_avg_deg: float = 6.0,
+              n_type_opt: str = "erdos_renyi",
+              network_creation_attempts=10,
+              perform_pca_bool=False,
+              w_out_from_w_out_pca_bool=False,
+              n_pcr_comps=None,
+              input_noise_scale=None,
+              input_noise_seed=None,
+              r_train_noise_scale=None,
+              r_train_noise_seed=None,
+              r_to_r_gen_opt="linear",
+              act_fct_opt="tanh",
+              node_bias_opt="no_bias",
+              bias_scale=1.0,
+              leak_factor=0.0,
+              w_in_opt="random_sparse",
+              w_in_scale=1.0,
+              default_res_state=None,
+              reg_param=1e-8,
+              network_seed=None,
+              bias_seed=None,
+              w_in_seed=None):
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        self._perform_pca_bool = perform_pca_bool
+        self._w_out_from_w_out_pca_bool = w_out_from_w_out_pca_bool
+        self._input_noise_scale = input_noise_scale
+        self._input_noise_seed = input_noise_seed
+        self._r_train_noise_scale = r_train_noise_scale
+        self._r_train_noise_seed = r_train_noise_seed
+
+        self.set_r_to_r_gen_fct_pre_pca(r_to_r_gen_opt)
+
+        if n_pcr_comps is None:
+            self._n_pcr_comps = self._r_gen_dim_pre_pca
+        else:
+            self._n_pcr_comps = n_pcr_comps
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
 
 
 # failed experiments / not working below:
