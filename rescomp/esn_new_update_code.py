@@ -3673,6 +3673,10 @@ class ESN_strong(_ResCompCore,
         self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
         self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
 
+        self.states_to_save = {"out_states": None,
+                               "r_gen_states": None,
+                               "r_gen_pre_pca_states": None}
+
 
     def set_r_to_r_gen_fct_pre_pca(self, r_to_r_gen_opt="linear"):
         if type(r_to_r_gen_opt) == str:
@@ -3730,6 +3734,74 @@ class ESN_strong(_ResCompCore,
         w_out = np.hstack((w_out_no_bias, w_out_only_bias))
         return w_out
 
+    def train_on_subset(self,
+                        y_train: np.ndarray,
+                        r_gen_states: np.ndarray,
+                        r_gen_pre_pca_states: np.ndarray,
+                        seed: int = 0,
+                        n_samples_subset: int = 100,
+                        n_ens: int = 100) -> np.ndarray:
+        """Perform the linear regression on random subsets of r_gen_states and y_train.
+
+        Args:
+            r_gen_states: The original r_states of shape (n_samples, r_gen_dim).
+            y_train: Matrix of dependent variables of shape (n_samples, y_dim).
+            seed: Seed for random number generator.
+            n_samples_subset: Nr of samples per subset.
+            n_ens: Nr of different subsets.
+
+        Returns:
+            W_out for each subset in the shape (n_ens, y_dim, r_gen_dim).
+        """
+        prev_w_out = self._w_out.copy()
+
+        # Get parameters:
+        n_samples = r_gen_states.shape[0]
+        r_gen_dim = self._r_gen_dim
+
+        if n_samples_subset > n_samples:
+            raise ValueError("Nr of samples in subset can not be larger than total number of "
+                             "samples. ")
+        y_dim = y_train.shape[1]
+
+        # Configureate rng:
+        rng = np.random.default_rng(seed)
+
+        # Calculate w_out for each subset:
+        w_out_subsets = np.zeros((n_ens, y_dim, r_gen_dim))
+        total_list_of_indices = np.arange(n_samples)
+        for i in range(n_ens):
+            indices = rng.choice(total_list_of_indices, size=n_samples_subset, replace=False)
+            r_gen_states_subset = r_gen_states[indices, :]
+            r_gen_pre_pca_states_subset = r_gen_pre_pca_states[indices, :]
+            out_states_subset = y_train[indices, :]
+            self.fit_w_out(out_states_subset, r_gen_states_subset, r_gen_pre_pca_states_subset)
+            w_out_subsets[i, :, :] = self._w_out.copy()
+
+        # Reset w_out:
+        self._w_out = prev_w_out
+        return w_out_subsets
+
+    def fit_w_out(self, y_train: np.ndarray, r_gen_states: np.ndarray,
+                  r_gen_pre_pca: np.ndarray) -> None:
+        """Fit w_out tailored for esn_strong.
+
+        Args:
+            y_train: The output of shape (time_steps, y_dim).
+            r_gen_states: The regressors of shape (time_steps, r_gen_dim).
+            r_gen_pre_pca: Pre pca r_gen states if w_out_from_w_out_pca_bool is true.
+
+        Returns:
+
+        """
+        self._fit_w_out(y_train, r_gen_states)
+        if self._perform_pca_bool:
+            if self._w_out_from_w_out_pca_bool:
+                w_out_pca = self.get_w_out()
+                self._w_out = self.transform_pca_w_out_back(w_out_pca,
+                                                            r_gen_pre_pca,
+                                                            self._pca.components_)
+
     def train(self,
               use_for_train: np.ndarray,
               sync_steps: int = 0,
@@ -3748,6 +3820,7 @@ class ESN_strong(_ResCompCore,
         # If you want to save the output:
         if save_y_train:
             self._saved_y_train = y_train
+        self.states_to_save["out_states"] = y_train.copy()
 
         # For a clear states, reset the reservoir.
         if reset_res_state:
@@ -3779,33 +3852,32 @@ class ESN_strong(_ResCompCore,
 
         # Perform r_to_r_gen_pre_pca on the r_states_w_noise.
         train_steps = r_train.shape[0]
-        r_gen_pre_pca = np.zeros((train_steps, self._r_gen_dim_pre_pca))
+        r_gen_pre_pca_states = np.zeros((train_steps, self._r_gen_dim_pre_pca))
         for i in range(train_steps):
-            r_gen_pre_pca[i, :] = self._r_to_r_gen_fct_pre_pca(r_train[i, :], None)
+            r_gen_pre_pca_states[i, :] = self._r_to_r_gen_fct_pre_pca(r_train[i, :], None)
+        self.states_to_save["r_gen_pre_pca_states"] = r_gen_pre_pca_states.copy()
 
         # Optionally perform pca:
         if self._perform_pca_bool:
             self._pca = decomposition.PCA(self._n_pcr_comps)
-            r_gen_post_pca = self._pca.fit_transform(r_gen_pre_pca)
+            r_gen_post_pca = self._pca.fit_transform(r_gen_pre_pca_states)
         else:
-            r_gen_post_pca = r_gen_pre_pca
+            r_gen_post_pca = r_gen_pre_pca_states
 
         # Add output bias:
         n_samples = r_gen_post_pca.shape[0]
         r_gen_states = np.hstack((r_gen_post_pca, np.ones(n_samples)[:, np.newaxis]))
+        self.states_to_save["r_gen_states"] = r_gen_states.copy()
 
         # Fit w_out using ridge regression.
-        self._fit_w_out(y_train, r_gen_states)
+        self.fit_w_out(y_train, r_gen_states, r_gen_pre_pca_states)
 
+        # Sort out _r_to_r_gen functions and saved_r_gen:
         if self._perform_pca_bool:
             if self._w_out_from_w_out_pca_bool:
-                w_out_pca = self.get_w_out()
-                self._w_out = self.transform_pca_w_out_back(w_out_pca,
-                                                            r_gen_pre_pca,
-                                                            self._pca.components_)
                 self._r_to_r_gen_fct = lambda r, x: np.hstack((self._r_to_r_gen_fct_pre_pca(r, x), 1))
-                n_samples = r_gen_pre_pca.shape[0]
-                self._saved_r_gen = np.hstack((r_gen_pre_pca, np.ones(n_samples)[:, np.newaxis]))
+                n_samples = r_gen_pre_pca_states.shape[0]
+                self._saved_r_gen = np.hstack((r_gen_pre_pca_states, np.ones(n_samples)[:, np.newaxis]))
             else:
                 r_to_r_gen_fct_with_pca = lambda r, x: self._pca.transform(self._r_to_r_gen_fct_pre_pca(r, x)[np.newaxis, :])[0, :]
                 self._r_to_r_gen_fct = lambda r, x: np.hstack((r_to_r_gen_fct_with_pca(r, x), 1))
@@ -3814,6 +3886,7 @@ class ESN_strong(_ResCompCore,
             self._r_to_r_gen_fct = lambda r, x: np.hstack((self._r_to_r_gen_fct_pre_pca(r, x), 1))
             self._saved_r_gen = r_gen_states
         self._r_gen_dim = self._saved_r_gen.shape[1]
+
         # Save the fitted output.
         if save_out:
             self._saved_out = (self._w_out @ self._saved_r_gen.T).T
