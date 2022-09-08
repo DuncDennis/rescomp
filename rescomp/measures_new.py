@@ -276,6 +276,7 @@ def largest_cross_lyapunov_exponent(
     dt: float = 1.0,
     initial_pert_direction: np.ndarray | None = None,
     return_convergence: bool = False,
+    scale_shift_vector: tuple[np.ndarray, np.ndarray] | None = None
 ) -> float | np.ndarray:
     """Numerically calculate a cross lyapunov exponent to measure the quality of the prediction.
 
@@ -299,11 +300,21 @@ def largest_cross_lyapunov_exponent(
             - If None: The direction of the initial perturbation is assumed to be np.ones(..).
         return_convergence: If True, return the convergence of the largest LE; a numpy array of
                             the shape (N, ).
+        scale_shift_vectors: Either None or a tuple where the first element is the shift-vector
+                             used to shift, and the scale-vector used to scale the
+                             predicted_trajectory compared to the data created via the
+                             iterator_func.
+                             It is assumed: data = original_data * scale_vector + shift_vector,
+                             where original_data is the trajectory produced via the iterator_func.
 
     Returns:
         The largest cross Lyapunov Exponent. If return_convergence is True: The convergence
         (np.ndarray), else just the float value, which is the last value in the convergence.
     """
+
+    if scale_shift_vector is not None:
+        scale_vec, shift_vec = scale_shift_vector
+        predicted_trajectory = (predicted_trajectory - shift_vec) / scale_vec
 
     predicted_time_steps, x_dim = predicted_trajectory.shape
 
