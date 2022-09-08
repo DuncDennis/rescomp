@@ -45,7 +45,7 @@ if __name__ == '__main__':
         else:
             dt = 1.0
 
-        scale, shift, noise_scale = syssim.st_preprocess_simulation()
+        shift_scale_params, noise_scale = syssim.st_preprocess_simulation()
         utils.st_line()
 
     with st.sidebar:
@@ -78,11 +78,10 @@ if __name__ == '__main__':
 
             time_series = syssim.simulate_trajectory(system_name, system_parameters,
                                                      time_steps)
-            time_series = syssim.preprocess_simulation(time_series,
-                                                       seed,
-                                                       scale=scale,
-                                                       shift=shift,
-                                                       noise_scale=noise_scale)
+            time_series, scale_shift_vector = syssim.preprocess_simulation(time_series,
+                                                                           seed,
+                                                                           scale_shift_params=shift_scale_params,
+                                                                           noise_scale=noise_scale)
             time_series_dict = {"time series": time_series}
 
             x_train, x_pred = syssim.split_time_series_for_train_pred(time_series,

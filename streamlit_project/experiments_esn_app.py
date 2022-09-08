@@ -51,7 +51,7 @@ if __name__ == '__main__':
         else:
             dt = 1.0
 
-        scale, shift, noise_scale = syssim.st_preprocess_simulation()
+        shift_scale_params, noise_scale = syssim.st_preprocess_simulation()
 
         x_dim_pre = syssim.get_x_dim(system_name, system_parameters)
         embedding_out = syssim.st_embed_timeseries(x_dim_pre, key="embedding")
@@ -93,11 +93,10 @@ if __name__ == '__main__':
 
             time_series = syssim.simulate_trajectory(system_name, system_parameters,
                                                      time_steps)
-            time_series = syssim.preprocess_simulation(time_series,
-                                                       seed,
-                                                       scale=scale,
-                                                       shift=shift,
-                                                       noise_scale=noise_scale)
+            time_series, scale_shift_vector = syssim.preprocess_simulation(time_series,
+                                                                           seed,
+                                                                           scale_shift_params=shift_scale_params,
+                                                                           noise_scale=noise_scale)
 
             time_series = syssim.get_embedded_time_series(time_series,
                                                           embedding_dimension=embedding_dims,
