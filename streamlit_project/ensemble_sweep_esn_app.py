@@ -51,7 +51,7 @@ if __name__ == '__main__':
         else:
             dt = 1.0
 
-        scale, shift, noise_scale = syssim.st_preprocess_simulation()
+        shift_scale_params, noise_scale = syssim.st_preprocess_simulation()
 
         x_dim_pre = syssim.get_x_dim(system_name, system_parameters)
         embedding_out = syssim.st_embed_timeseries(x_dim_pre, key="embedding")
@@ -74,13 +74,15 @@ if __name__ == '__main__':
         seed = utils.st_seed()
         utils.st_line()
 
-    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, sweep_tab = st.tabs(
-        ["🌀 Simulated data",
-         "🛠️ Architecture",
-         "🦾 Training",
-         "🔮 Prediction",
-         "🔬 Look-under-hood",
-         "🧹 Sweeping"])
+    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, sweep_tab, theory_tab = \
+        st.tabs(
+            ["🌀 Simulated data",
+             "🛠️ Architecture",
+             "🦾 Training",
+             "🔮 Prediction",
+             "🔬 Look-under-hood",
+             "🧹 Sweeping",
+             "🔰 Theory"])
 
     with sim_data_tab:
         if simulate_bool:
@@ -90,11 +92,13 @@ if __name__ == '__main__':
 
             time_series = syssim.simulate_trajectory(system_name, system_parameters,
                                                      time_steps)
-            time_series = syssim.preprocess_simulation(time_series,
-                                                       seed,
-                                                       scale=scale,
-                                                       shift=shift,
-                                                       noise_scale=noise_scale)
+
+            time_series, scale_shift_vector = syssim.preprocess_simulation(time_series,
+                                                                           seed,
+                                                                           scale_shift_params=shift_scale_params,
+                                                                           noise_scale=noise_scale)
+
+            time_series_dict = {"time series": time_series}
 
             time_series = syssim.get_embedded_time_series(time_series,
                                                           embedding_dimension=embedding_dims,
@@ -306,9 +310,6 @@ if __name__ == '__main__':
                                                                 dt=dt,
                                                                 using_str="the reservoir update "
                                                                           "equation")
-                utils.st_line()
-                if st.checkbox("Autonomously drive the reservoir", key="auto_res"):
-                    st.write("TBD maybe basin of attractor? ")
 
             with pca_tab:
                 st.info("The following functionalities make sense for PCA_ens where the "
@@ -1036,46 +1037,6 @@ if __name__ == '__main__':
 
                     st.write("ESN offset: ", esn_to_test._input_data_mean)
 
-                utils.st_line()
-                if st.checkbox("R_Gen std deviation plots during training: ", key="r_gen std plots"):
-                    # TODO: Experimental
-                    st.warning("EXPERIMENTAL")
-                    st.info("Plot the logarithmic standard deviaiton plot of r_gen for different "
-                            "activation functions: ")
-
-                    results_dict = {"activation function": [],  # type: ignore
-                                    "var of rgen": [],
-                                    "std of rgen": [],
-                                    "rgen index": []}
-
-                    for act_fct in ["tanh", "sigmoid", "relu", "linear"]:
-                        build_args["act_fct_opt"] = act_fct
-                        esn_pca_test = esn.build(esn_type="ESN_pca", seed=seed,
-                                                 x_dim=x_dim,
-                                                 **build_args)
-                        esn_pca_test = copy.deepcopy(esn_pca_test)
-                        _, _, res_train_dict_pca, _ = esn.train_return_res(
-                            esn_pca_test,
-                            x_train,
-                            t_train_sync,
-                        )
-
-                        r_gen = res_train_dict_pca["r_gen"]
-                        std = np.std(r_gen, axis=0)
-                        var = np.var(r_gen, axis=0)
-                        rgendims = std.shape[0]
-                        results_dict["rgen index"] += np.arange(rgendims).tolist()
-                        results_dict["var of rgen"] += var.tolist()
-                        results_dict["std of rgen"] += std.tolist()
-                        results_dict["activation function"] += [act_fct, ] * rgendims
-
-                    df_to_plot = pd.DataFrame.from_dict(results_dict)  # type: ignore
-                    fig = px.line(df_to_plot,
-                                  x="rgen index",
-                                  y="var of rgen",
-                                  color="activation function", log_y=True)
-                    st.plotly_chart(fig)
-
             with more_tab:
                 if st.checkbox("Cross lyapunov exponent", key="cross lyap exp checkbox"):
                     # TODO: Experimental
@@ -1109,7 +1070,8 @@ if __name__ == '__main__':
                         part_time_steps=part_time_steps,
                         deviation_scale=deviation_scale,
                         steps_skip=steps_skip,
-                        return_convergence=True)
+                        return_convergence=True,
+                        scale_shift_vector=scale_shift_vector)
 
                     largest_lle = np.round(lle_conv[-1], 5)
 
@@ -1119,7 +1081,6 @@ if __name__ == '__main__':
                                                               f"Exponent: "
                                                               f"{largest_lle}")
                     plpl.multiple_figs(figs)
-
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
@@ -1199,6 +1160,250 @@ if __name__ == '__main__':
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
+    with theory_tab:
+        if predict_bool:
+            if st.checkbox("Check linear ESN without network: ", key="theory_linear_nonet"):
+                st.markdown("**Theory:**")
+                st.markdown("Here we assume a linear activation function, and no network. "
+                            "Furthermore we assume a output-bias readout and an optional node bias. "
+                            "With these assumptions the output becomes a function of the input: ")
+
+                st.latex(r"""
+                \begin{aligned}
+                \boldsymbol{y} &= \tilde{W}_\text{out} \tilde{\boldsymbol{r}} =  W_\text{out} 
+                \boldsymbol{r} + \boldsymbol{w} = 
+                W_\text{out}\left[ W_\text{in} 
+                \boldsymbol{x} + \boldsymbol{b} \right] + \boldsymbol{w} \\ 
+                \boldsymbol{y} &= 
+                W_\text{out} W_\text{in}  \boldsymbol{x} + W_\text{out} \boldsymbol{b} + \boldsymbol{w}
+                \end{aligned}
+                """)
+
+                st.markdown("For the pca esn the output looks like: ")
+                st.latex(r"""
+                \begin{aligned}
+                \boldsymbol{y} &= 
+                \tilde{W}^\text{pca}_\text{out} \tilde{\boldsymbol{r}}_\text{pca} = 
+                W_\text{out}^\text{pca} \boldsymbol{r}_\text{pca} + \boldsymbol{w}_\text{pca} = 
+                W_\text{out}^\text{pca} P (\boldsymbol{r} - \boldsymbol{r}_\text{mean}) + 
+                \boldsymbol{w}_\text{pca} \\
+                
+                \boldsymbol{y} &= 
+                W_\text{out}^\text{pca} P W_\text{in}(\boldsymbol{x} - \boldsymbol{x}_\text{mean}) + 
+                \boldsymbol{w}_\text{pca} \\
+                
+                \boldsymbol{y} &= 
+                W_\text{out}^\text{pca} P W_\text{in}  \boldsymbol{x} +  \boldsymbol{w}_\text{pca} - 
+                W_\text{out}^\text{pca} P W_\text{in} \boldsymbol{x}_\text{mean}
+                
+                \end{aligned}
+                """)
+
+                st.markdown("By comparing both equations we get the following relationships: ")
+                st.latex(r"""
+                \begin{aligned}
+                W_\text{out}^\text{pca} P &= W_\text{out} \\
+                \boldsymbol{w}_\text{pca} - 
+                W_\text{out}^\text{pca} P W_\text{in} \boldsymbol{x}_\text{mean} &=  
+                W_\text{out} \boldsymbol{b} + \boldsymbol{w}
+                \end{aligned}
+                """)
+
+                st.markdown("These two relationships will now be tested numerically:")
+                st.info("Please select r_to_r_gen_opt = output_bias, act_fct_opt=linear, node_bias_opt=random_bias,"
+                        " n_rad=0.0")
+                # normal esn:
+                normal_esn = esn.build(esn_type="ESN_normal",
+                                       seed=seed,
+                                       x_dim=x_dim,
+                                       **build_args)
+                r_dim = build_args["r_dim"]
+                normal_esn = copy.deepcopy(normal_esn)
+                _, _, _, normal_esn = esn.train_return_res(
+                    normal_esn,
+                    x_train,
+                    t_train_sync,
+                )
+                w_out_normal = normal_esn.get_w_out()
+                w_out_res_normal = w_out_normal[:, :r_dim]
+                w_out_vec_normal = w_out_normal[:, -1]
+                b_normal = normal_esn._node_bias
+
+                # PCA esn:
+                pca_esn = esn.build(esn_type="ESN_pca",
+                                       seed=seed,
+                                       x_dim=x_dim,
+                                       **build_args)
+                pca_esn = copy.deepcopy(pca_esn)
+                _, _, _, pca_esn = esn.train_return_res(
+                    pca_esn,
+                    x_train,
+                    t_train_sync,
+                )
+                w_out_pca = pca_esn.get_w_out()
+                w_out_res_pca = w_out_pca[:, :r_dim]
+                w_out_vec_pca = w_out_pca[:, -1]
+                x_mean = np.mean(x_train[t_train_sync: -1, :], axis=0)
+                pca_components = pca_esn._pca.components_
+                w_in = pca_esn._w_in
+
+                # first test:  w_out matrices
+                pca_matrix = w_out_res_pca @ pca_components
+                normal_matrix = w_out_res_normal
+
+                st.write("Difference of matrices: ", pca_matrix - normal_matrix)
+
+                # st.write("W_in as comparison: ", w_in.T)
+                # st.write("normal w_out matrix: ", normal_matrix)
+                # st.write("pca w_out matrix: ", w_out_res_pca)
+
+                # second test:
+                pca_vector = w_out_vec_pca - w_out_res_pca @ pca_components @ w_in @ x_mean
+                normal_vector = w_out_res_normal @ b_normal + w_out_vec_normal
+                st.write("Differences of vectors: ", pca_vector - normal_vector)
+
+                st.info("For small regulation parameters the difference in matrices gets bigger, "
+                        "due to nummerical errors.")
+                st.info("The equations above assume that the output can be written as an affine "
+                        "function of the input. This is for only for linear systems the case. "
+                        "Thus there is a bigger difference if tried on non-linear systems. ")
+
+                st.markdown("Also the first x_dim pca components will explain 100% of the variance"
+                            ", i.e. the data in the high dimensional r_dim space spans the same "
+                            "dimensions as the input: ")
+                cols = st.columns(2)
+                with cols[0]:
+                    st.write("Explained variance: ", pca_esn._pca.explained_variance_ratio_.T)
+                with cols[1]:
+                    st.write("Cummulative explained variance: ",
+                             np.cumsum(pca_esn._pca.explained_variance_ratio_).T)
+
+            utils.st_line()
+            if st.checkbox("Check linear ESN with network: ", key="theory_linear_net"):
+                st.markdown("**Theory:**")
+                st.markdown("Here we assume a linear activation function with a network. "
+                            "Furthermore we assume a output-bias readout and no node bias. "
+                            "With these assumptions the output becomes a linear function of all"
+                            "previous inputs. The ESN becomes a VAR (vector auto-regression model).")
+
+                st.latex(r"""
+                \begin{aligned}
+                \boldsymbol{y}_i &= \tilde{W}_\text{out} \tilde{\boldsymbol{r}}_i =  W_\text{out} 
+                \boldsymbol{r}_i + \boldsymbol{w} = 
+                W_\text{out}\left[ W_\text{in} 
+                \boldsymbol{x}_{i-1} + A \boldsymbol{r}_{i-1} + \boldsymbol{b} \right] + \boldsymbol{w} \\ 
+                \boldsymbol{y}_i &= W_\text{out} \left[ W_\text{in} 
+                \boldsymbol{x}_{i-1} + A W_\text{in} \boldsymbol{x}_{i-2} + A^2 \boldsymbol{r}_{i-2}
+                + (A+1) \boldsymbol{b} \right] + \boldsymbol{w} \\
+                \boldsymbol{y}_i &= \sum_{j=1} C_j \boldsymbol{x}_{i-j} + \tilde{\boldsymbol{w}}, 
+                \qquad C_j \text{ is a } x_\text{dim} \times x_\text{dim} \text{ matrix.} 
+                \end{aligned}
+                """)
+
+                st.markdown("For the pca esn the output looks like: ")
+                st.latex(r"""
+                \begin{aligned}
+                \boldsymbol{y}_i &= 
+                \tilde{W}^\text{pca}_\text{out} \tilde{\boldsymbol{r}}_\text{pca, i} = 
+                W_\text{out}^\text{pca} \boldsymbol{r}_\text{pca, i} + \boldsymbol{w}_\text{pca} = 
+                W_\text{out}^\text{pca} P (\boldsymbol{r}_i - \boldsymbol{r}_\text{mean}) + 
+                \boldsymbol{w}_\text{pca} \\
+                
+                \boldsymbol{y} &= W_\text{out}^\text{pca} P \boldsymbol{r}_i + \boldsymbol{c} = 
+                W_\text{out}^\text{pca} P \left[ W_\text{in} 
+                \boldsymbol{x}_{i-1} + A \boldsymbol{r}_{i-1} + \boldsymbol{b} \right] + \boldsymbol{c}\\
+                \end{aligned}
+                """)
+
+                st.markdown("By comparing both equations we get the following relationships: ")
+                st.latex(r"""
+                \begin{aligned}
+                W_\text{out}^\text{pca} P &= W_\text{out} \\
+                
+                \boldsymbol{w}_\text{pca} - 
+                W_\text{out}^\text{pca} P \boldsymbol{r}_\text{mean} &= \boldsymbol{w}
+                \end{aligned}
+                """)
+
+                st.markdown("These two relationships will now be tested numerically:")
+                st.info(
+                    "Please select r_to_r_gen_opt = output_bias, act_fct_opt=linear, node_bias_opt=random_bias,"
+                    ", n_rad=0.5")
+
+                # normal esn:
+                normal_esn = esn.build(esn_type="ESN_normal",
+                                       seed=seed,
+                                       x_dim=x_dim,
+                                       **build_args)
+                r_dim = build_args["r_dim"]
+                normal_esn = copy.deepcopy(normal_esn)
+                _, _, _, normal_esn = esn.train_return_res(
+                    normal_esn,
+                    x_train,
+                    t_train_sync,
+                )
+                w_out_normal = normal_esn.get_w_out()
+                w_out_res_normal = w_out_normal[:, :r_dim]
+                w_out_vec_normal = w_out_normal[:, -1]
+                b_normal = normal_esn._node_bias
+
+                # PCA esn:
+                pca_esn = esn.build(esn_type="ESN_pca",
+                                       seed=seed,
+                                       x_dim=x_dim,
+                                       **build_args)
+                pca_esn = copy.deepcopy(pca_esn)
+                _, _, pca_res_dict, pca_esn = esn.train_return_res(
+                    pca_esn,
+                    x_train,
+                    t_train_sync,
+                )
+                w_out_pca = pca_esn.get_w_out()
+                w_out_res_pca = w_out_pca[:, :r_dim]
+                w_out_vec_pca = w_out_pca[:, -1]
+                r_mean = np.mean(pca_res_dict["r"], axis=0)
+                pca_components = pca_esn._pca.components_
+
+                # first test:  w_out matrices
+                pca_matrix = w_out_res_pca @ pca_components
+                normal_matrix = w_out_res_normal
+
+                st.write("Difference of matrices: ", pca_matrix - normal_matrix)
+
+                # second test:
+                pca_vector = w_out_vec_pca - w_out_res_pca @ pca_components @ r_mean
+                normal_vector = w_out_vec_normal
+                st.write("Differences of vectors: ", pca_vector - normal_vector)
+
+
+            utils.st_line()
+            if st.checkbox("Moment Matrix: ",
+                           key="moment matrix"):
+                st.markdown("**Theory:**")
+                st.markdown("See how ill the moment matrix is conditioned. ")
+                r_gen_states = res_train_dict["r_gen"]
+                moment_matrix = r_gen_states.T @ r_gen_states
+                st.write(moment_matrix)
+                # st.write(moment_matrix > 1e-14)
+
+                matrix_rank = np.linalg.matrix_rank(r_gen_states)
+                st.write(matrix_rank)
+
+                # st.write("Try to inverse the moment_matrix: ")
+                inv_moment_matrix = np.linalg.inv(moment_matrix)
+                # Idea: Fast training by just inverting the diagonal?
+                st.write("Inverse: ", inv_moment_matrix)
+
+                st.write("Condition of design matrix: ")
+                cond = np.linalg.cond(r_gen_states)
+                st.write("Condition: ", cond)
+
+                # Do i have to care about multi-colinearity?
+                # SEE: https://en.wikipedia.org/wiki/Multicollinearity -> Detection
+
+                # Add noise to data and re-run regression, see how much the coefficients change.
+        else:
+            st.info('Activate [🔮 Predict] checkbox to see something.')
     #  Container code at the end:
     if build_bool:
         x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()

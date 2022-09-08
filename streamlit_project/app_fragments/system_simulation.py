@@ -248,8 +248,9 @@ def simulate_trajectory(system_name: str, system_parameters: dict[str, Any], tim
 @st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
 def get_scaled_and_shifted_data(time_series: np.ndarray,
                                 scale: float = 1.0,
-                                shift: float = 0.0
-                                ) -> np.ndarray:
+                                shift: float = 0.0,
+                                return_parameters: bool = False
+                                ) -> np.ndarray | tuple[np.ndarray, tuple[np.darray, np.ndarray]]:
     """
     Scale and shift a time series.
 
@@ -260,11 +261,16 @@ def get_scaled_and_shifted_data(time_series: np.ndarray,
         time_series: The time series of shape (time_steps, sys_dim).
         scale: Scale every axis so that the std is the scale value.
         shift: Shift every axis so that the mean is the shift value.
+        return_parameters: If True, also return the scale_vec and shift_vec.
 
     Returns:
-        The scaled and shifted time_series.
+        The scaled and shifted time_series and, if return_parameters is True: A tuple containing
+        the scale_vec and shift_vec.
     """
-    return datapre.scale_and_shift(time_series, scale=scale, shift=shift)
+    return datapre.scale_and_shift(time_series,
+                                   scale=scale,
+                                   shift=shift,
+                                   return_parameters=return_parameters)
 
 
 @st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
@@ -286,7 +292,7 @@ def get_noisy_data(time_series: np.ndarray,
 
 
 def st_preprocess_simulation(key: str | None = None
-                             ) -> tuple[float | None, float | None, float | None]:
+                             ) -> tuple[tuple[float, float] | None, float | None]:
     """Streamlit elements to get parameters for preprocessing the data.
 
     To be used together with preprocess_simulation.
@@ -296,7 +302,7 @@ def st_preprocess_simulation(key: str | None = None
         key: Provide a unique key if this streamlit element is used multiple times.
 
     Returns:
-        The scale, shift and noise_scale to be input into preprocess_simulation.
+        The scale_shift_parameters and noise_scale to be input into preprocess_simulation.
     """
     with st.expander("Preprocess:"):
         if st.checkbox("Normalize and center",
@@ -308,8 +314,9 @@ def st_preprocess_simulation(key: str | None = None
             with right:
                 shift = st.number_input("shift", value=0.0, step=0.1, format="%f",
                                         key=f"{key}__st_preprocess_simulation__shift")
+            shift_scale_params = scale, shift
         else:
-            scale, shift = None, None
+            shift_scale_params = None
 
         if st.checkbox("Add white noise", key=f"{key}__st_preprocess_simulation__noise_check"):
             noise_scale = st.number_input("noise scale", value=0.1, min_value=0.0, step=0.01,
@@ -317,24 +324,25 @@ def st_preprocess_simulation(key: str | None = None
                                           key=f"{key}__st_preprocess_simulation__noise")
         else:
             noise_scale = None
-    return scale, shift, noise_scale
+
+    return shift_scale_params, noise_scale
 
 
 @st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
 def preprocess_simulation(time_series: np.ndarray,
                           seed: int,
-                          shift: float | None = None,
-                          scale: float | None = None,
-                          noise_scale: float | None = None) -> np.ndarray:
+                          scale_shift_params: tuple[float, float] | None,
+                          noise_scale: float | None = None
+                          ) -> np.ndarray | tuple[np.ndarray, tuple[np.darray, np.ndarray]]:
     """Function to preprocess the data: scale shift and add noise.
 
     Args:
         time_series: The input timeseries.
         seed: The seed to use for the random noise.
-        shift: The mean in every direction of the modified time series.
-               If None don't scale and shift.
-        scale: The std in every direction of the modified time series.
-               If None don't scale and shift.
+        scale_shift_params: A tuple with the first element being a float describing the std in
+                            every direction of the modified time series. The second element being
+                            the mean in every direction of the modified time series.
+                            If None don't scale and shift.
         noise_scale: The scale of the added white noise.
 
     Returns:
@@ -342,13 +350,42 @@ def preprocess_simulation(time_series: np.ndarray,
     """
 
     mod_time_series = time_series
-    if shift is not None and scale is not None:
-        mod_time_series = get_scaled_and_shifted_data(time_series, shift=shift, scale=scale)
+    if scale_shift_params is not None:
+        scale, shift = scale_shift_params
+        mod_time_series, scale_shift_vector = get_scaled_and_shifted_data(time_series,
+                                                                          shift=shift,
+                                                                          scale=scale,
+                                                                          return_parameters=True)
 
     if noise_scale is not None:
-        mod_time_series = get_noisy_data(mod_time_series, noise_scale=noise_scale, seed=seed)
+        mod_time_series = get_noisy_data(mod_time_series,
+                                         noise_scale=noise_scale,
+                                         seed=seed)
 
-    return mod_time_series
+    if scale_shift_params is not None:  # If you scale and shift, also return the vectors.
+        return mod_time_series, scale_shift_vector
+    else:
+        return mod_time_series, None
+
+
+@st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
+def inverse_transform_shift_scale(time_series: np.ndarray,
+                                  scale_shift_vectors: tuple[np.ndarray, np.ndarray]
+                                  ) -> np.ndarray:
+    """Inverse transform a time series that was shifted and scaled.
+    # TODO: not sure if needed.
+
+    The inverse to get_scaled_and_shifted_data.
+
+    Args:
+        time_series: The shifted and scaled input timeseries.
+        scale_shift_params: A tuple: (scale_vector, shift_vector).
+
+    Returns:
+        The inverse_transformed times series.
+    """
+    scale_vec, shift_vec = scale_shift_vectors
+    return (time_series - shift_vec) / scale_vec
 
 
 def split_time_series_for_train_pred(time_series: np.ndarray,
