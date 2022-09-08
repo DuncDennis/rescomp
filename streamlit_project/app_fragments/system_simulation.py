@@ -249,7 +249,7 @@ def simulate_trajectory(system_name: str, system_parameters: dict[str, Any], tim
 def get_scaled_and_shifted_data(time_series: np.ndarray,
                                 scale: float = 1.0,
                                 shift: float = 0.0,
-                                return_parameters: bool = False
+                                return_scale_shift: bool = False
                                 ) -> np.ndarray | tuple[np.ndarray, tuple[np.darray, np.ndarray]]:
     """
     Scale and shift a time series.
@@ -261,16 +261,16 @@ def get_scaled_and_shifted_data(time_series: np.ndarray,
         time_series: The time series of shape (time_steps, sys_dim).
         scale: Scale every axis so that the std is the scale value.
         shift: Shift every axis so that the mean is the shift value.
-        return_parameters: If True, also return the scale_vec and shift_vec.
+        return_scale_shift: If True, also return the scale_vec and shift_vec.
 
     Returns:
-        The scaled and shifted time_series and, if return_parameters is True: A tuple containing
+        The scaled and shifted time_series and, if return_scale_shift is True: A tuple containing
         the scale_vec and shift_vec.
     """
     return datapre.scale_and_shift(time_series,
                                    scale=scale,
                                    shift=shift,
-                                   return_parameters=return_parameters)
+                                   return_scale_shift=return_scale_shift)
 
 
 @st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
@@ -355,7 +355,7 @@ def preprocess_simulation(time_series: np.ndarray,
         mod_time_series, scale_shift_vector = get_scaled_and_shifted_data(time_series,
                                                                           shift=shift,
                                                                           scale=scale,
-                                                                          return_parameters=True)
+                                                                          return_scale_shift=True)
 
     if noise_scale is not None:
         mod_time_series = get_noisy_data(mod_time_series,

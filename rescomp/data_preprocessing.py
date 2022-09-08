@@ -8,7 +8,7 @@ from sklearn.decomposition import PCA
 
 def scale_and_shift(time_series: np.ndarray, scale: float | np.ndarray | None = None,
                     shift: float | np.ndarray | None = None,
-                    return_parameters: bool = False
+                    return_scale_shift: bool = False
                     ) -> np.ndarray | tuple[np.ndarray, tuple[np.darray, np.ndarray]]:
     """ Scale and shift a time series.
 
@@ -23,10 +23,10 @@ def scale_and_shift(time_series: np.ndarray, scale: float | np.ndarray | None = 
         shift: If None the data is shifted so that the mean is 0 for each axis. If float, shift
                every axis so that the mean is the shift value. If shift is an array, shift so
                that the mean of each axis corresponds to the value in the array.
-        return_parameters: If True, also return the total scale_vec and shift_vec.
+        return_scale_shift: If True, also return the total scale_vec and shift_vec.
 
     Returns:
-        The scaled and shifted time_series and, if return_parameters is True: A tuple containing
+        The scaled and shifted time_series and, if return_scale_shift is True: A tuple containing
         the total scale_vec and shift_vec.
     """
 
@@ -57,7 +57,7 @@ def scale_and_shift(time_series: np.ndarray, scale: float | np.ndarray | None = 
 
     scaled_and_shifted_time_series = scaled_and_centered + shift_vec
 
-    if return_parameters:
+    if return_scale_shift:
         scale_vec_total = scale_vec/std
         shift_vec_total = shift_vec - mean * scale_vec_total
         return scaled_and_shifted_time_series, (scale_vec_total, shift_vec_total)

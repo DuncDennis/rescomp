@@ -240,7 +240,6 @@ def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
         Tuple with the fitted output, the real output and reservoir dictionary containing states
         for r_act_fct_inp, r_internal, r_input, r, r_gen, and the esn_obj.
     """
-    print("training", esn_obj._act_fct_opt)
     esn_obj.train(x_train,
                   sync_steps=t_train_sync,
                   save_y_train=True,
