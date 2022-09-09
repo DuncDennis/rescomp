@@ -65,7 +65,6 @@ def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
         raise Exception("This esn_type is not accounted for")
 
     seed_args = _get_seed_args_in_build(esn)
-    print(seed_args)
     rng = np.random.default_rng(seed)
     seeds = rng.integers(0, 1000000, len(seed_args))
     for i_seed, seed_arg in enumerate(seed_args):
@@ -218,6 +217,10 @@ def st_basic_esn_build(key: str | None = None) -> dict[str, Any]:
                                                 key=f"{key}__st_basic_esn_build__winopt")
     basic_build_args["w_in_scale"] = st.number_input('w_in_scale', value=1.0, step=0.1,
                                                      key=f"{key}__st_basic_esn_build__winsc")
+    basic_build_args["input_noise_scale"] = st.number_input('input noise scale',
+                                                            value=0.0,
+                                                            format="%f",
+                                                            key=f"{key}__st_basic_esn_build__inpnoisescale")
     log_reg_param = st.number_input('Log regulation parameter', value=-7., step=1., format="%f",
                                     key=f"{key}__st_basic_esn_build__reg")
     basic_build_args["reg_param"] = 10 ** (log_reg_param)
@@ -265,10 +268,6 @@ def st_pca_build_args(r_dim: int,
                         max_value=int(r_dim),
                         key=f"{key}__st_pca_build_args__pc")
     )
-    pca_build_args["input_noise_scale"] = st.number_input('input noise scale',
-                                                          value=0.0,
-                                                          format="%f",
-                                                          key=f"{key}__st_pca_build_args__inpnoisescale")
     return pca_build_args
 
 
