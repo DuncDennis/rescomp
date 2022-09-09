@@ -20,10 +20,11 @@ import streamlit_project.app_fragments.esn_experiments as esnexp
 import numpy as np
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import rescomp.data_preprocessing as datapre
 import streamlit_project.generalized_plotting.plotly_plots as plpl
 import streamlit_project.latex_formulas.esn_pca_formulas as pcalatex
-import rescomp.measures_new as rescompmeasures
+from sklearn.decomposition import PCA
 
 if __name__ == '__main__':
     st.set_page_config("Ensemble ESN Viewer", page_icon="⚡")
@@ -1063,7 +1064,6 @@ if __name__ == '__main__':
             with tabs[0]:  # PCA on reservoir states
                 if st.checkbox("Explained var of PCA comps for sweep",
                                key="sweep__pca_expl_var"):
-                    from sklearn.decomposition import PCA
 
                     N_ens = 3
                     r_or_r_gen = "r"  # or "r_gen"
@@ -1130,6 +1130,104 @@ if __name__ == '__main__':
                     fig.update_yaxes(type="log", exponentformat="E")
                     st.plotly_chart(fig)
                     st.write(df)
+                utils.st_line()
+                if st.checkbox("ESN_pca vs. ESN_normal: PCA on r_train and r_pred.",
+                               key="sweep__esn_pca_vs_esn_normal"):
+
+                    # normal esn:
+                    mod_build_args = copy.deepcopy(build_args)
+                    mod_build_args["r_to_r_gen_opt"] = "output_bias"
+                    esn_normal = esn.build(esn_type="ESN_normal",
+                                           seed=seed,
+                                           x_dim=x_dim,
+                                           **mod_build_args)
+                    esn_normal = copy.deepcopy(esn_normal)
+                    _, _, res_train_dict_normal, esn_normal = esn.train_return_res(
+                        esn_normal,
+                        x_train,
+                        t_train_sync,
+                    )
+                    esn_normal = copy.deepcopy(esn_normal)
+                    r_train_normal = res_train_dict_normal["r"]
+                    pca_normal = PCA()
+                    r_train_normal_pca = pca_normal.fit_transform(r_train_normal)
+
+                    _, _, res_pred_dict_normal, esn_normal = esn.predict_return_res(
+                        esn_normal,
+                        x_pred,
+                        t_pred_sync)
+                    r_pred_normal_pca = pca_normal.transform(res_pred_dict_normal["r"])
+                    esn_normal = copy.deepcopy(esn_normal)
+
+                    # pca esn:
+                    mod_build_args = copy.deepcopy(build_args)
+                    mod_build_args["r_to_r_gen_opt"] = "output_bias"
+                    esn_pca = esn.build(esn_type="ESN_pca",
+                                        seed=seed,
+                                        x_dim=x_dim,
+                                        **mod_build_args)
+                    esn_pca = copy.deepcopy(esn_pca)
+                    _, _, res_train_dict_pca, esn_pca = esn.train_return_res(
+                        esn_pca,
+                        x_train,
+                        t_train_sync,
+                    )
+                    esn_pca = copy.deepcopy(esn_pca)
+                    r_train_pca_pca = res_train_dict_pca["r_gen"][:, :-1]  # remove output bias
+
+                    _, _, res_pred_dict_pca, esn_pca = esn.predict_return_res(
+                        esn_pca,
+                        x_pred,
+                        t_pred_sync)
+                    esn_pca = copy.deepcopy(esn_pca)
+                    r_pred_pca_pca = res_pred_dict_pca["r_gen"][:, :-1]   # remove output bias
+
+                    # Plotting:
+                    log_y = st.checkbox("log y", key=f"logy_r_gen_std")
+                    r_pca_dict = {"r_train_pca_normal": r_train_normal_pca,
+                                  "r_pred_pca_normal": r_pred_normal_pca,
+                                  "r_train_pca_pca": r_train_pca_pca,
+                                  "r_pred_pca_pca": r_pred_pca_pca,
+                                  }
+                    mode = st.selectbox("Statistical measure", ["std",
+                                                                "var",
+                                                                "mean",
+                                                                "median",
+                                                                "ptp",
+                                                                "kurtosis"],
+                                        key=f"statistical_measures__std_of_pca_vs_normal")
+                    out = measures.get_statistical_measure(r_pca_dict, mode=mode)
+
+                    fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y,)
+
+                    # fig = px.bar(out, x="x_axis", y="std", color="label", log_y=log_y,
+                    #              barmode="group")
+                    fig.update_xaxes(title="pca component")
+                    # fig.update_layout(bargap=0.0)
+                    if log_y:
+                        fig.update_yaxes(type="log", exponentformat="E")
+                    st.plotly_chart(fig)
+
+                    if st.checkbox("Plot individual dimension as histogram", key="hist_pca_vs_norm"):
+                        r_pca_dict_copy = copy.deepcopy(r_pca_dict)
+                        del r_pca_dict["r_pred_pca_normal"]
+                        measures.st_histograms(r_pca_dict, key="hist_pca_va_norm")
+
+                    if st.checkbox("Plot sorted std of r normal states"):
+                        # normal r sorted (without pca).
+                        res_train_normal_std = np.std(res_train_dict_normal["r"], axis=0)
+                        res_train_normal_std_sorted = np.sort(res_train_normal_std)
+                        res_pred_normal_std = np.std(res_pred_dict_normal["r"], axis=0)
+                        res_pred_normal_std_sorted = res_pred_normal_std[np.argsort(res_train_normal_std)]
+
+                        r_normal_std_sorted_dict = {"res_train_normal_std_sorted": res_train_normal_std_sorted,
+                                                    "res_pred_normal_std_sorted": res_pred_normal_std_sorted}
+
+                        figs = plpl.multiple_1d_time_series(r_normal_std_sorted_dict,
+                                                            x_label="reservoir index sorted by "
+                                                                    "std of r_train",
+                                                            y_label="std of reservoir node")
+                        plpl.multiple_figs(figs)
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
