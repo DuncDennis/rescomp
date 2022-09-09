@@ -67,6 +67,9 @@ if __name__ == '__main__':
             basic_build_args = esn.st_basic_esn_build()
         with st.expander("Network parameters: "):
             build_args = basic_build_args | esn.st_network_build_args()
+        if esn_type == "ESN_pca":
+            with st.expander("ESN_pca settings: "):
+                build_args = basic_build_args | esn.st_pca_build_args(build_args["r_dim"])
         utils.st_line()
 
     with st.sidebar:
@@ -1044,43 +1047,13 @@ if __name__ == '__main__':
                     st.info("Calculate the \"cross lyapunov exponent\" as a measure for the "
                             "prediction quality. ")
 
-                    left, right = st.columns(2)
-                    with left:
-                        steps = int(st.number_input("steps", value=int(1e3),
-                                                    key=f"cross_lyapunov_exp__steps"))
-                    with right:
-                        part_time_steps = int(st.number_input("time steps of each part", value=15,
-                                                              key=f"cross_lyapunov_exp__part"))
-                    left, right = st.columns(2)
-                    with left:
-                        steps_skip = int(st.number_input("steps to skip", value=50, min_value=0,
-                                                         key=f"cross_lyapunov_exp__skip"))
-                    with right:
-                        deviation_scale = 10 ** (
-                            float(st.number_input("log (deviation_scale)", value=-10.0,
-                                                  key=f"cross_lyapunov_exp__eps")))
-
                     iterator_func = syssim.get_iterator_func(system_name, system_parameters)
+                    sysmeas.st_largest_cross_lyapunov_exponent(iterator_func,
+                                                               y_pred,
+                                                               scale_shift_vector=scale_shift_vector,
+                                                               dt=dt,
+                                                               )
 
-                    lle_conv = rescompmeasures.largest_cross_lyapunov_exponent(
-                        iterator_func,
-                        y_pred,
-                        dt=dt,
-                        steps=steps,
-                        part_time_steps=part_time_steps,
-                        deviation_scale=deviation_scale,
-                        steps_skip=steps_skip,
-                        return_convergence=True,
-                        scale_shift_vector=scale_shift_vector)
-
-                    largest_lle = np.round(lle_conv[-1], 5)
-
-                    figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
-                                                        y_label="running avg of LLE",
-                                                        title=f"Largest Cross Lyapunov "
-                                                              f"Exponent: "
-                                                              f"{largest_lle}")
-                    plpl.multiple_figs(figs)
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
