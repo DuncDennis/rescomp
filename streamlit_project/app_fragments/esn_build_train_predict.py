@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from typing import Any
 
 import numpy as np
@@ -63,11 +64,31 @@ def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     else:
         raise Exception("This esn_type is not accounted for")
 
+    seed_args = _get_seed_args_in_build(esn)
+    print(seed_args)
+    rng = np.random.default_rng(seed)
+    seeds = rng.integers(0, 1000000, len(seed_args))
+    for i_seed, seed_arg in enumerate(seed_args):
+        kwargs[seed_arg] = seeds[i_seed]
+
     build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, kwargs)
 
-    with utils.temp_seed(seed):
-        esn.build(x_dim, **build_kwargs)
+    esn.build(x_dim, **build_kwargs)
     return esn
+
+
+def _get_seed_args_in_build(esn_obj: ESN_TYPING) -> list[str, ...]:
+    """Utility function to get all the seed kwargs in the esn.build function.
+
+    Args:
+        esn_obj: The esn object with the build method.
+
+    Returns:
+        List of keyword argument names of build, that have "seed" in it.
+    """
+    build_func = esn_obj.build
+    args = inspect.signature(build_func).parameters
+    return [arg_name for arg_name in args.keys() if "seed" in arg_name]
 
 
 @st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=False,
@@ -221,6 +242,34 @@ def st_network_build_args(key: str | None = None) -> dict[str, object]:
     network_build_args["n_type_opt"] = st.selectbox('n_type_opt', NETWORK_TYPES,
                                                     key=f"{key}__st_network_build_args__nopt")
     return network_build_args
+
+
+def st_pca_build_args(r_dim: int,
+                      key: str | None = None) -> dict[str, object]:
+    """Streamlit elements to specify the Settings for ESN_pca.
+
+    Args:
+        r_dim: The reservoir dimension, as the maximum value of the principal components.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        A dictionary containing the pca esn build args.
+    """
+
+    pca_build_args = {}
+    pca_build_args["pca_components"] = int(
+        st.number_input('principal components',
+                        value=r_dim,
+                        step=1,
+                        min_value=1,
+                        max_value=int(r_dim),
+                        key=f"{key}__st_pca_build_args__pc")
+    )
+    pca_build_args["input_noise_scale"] = st.number_input('input noise scale',
+                                                          value=0.0,
+                                                          format="%f",
+                                                          key=f"{key}__st_pca_build_args__inpnoisescale")
+    return pca_build_args
 
 
 @st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=False,

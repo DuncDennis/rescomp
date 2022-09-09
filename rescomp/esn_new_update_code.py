@@ -2021,6 +2021,9 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
         _add_standard_input_coupling.__init__(self)
         _add_standard_y_to_x.__init__(self)
 
+        self._input_noise_scale = None
+        self._input_noise_seed = None
+
     def train(self, use_for_train, sync_steps=0, reset_res_state=True, save_y_train=False,
               **kwargs):
         sync = use_for_train[:sync_steps]
@@ -2028,6 +2031,11 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
 
         x_train = train[:-1]
         y_train = train[1:]
+
+        # add input noise:
+        if self._input_noise_scale is not None:
+            inp_rng = np.random.default_rng(self._input_noise_seed)
+            x_train += inp_rng.standard_normal(x_train.shape) * self._input_noise_scale
 
         if save_y_train:
             self._saved_y_train = y_train
@@ -2058,41 +2066,43 @@ class ESN_pca(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_p
         for i in range(train_steps):
             r_gen[i, :] = self._r_to_r_gen_fct(r_train[i, :], None)
 
-        # DEBUGGING:
-
-        # print("A.T @ A: ", self._matrix.T @ self._matrix)
-        # mean_r = np.mean(r_train, axis=0)
-        # A = self._pca.components_
-        # is_unitary = np.allclose(np.eye(len(A)), A.dot(A.T.conj()))
-        # print("IS UNITARY: ", is_unitary)
-        # # pca_manual = np.dot(r_train - mean_r, A.T)
-        # pca_manual = (r_train - mean_r) @ (A.T)
-        #
-        # mean_r @ (A.T)
-        #
-        # print("PCA MANUAL - PCA REAL: ", pca_manual - r_gen)
-        #
-        # print("R TRAIN MEAN PRE: ", np.mean(r_train, axis=0))
-        # print("R GEN TRAIN MEAN: ", np.mean(r_gen, axis=0))
-        # END DEBUG
-
         self._saved_r_gen = r_gen
         self._fit_w_out(y_train, self._saved_r_gen)
 
         if save_out:
             self._saved_out = (self._w_out @ self._saved_r_gen.T).T
 
-    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi",
+    def build(self,
+              x_dim,
+              r_dim=500,
+              n_rad=0.1,
+              n_avg_deg=6.0,
+              n_type_opt="erdos_renyi",
               network_creation_attempts=10,
-              pca_components=None, pca_comps_to_skip=0, norm_with_expl_var=False,
+              pca_components=None,
+              pca_comps_to_skip=0,
+              norm_with_expl_var=False,
               centering_pre_trans=True,
-              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0,
+              r_to_r_gen_opt="linear",
+              act_fct_opt="tanh",
+              node_bias_opt="no_bias",
+              bias_scale=1.0,
               leak_factor=0.0,
-              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8,
+              w_in_opt="random_sparse",
+              w_in_scale=1.0,
+              default_res_state=None,
+              reg_param=1e-8,
               network_seed=None,
-              bias_seed=None, w_in_seed=None):
+              bias_seed=None,
+              w_in_seed=None,
+              input_noise_scale: float | None = None,
+              input_noise_seed: int | None = None):
 
         # self.logger.debug("Building ESN Archtecture")
+
+        self._input_noise_scale = input_noise_scale
+        self._input_noise_seed = input_noise_seed
+
 
         if pca_components is None:
             pca_components = r_dim
