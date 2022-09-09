@@ -1682,24 +1682,51 @@ class ESN_normal(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _ad
         _add_standard_input_coupling.__init__(self)
         _add_standard_y_to_x.__init__(self)
 
+        self._input_noise_scale = None
+        self._input_noise_seed = None
+
     def train(self, use_for_train, sync_steps=0, reset_res_state=True, **kwargs):
         sync = use_for_train[:sync_steps]
         train = use_for_train[sync_steps:]
 
         x_train = train[:-1]
         y_train = train[1:]
+
+        # add input noise:
+        if self._input_noise_scale is not None:
+            inp_rng = np.random.default_rng(self._input_noise_seed)
+            x_train += inp_rng.standard_normal(x_train.shape) * self._input_noise_scale
+
         super(ESN_normal, self).train(sync, x_train, y_train, reset_res_state=reset_res_state,
                                       **kwargs)
 
-    def build(self, x_dim, r_dim=500, n_rad=0.1, n_avg_deg=6.0, n_type_opt="erdos_renyi",
+    def build(self,
+              x_dim,
+              r_dim=500,
+              n_rad=0.1,
+              n_avg_deg=6.0,
+              n_type_opt="erdos_renyi",
               network_creation_attempts=10,
-              r_to_r_gen_opt="linear", act_fct_opt="tanh", node_bias_opt="no_bias", bias_scale=1.0,
+              r_to_r_gen_opt="linear",
+              act_fct_opt="tanh",
+              node_bias_opt="no_bias",
+              bias_scale=1.0,
               leak_factor=0.0,
-              w_in_opt="random_sparse", w_in_scale=1.0, default_res_state=None, reg_param=1e-8,
+              w_in_opt="random_sparse",
+              w_in_scale=1.0,
+              default_res_state=None,
+              reg_param=1e-8,
               network_seed=None,
-              bias_seed=None, w_in_seed=None):
+              bias_seed=None,
+              w_in_seed=None,
+              input_noise_scale: float | None = None,
+              input_noise_seed: int | None = None
+              ):
 
         # self.logger.debug("Building ESN Archtecture")
+
+        self._input_noise_scale = input_noise_scale
+        self._input_noise_seed = input_noise_seed
 
         self._x_dim = x_dim
         self._y_dim = x_dim
