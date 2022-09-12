@@ -47,17 +47,17 @@ ESN_TYPING = Any
 
 @st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=False,
           max_entries=utils.MAX_CACHE_ENTRIES)
-def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
+def build(esn_type: str, seed: int, x_dim: int, build_args: dict[str, Any]) -> ESN_TYPING:
     """Build the esn class.
 
     Args:
         esn_type: One of the esn types defined in ESN_DICT.
         seed: Set the global seed. TODO: maybe dont set global seed?
         x_dim: The x_dimension of the data to be predicted.
-        **kwargs: All other build args.
+        build_args: The build args parsed to esn_obj.build.
 
     Returns:
-        The build esn.
+        The built esn.
     """
     if esn_type in ESN_DICT.keys():
         esn = ESN_DICT[esn_type]()
@@ -68,9 +68,9 @@ def build(esn_type: str, seed: int, x_dim: int, **kwargs) -> ESN_TYPING:
     rng = np.random.default_rng(seed)
     seeds = rng.integers(0, 1000000, len(seed_args))
     for i_seed, seed_arg in enumerate(seed_args):
-        kwargs[seed_arg] = seeds[i_seed]
+        build_args[seed_arg] = seeds[i_seed]
 
-    build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, kwargs)
+    build_kwargs = rescomp.utilities._remove_invalid_args(esn.build, build_args)
 
     esn.build(x_dim, **build_kwargs)
     return esn

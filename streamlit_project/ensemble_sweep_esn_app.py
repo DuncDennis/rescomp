@@ -65,12 +65,12 @@ if __name__ == '__main__':
         st.header("ESN: ")
         esn_type = esn.st_select_esn_type()
         with st.expander("Basic parameters: "):
-            basic_build_args = esn.st_basic_esn_build()
+            build_args = esn.st_basic_esn_build()
         with st.expander("Network parameters: "):
-            build_args = basic_build_args | esn.st_network_build_args()
+            build_args = build_args | esn.st_network_build_args()
         if esn_type == "ESN_pca":
             with st.expander("ESN_pca settings: "):
-                build_args = basic_build_args | esn.st_pca_build_args(build_args["r_dim"])
+                build_args = build_args | esn.st_pca_build_args(build_args["r_dim"])
         utils.st_line()
 
     with st.sidebar:
@@ -155,7 +155,7 @@ if __name__ == '__main__':
 
     with build_tab:
         if build_bool:
-            esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, **build_args)
+            esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
             esn_obj = copy.deepcopy(esn_obj)  # needed for the streamlit caching to work correctly.
             st.markdown("Explore the Echo State Network architecture.")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])

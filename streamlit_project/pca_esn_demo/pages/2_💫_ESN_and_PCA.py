@@ -128,7 +128,7 @@ if __name__ == '__main__':
 
     with build_tab:
         if build_bool:
-            esn_obj = esn.build_with_seed(esn_type, seed=seed, x_dim=x_dim, **build_args)
+            esn_obj = esn.build_with_seed(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
             esn_obj = copy.deepcopy(esn_obj)  # needed for the streamlit caching to work correctly.
             st.markdown("Explore the Echo State Network architecture.")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
