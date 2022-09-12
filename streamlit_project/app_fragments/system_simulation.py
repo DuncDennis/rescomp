@@ -314,9 +314,9 @@ def st_preprocess_simulation(key: str | None = None
             with right:
                 shift = st.number_input("shift", value=0.0, step=0.1, format="%f",
                                         key=f"{key}__st_preprocess_simulation__shift")
-            shift_scale_params = scale, shift
+            scale_shift_params = scale, shift
         else:
-            shift_scale_params = None
+            scale_shift_params = None
 
         if st.checkbox("Add white noise", key=f"{key}__st_preprocess_simulation__noise_check"):
             noise_scale = st.number_input("noise scale", value=0.1, min_value=0.0, step=0.01,
@@ -325,7 +325,7 @@ def st_preprocess_simulation(key: str | None = None
         else:
             noise_scale = None
 
-    return shift_scale_params, noise_scale
+    return scale_shift_params, noise_scale
 
 
 @st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)

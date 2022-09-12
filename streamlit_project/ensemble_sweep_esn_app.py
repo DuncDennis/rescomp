@@ -47,14 +47,14 @@ if __name__ == '__main__':
                                                  default_t_train=5000,
                                                  default_t_pred_disc=2500,
                                                  default_t_pred_sync=200,
-                                                 default_t_pred=3000)
+                                                 default_t_pred=5000)
 
         if "dt" in system_parameters.keys():
             dt = system_parameters["dt"]
         else:
             dt = 1.0
 
-        shift_scale_params, noise_scale = syssim.st_preprocess_simulation()
+        scale_shift_params, noise_scale = syssim.st_preprocess_simulation()
 
         x_dim_pre = syssim.get_x_dim(system_name, system_parameters)
         embedding_out = syssim.st_embed_timeseries(x_dim_pre, key="embedding")
@@ -100,13 +100,14 @@ if __name__ == '__main__':
             section_steps = [t_train_disc, t_train_sync, t_train, t_pred_disc, t_pred_sync, t_pred]
             section_names = ["train disc", "train sync", "train", "pred disc", "pred sync", "pred"]
             time_steps = sum(section_steps)
+            iterator_func = syssim.get_iterator_func(system_name, system_parameters)
 
             time_series = syssim.simulate_trajectory(system_name, system_parameters,
                                                      time_steps)
 
             time_series, scale_shift_vector = syssim.preprocess_simulation(time_series,
                                                                            seed,
-                                                                           scale_shift_params=shift_scale_params,
+                                                                           scale_shift_params=scale_shift_params,
                                                                            noise_scale=noise_scale)
 
             time_series_dict = {"time series": time_series}
@@ -198,18 +199,31 @@ if __name__ == '__main__':
                     "During training, the true training data and the fitted data should be very "
                     "similar. Otherwise the Echo State Network prediction is very likely to fail.")
 
-            plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
+            tabs = st.tabs(["Plot",
+                            "Measures",
+                            "Difference",
+                            "Cross Lyapunov Exponent"])
 
-            with plot_tab:
+            with tabs[0]:
                 plot.st_all_timeseries_plots(train_data_dict, key="train")
-            with measure_tab:
+            with tabs[1]:
                 measures.st_all_data_measures(train_data_dict, dt=dt, key="train")
-            with difference_tab:
+            with tabs[2]:
                 pred_vs_true.st_all_difference_measures(y_pred_traj=y_train_fit,
                                                         y_true_traj=y_train_true,
                                                         dt=dt,
                                                         train_or_pred="train",
                                                         key="train")
+            with tabs[3]:
+                if st.checkbox("Cross lyapunov exponent", key="cross_lyap_exp_train"):
+                    sysmeas.st_largest_cross_lyapunov_exponent(iterator_func,
+                                                               y_train_fit,
+                                                               scale_shift_vector=scale_shift_vector,
+                                                               dt=dt,
+                                                               save_session_state=True,
+                                                               session_state_str="train",
+                                                               key="train"
+                                                               )
         else:
             st.info('Activate [🦾 Train] checkbox to see something.')
 
@@ -223,17 +237,29 @@ if __name__ == '__main__':
             pred_data_dict = {"true": y_pred_true,
                               "pred": y_pred}
             st.markdown("Compare the Echo State Network **prediction** with the **true data**.")
-            plot_tab, measure_tab, difference_tab = st.tabs(["Plot", "Measures", "Difference"])
-            with plot_tab:
+            tabs = st.tabs(["Plot",
+                            "Measures",
+                            "Difference",
+                            "Cross Lyapunov Exponent"])
+            with tabs[0]:
                 plot.st_all_timeseries_plots(pred_data_dict, key="predict")
-            with measure_tab:
+            with tabs[1]:
                 measures.st_all_data_measures(pred_data_dict, dt=dt, key="predict")
-            with difference_tab:
+            with tabs[2]:
                 pred_vs_true.st_all_difference_measures(y_pred_traj=y_pred,
                                                         y_true_traj=y_pred_true,
                                                         dt=dt,
                                                         train_or_pred="predict",
                                                         key="predict")
+            with tabs[3]:
+                if st.checkbox("Cross lyapunov exponent", key="cross_lyap_exp_predict"):
+                    sysmeas.st_largest_cross_lyapunov_exponent(iterator_func,
+                                                               y_pred,
+                                                               scale_shift_vector=scale_shift_vector,
+                                                               dt=dt,
+                                                               save_session_state=True,
+                                                               session_state_str="pred",
+                                                               key="predict")
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
@@ -1049,18 +1075,7 @@ if __name__ == '__main__':
                     st.write("ESN offset: ", esn_to_test._input_data_mean)
 
             with more_tab:
-                if st.checkbox("Cross lyapunov exponent", key="cross lyap exp checkbox"):
-                    # TODO: Experimental
-                    st.warning("EXPERIMENTAL")
-                    st.info("Calculate the \"cross lyapunov exponent\" as a measure for the "
-                            "prediction quality. ")
-
-                    iterator_func = syssim.get_iterator_func(system_name, system_parameters)
-                    sysmeas.st_largest_cross_lyapunov_exponent(iterator_func,
-                                                               y_pred,
-                                                               scale_shift_vector=scale_shift_vector,
-                                                               dt=dt,
-                                                               )
+                pass
 
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
@@ -1497,6 +1512,23 @@ if __name__ == '__main__':
                     fig.update_xaxes(title="pca component")
                     if log_y:
                         fig.update_yaxes(type="log", exponentformat="E")
+                    st.plotly_chart(fig)
+                utils.st_line()
+                if st.checkbox("Test: ", key="Test"):
+                    error_series_ens, valid_time_ens = resmeas.average_valid_time_index(
+                        iterator_func,
+                        y_pred,
+                        steps=500,
+                        part_time_steps=300,
+                        normalization="root_of_avg_of_spacedist_squared",
+                        scale_shift_vector=scale_shift_vector)
+
+                    st.write(error_series_ens.shape)
+                    avg_error = np.mean(error_series_ens, axis=0)
+                    st.line_chart(avg_error)
+
+                    # valid_time_hist
+                    fig = px.histogram(valid_time_ens, nbins=30)
                     st.plotly_chart(fig)
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
