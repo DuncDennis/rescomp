@@ -7,7 +7,7 @@ import itertools
 import pandas as pd
 import streamlit as st
 import numpy as np
-from scipy.stats import kurtosis
+from scipy.stats import kurtosis, skew
 import plotly.graph_objects as go
 import plotly.express as px
 
@@ -133,7 +133,8 @@ def st_statistical_measures(time_series_dict: dict[str, np.ndarray], key: str | 
                                                 "mean",
                                                 "median",
                                                 "ptp",
-                                                "kurtosis"],
+                                                "kurtosis",
+                                                "skewness"],
                         key=f"{key}__st_statistical_measures")
 
     df = get_statistical_measure(time_series_dict, mode=mode)
@@ -149,16 +150,15 @@ def get_statistical_measure(time_series_dict: dict[str, np.ndarray],
     """Get a pandas DataFrame of a statistical quantity of a dict of time_series.
     Args:
         time_series_dict: The dict of time_series. The key is used as the legend label.
-        mode: One of "std", "var", "mean", "median", "ptp", "kurtosis". # TODO more can be added.
+        mode: One of "std", "var", "mean", "median", "ptp", "kurtosis", "skewness. # TODO more can be added.
 
     Returns:
         A Pandas DataFrame with the columns "x_axis", "label" and the mode.
     """
 
-    time_steps, sys_dim = list(time_series_dict.values())[0].shape
-
     proc_data_dict = {"x_axis": [], "label": [], mode: []}
     for label, data in time_series_dict.items():
+        sys_dim = data.shape[1]
         if mode == "std":
             stat_quant = np.std(data, axis=0)
         elif mode == "mean":
@@ -171,6 +171,8 @@ def get_statistical_measure(time_series_dict: dict[str, np.ndarray],
             stat_quant = np.ptp(data, axis=0)
         elif mode == "kurtosis":
             stat_quant = kurtosis(data, axis=0)
+        elif mode == "skewness":
+            stat_quant = skew(data, axis=0)
         else:
             raise ValueError(f"Mode {mode} is not implemented.")
 
