@@ -96,12 +96,16 @@ def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
         valid_times *= dt
     elif time_axis == "lyapunov times":
 
-        latest_measured_lle = utils.st_get_session_state(name="LLE")
+        latest_measured_lle = utils.st_get_session_state_category(name="LLE", category="MEASURES")
         if latest_measured_lle is None:
             disabled = True
         else:
             disabled = False
-        if st.button("Get latest measured LLE", disabled=disabled):
+
+        # if st.button("Get latest measured LLE", disabled=disabled):
+
+        if st.checkbox("Use latest measured LLE", disabled=disabled, value=True,
+                       key=f"{key}__st_show_valid_times_vs_error_threshold__llecheck"):
             default_lle = latest_measured_lle
         else:
             default_lle = 0.5
@@ -116,6 +120,8 @@ def st_show_valid_times_vs_error_threshold(y_pred_traj: np.ndarray,
     else:
         raise ValueError(f"This time_axis option {time_axis} is not accounted for.")
 
+    state_name = f"VT(0.4, {time_axis})"
+    utils.st_add_to_state_category(state_name, "MEASURES", np.round(valid_times[4], 2))  # valid time at error-tresh = 0.4
     data_dict = {"Valid time vs. thresh": valid_times}
     figs = plpl.multiple_1d_time_series(data_dict, y_label=f"Valid times in {y_label_add}",
                                         x_label="error threshold", x_scale=1/10)

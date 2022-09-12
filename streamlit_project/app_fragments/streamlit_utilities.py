@@ -5,6 +5,7 @@ import contextlib
 from typing import Any
 
 import numpy as np
+import pandas as pd
 import streamlit as st
 
 
@@ -160,6 +161,59 @@ def st_get_session_state(name: str) -> Any:
         return st.session_state[name]
     else:
         return None
+
+
+def st_add_to_state_category(name: str, category: str, value: Any) -> None:
+    """Add a variable to the session state with a category prefix.
+
+    The name will be saved as f"{category}__{name}".
+
+    Args:
+        name: The name of the session state variable.
+        category: The category name.
+        value: The value of the variable.
+
+    """
+
+    full_name = f"{category}__{name}"
+    st_add_to_state(full_name, value)
+
+
+def st_get_session_state_category(name: str, category: str) -> Any:
+    """Get a variable of session state by defining the prefix and name.
+
+    Args:
+        name: The name of the session state variable.
+        category: The Prefix of the name (i.e. the category).
+
+    Returns:
+        The value of the variable.
+    """
+    full_name = f"{category}__{name}"
+    if full_name in st.session_state:
+        return st.session_state[full_name]
+    else:
+        return None
+
+
+def st_get_all_from_category_as_dict(category: str) -> dict[str, Any]:
+    """Get all session state variables from category as a dictionary.
+
+    Args:
+        category: The name of the category.
+
+    Returns:
+        A dictionary containing all session states of that category.
+    """
+    out_dict = {key.split("__")[-1]: val for key, val in st.session_state.items() if key.startswith(f"{category}__")}
+    return out_dict
+
+
+def st_write_session_state_category_as_table(category: str) -> None:
+    out_dict = st_get_all_from_category_as_dict(category)
+    out_dict_as_lists = {k: [v, ] for k, v in out_dict.items()}
+    df = pd.DataFrame.from_dict(out_dict_as_lists).T
+    st.table(df)
 
 
 def st_reset_all_check_boxes(key: str | None = None) -> None:

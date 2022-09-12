@@ -49,7 +49,7 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
                                              steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
-    utils.st_add_to_state(name="LLE", value=largest_lle)
+    utils.st_add_to_state_category(name="LLE", category="MEASURES", value=largest_lle)
 
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
@@ -166,7 +166,7 @@ def st_largest_lyapunov_exponent_custom(iterator_func: Callable[[np.ndarray], np
                                                     steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
-    utils.st_add_to_state(name="LLE_custom", value=largest_lle)
+    utils.st_add_to_state_category(name="LLE_custom", category="MEASURES", value=largest_lle)
 
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
@@ -205,7 +205,7 @@ def st_largest_cross_lyapunov_exponent(
 
     left, right = st.columns(2)
     with left:
-        steps = int(st.number_input("steps", value=int(1e3),
+        steps = int(st.number_input("steps", value=int(150),
                                     key=f"{key}__st_largest_cross_lyapunov_exponent__steps"))
     with right:
         part_time_steps = int(st.number_input("time steps of each part", value=15,
@@ -228,7 +228,7 @@ def st_largest_cross_lyapunov_exponent(
                                                    steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
-    utils.st_add_to_state(name="LLE_custom", value=largest_lle)
+    utils.st_add_to_state_category(name="LLE_cross", category="MEASURES", value=largest_lle)
 
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
