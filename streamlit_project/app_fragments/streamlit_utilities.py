@@ -209,10 +209,39 @@ def st_get_all_from_category_as_dict(category: str) -> dict[str, Any]:
     return out_dict
 
 
-def st_write_session_state_category_as_table(category: str) -> None:
+def st_delete_state_category(category: str) -> None:
+    """Delete all session states corresponding to a category:
+
+    Args:
+        category: The name of the category.
+
+    """
+    keys_to_delete = [key for key in st.session_state.keys() if key.startswith(f"{category}__")]
+    for key_to_delete in keys_to_delete:
+        del st.session_state[key_to_delete]
+
+
+def st_write_session_state_category_as_table(category: str,
+                                             key: str | None = None) -> None:
+    """Streamlit element to write all values of a session state category as a table.
+
+    Button to clear the table and clear the cach.
+
+    Args:
+        category: The name of the category.
+        key: An optional key if the element is used multiple times.
+
+    """
+    if st.button("Refresh",
+                 key=f"{key}__st_write_session_state_category_as_table",
+                 help="You have to reload the page to get fresh values."):
+        st_delete_state_category(category)
+        clear_all_caches()
+        st.experimental_rerun()
     out_dict = st_get_all_from_category_as_dict(category)
     out_dict_as_lists = {k: [v, ] for k, v in out_dict.items()}
     df = pd.DataFrame.from_dict(out_dict_as_lists).T
+    df.sort_index(inplace=True)
     st.table(df)
 
 
@@ -236,8 +265,8 @@ def st_reset_all_check_boxes(key: str | None = None) -> None:
                 st.session_state[k] = False
 
 
-def clear_all_cashes() -> None:
-    """Function to clear all cashed values.
+def clear_all_caches() -> None:
+    """Function to clear all cached values.
 
     TODO: Not really clearing all caches. st.cache is not cleared (but used in train and predict and build)
     """
@@ -245,7 +274,7 @@ def clear_all_cashes() -> None:
     st.experimental_singleton.clear()
 
 
-def st_clear_all_cashes_button(key: str | None = None) -> None:
+def st_clear_all_caches_button(key: str | None = None) -> None:
     """Streamlit button to clear all cashed values.
 
     Args:
@@ -254,7 +283,7 @@ def st_clear_all_cashes_button(key: str | None = None) -> None:
     """
     help = "Clears all cashed values. Use if app gets too slow because of memory issues."
     if st.button("Clear cash", help=help, key=f"{key}__st_clear_all_cashes"):
-        clear_all_cashes()
+        clear_all_caches()
 
 
 if __name__ == '__main__':

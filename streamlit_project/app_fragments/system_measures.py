@@ -15,8 +15,11 @@ import rescomp.measures_new as meas
 STATE_PREFIX = "measures"  # The prefix for the session state variables.
 
 
-def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, Any],
-                                 key: str | None = None) -> None:
+def st_largest_lyapunov_exponent(system_name: str,
+                                 system_parameters: dict[str, Any],
+                                 key: str | None = None,
+                                 save_session_state: bool = True,
+                                 session_state_str: str | None = None) -> None:
     """Streamlit element to calculate the largest lyapunov exponent.
 
     Set up the number inputs for steps, part_time_steps, steps_skip and deviation scale.
@@ -26,7 +29,10 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
         system_name: The system name. Has to be in SYSTEM_DICT.
         system_parameters: The system parameters. Not every kwarg has to be specified.
         key: Provide a unique key if this streamlit element is used multiple times.
+        save_session_state: Whether to save the session state or not.
+        session_state_str: A additional str to append to the session state name.
     """
+
     st.markdown("**Calculate the largest Lyapunov exponent using the system equations:**")
     left, right = st.columns(2)
     with left:
@@ -49,7 +55,11 @@ def st_largest_lyapunov_exponent(system_name: str, system_parameters: dict[str, 
                                              steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
-    utils.st_add_to_state_category(name="LLE", category="MEASURES", value=largest_lle)
+    if save_session_state:
+        name = "LLE"
+        if session_state_str is not None:
+            name = name + f"_{session_state_str}"
+        utils.st_add_to_state_category(name=name, category="MEASURES", value=largest_lle)
 
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
@@ -128,7 +138,10 @@ def st_largest_lyapunov_exponent_custom(iterator_func: Callable[[np.ndarray], np
                                         starting_point: np.ndarray,
                                         dt: float = 1.0,
                                         using_str: str | None = None,
-                                        key: str | None = None) -> None:
+                                        save_session_state: bool = True,
+                                        session_state_str: str | None = None,
+                                        key: str | None = None,
+                                        ) -> None:
     """Streamlit element to calculate the largest lyapunov exponent of a custom iterator_func.
 
     Set up the number inputs for steps, part_time_steps, steps_skip and deviation scale.
@@ -139,6 +152,8 @@ def st_largest_lyapunov_exponent_custom(iterator_func: Callable[[np.ndarray], np
         starting_point: The starting_point of the main trajectory.
         dt: Size of time step.
         using_str: A string to say which iterator function is used. Will be added to markdown.
+        save_session_state: Whether to save the session state or not.
+        session_state_str: A additional str to append to the session state name.
         key: Provide a unique key if this streamlit element is used multiple times.
     """
 
@@ -166,7 +181,11 @@ def st_largest_lyapunov_exponent_custom(iterator_func: Callable[[np.ndarray], np
                                                     steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
-    utils.st_add_to_state_category(name="LLE_custom", category="MEASURES", value=largest_lle)
+    if save_session_state:
+        name = "LLE_custom"
+        if session_state_str is not None:
+            name = name + f"_{session_state_str}"
+        utils.st_add_to_state_category(name=name, category="MEASURES", value=largest_lle)
 
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
@@ -180,6 +199,8 @@ def st_largest_cross_lyapunov_exponent(
         predicted_trajectory: np.ndarray,
         dt: float = 1.0,
         scale_shift_vector: tuple[np.ndarray, np.ndarray] | None = None,
+        save_session_state: bool = True,
+        session_state_str: str | None = None,
         key: str | None = None
         ) -> None:
     """Streamlit element to calculate the cross lyapunov exponent between an it-func and pred.
@@ -200,6 +221,8 @@ def st_largest_cross_lyapunov_exponent(
                              iterator_func.
                              It is assumed: data = original_data * scale_vector + shift_vector,
                              where original_data is the trajectory produced via the iterator_func.
+        save_session_state: Whether to save the session state or not.
+        session_state_str: A additional str to append to the session state name.
         key: Provide a unique key if this streamlit element is used multiple times.
     """
 
@@ -228,7 +251,11 @@ def st_largest_cross_lyapunov_exponent(
                                                    steps_skip=steps_skip)
     largest_lle = np.round(lle_conv[-1], 5)
 
-    utils.st_add_to_state_category(name="LLE_cross", category="MEASURES", value=largest_lle)
+    if save_session_state:
+        name = "LLE_cross"
+        if session_state_str is not None:
+            name = name + f"_{session_state_str}"
+        utils.st_add_to_state_category(name=name, category="MEASURES", value=largest_lle)
 
     figs = plpl.multiple_1d_time_series({"LLE convergence": lle_conv}, x_label="N",
                                         y_label="running avg of LLE", title=f"Largest Lyapunov "
