@@ -120,7 +120,13 @@ def st_extrema_map(time_series_dict: dict[str, np.ndarray], key: str | None = No
         st.plotly_chart(fig)
 
 
-def st_statistical_measures(time_series_dict: dict[str, np.ndarray], key: str | None = None
+def st_statistical_measures(time_series_dict: dict[str, np.ndarray],
+                            key: str | None = None,
+                            x_label: str = "x_axis",
+                            bar_or_line: str = "bar",
+                            default_log_y: bool = False,
+                            default_abs: bool = False,
+                            default_measure: str = "std"
                             ) -> None:
     """Streamlit element to calculate and plot statistical quantities of a time series.
 
@@ -128,18 +134,41 @@ def st_statistical_measures(time_series_dict: dict[str, np.ndarray], key: str | 
         time_series_dict: The time series data.
         key: Provide a unique key if this streamlit element is used multiple times.
     """
-    mode = st.selectbox("Statistical measure", ["std",
-                                                "var",
-                                                "mean",
-                                                "median",
-                                                "ptp",
-                                                "kurtosis",
-                                                "skewness"],
-                        key=f"{key}__st_statistical_measures")
+    cols = st.columns(2)
+    with cols[0]:
+        statistical_measures = ["std",
+                                "var",
+                                "mean",
+                                "median",
+                                "ptp",
+                                "kurtosis",
+                                "skewness"]
+        mode = st.selectbox("Statistical measure",
+                            options=statistical_measures,
+                            index=statistical_measures.index(default_measure),
+                            key=f"{key}__st_statistical_measures")
+    with cols[1]:
+        abs = st.checkbox("abs",
+                          key=f"{key}__st_statistical_measures__abs",
+                          value=default_abs)
+        log_y = st.checkbox("log y",
+                            key=f"{key}__st_statistical_measures__logy",
+                            value=default_log_y)
 
     df = get_statistical_measure(time_series_dict, mode=mode)
-    fig = plpl.barplot(df, x="x_axis", y=mode, color="label",
-                       x_label="system dimension")
+    if abs:
+        df[mode] = df[mode].abs()
+    if bar_or_line == "line":
+        fig = px.line(df, x="x_axis", y=mode, color="label", log_y=log_y)
+    elif bar_or_line == "bar":
+        fig = plpl.barplot(df, x="x_axis", y=mode, color="label")
+    else:
+        raise ValueError("bar_or_line must be either \"bar\" or \"line\".")
+
+    if log_y:
+        fig.update_yaxes(type="log", exponentformat="E")
+
+    fig.update_xaxes(title=x_label)
 
     st.plotly_chart(fig)
 
@@ -397,29 +426,42 @@ def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key:
 
     """
 
-    if st.checkbox("Consecutive extrema", key=f"{key}__st_all_data_measures__ce"):
+    if st.checkbox("Consecutive extrema",
+                   key=f"{key}__st_all_data_measures__ce"):
         st.markdown("**Plot consecutive minima or maxima for individual dimensions:**")
-        st_extrema_map(data_dict, key=f"{key}__st_all_data_measures")
+        st_extrema_map(data_dict,
+                       key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Statistical measures", key=f"{key}__st_all_data_measures__sm"):
+    if st.checkbox("Statistical measures",
+                   key=f"{key}__st_all_data_measures__sm"):
         st.markdown("**Plot the standard deviation, variance, mean or median of the time series:**")
-        st_statistical_measures(data_dict, key=f"{key}__st_all_data_measures")
+        st_statistical_measures(data_dict,
+                                key=f"{key}__st_all_data_measures",
+                                x_label="system dimension")
     utils.st_line()
-    if st.checkbox("Histogram", key=f"{key}__st_all_data_measures__hist"):
+    if st.checkbox("Histogram",
+                   key=f"{key}__st_all_data_measures__hist"):
         st.markdown("**Plot the value histogram for individual dimensions:**")
-        st_histograms(data_dict, key=f"{key}__st_all_data_measures")
+        st_histograms(data_dict,
+                      key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Power spectrum", key=f"{key}__st_all_data_measures__ps"):
+    if st.checkbox("Power spectrum",
+                   key=f"{key}__st_all_data_measures__ps"):
         st.markdown("**Plot the mean or dimension resolved power spectrum:**")
-        st_power_spectrum(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
+        st_power_spectrum(data_dict,
+                          dt=dt,
+                          key=f"{key}__st_all_data_measures")
     utils.st_line()
-    if st.checkbox("Lyapunov from data", key=f"{key}__st_all_data_measures__ledata"):
+    if st.checkbox("Lyapunov from data",
+                   key=f"{key}__st_all_data_measures__ledata"):
 
         st.markdown("**Plot the logarithmic trajectory divergence from data.**")
         with st.expander("More info ..."):
             st.write("The algorithm is based on the Rosenstein algorithm. Original Paper: Rosenstein et. al. (1992).")
             st.write("The sloap of the linear fit represents the largest Lyapunov exponent.")
-        st_largest_lyapunov_from_data(data_dict, dt=dt, key=f"{key}__st_all_data_measures")
+        st_largest_lyapunov_from_data(data_dict,
+                                      dt=dt,
+                                      key=f"{key}__st_all_data_measures")
 
 
 if __name__ == "__main__":
