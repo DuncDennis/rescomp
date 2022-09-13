@@ -306,6 +306,16 @@ if __name__ == '__main__':
             with tabs[1]:  # W_out and R_gen
                 esnplot.st_all_w_out_r_gen_plots(r_gen_dict, w_out)
 
+                utils.st_line()
+                if st.checkbox("Investigate partial wout connections", key="pwoutcon"):
+                    esnplot.st_investigate_partial_w_out_influence(
+                        r_gen_train=res_train_dict["r_gen"],
+                        x_train=x_train,
+                        t_train_sync=t_train_sync,
+                        w_out=w_out,
+                        key="invwout")
+
+
             with tabs[2]:  # reservoir time series
                 if st.checkbox("Reservoir states", key="r_states_3d"):
                     plot.st_timeseries_as_three_dim_plot(r_dict, key="r")

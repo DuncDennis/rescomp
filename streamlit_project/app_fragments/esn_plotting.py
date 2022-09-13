@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Callable
 
 import numpy as np
 import networkx as nx
 import streamlit as st
 from sklearn.decomposition import PCA
+import pandas as pd
 
 from plotly.subplots import make_subplots
 import plotly.graph_objects as go
@@ -21,6 +23,7 @@ from streamlit_project.app_fragments import timeseries_measures as meas_app
 from streamlit_project.app_fragments import esn_app_utilities as esnutils
 from streamlit_project.app_fragments import timeseries_plotting as plot
 import streamlit_project.latex_formulas.esn_formulas as esn_latex
+import streamlit_project.app_fragments.esn_experiments as esnexp
 
 
 def st_plot_w_out_as_barchart(w_out: np.ndarray,
@@ -424,7 +427,10 @@ def st_r_gen_times_w_out_stat_measure(r_gen_dict: dict[str, np.ndarray],
     meas_app.st_statistical_measures(dict_use,
                                      key=f"{key}__st_r_gen_stat_measure_times_w_out__meas",
                                      bar_or_line="line",
-                                     x_label="r_gen_dim")
+                                     x_label="r_gen_dim",
+                                     default_measure="std",
+                                     default_abs=False,
+                                     default_log_y=True)
 
 
 def st_scatter_matrix_plot(res_train_dict: dict[str, np.ndarray],
@@ -543,14 +549,14 @@ def st_all_w_out_r_gen_plots(r_gen_dict: dict[str, np.ndarray],
         st_plot_output_w_out_strength(w_out, key=f"{key}__st_all_w_out_r_gen_plots__os")
 
     utils.st_line()
-    if st.checkbox("W_out matrix as barchart", key=f"{key}__st_all_w_out_r_gen_plots__wbp"):
+    if st.checkbox("Wout matrix as barchart", key=f"{key}__st_all_w_out_r_gen_plots__wbp"):
         st.markdown(
-            "Show the w_out matrix as a stacked barchart, where the x axis is the "
+            r"Show the $W_\text{out}$ matrix as a stacked barchart, where the x axis is the "
             "index of the generalized reservoir dimension.")
         st_plot_w_out_as_barchart(w_out, key=f"{key}__st_all_w_out_r_gen_plots__wbp2")
 
     utils.st_line()
-    if st.checkbox("Statistical measures on R_gen", key=f"{key}__st_all_w_out_r_gen_plots__smr"):
+    if st.checkbox("Statistical measures on Rgen", key=f"{key}__st_all_w_out_r_gen_plots__smr"):
         st.markdown(
             "Show the standard deviation of the generalized reservoir state (r_gen) "
             "during training and prediction.")
@@ -564,7 +570,7 @@ def st_all_w_out_r_gen_plots(r_gen_dict: dict[str, np.ndarray],
                                          key=f"{key}__st_all_w_out_r_gen_plots__smr1")
 
     utils.st_line()
-    if st.checkbox("Statistical measures on R_gen times w_out",
+    if st.checkbox("Statistical measures on Rgen times Wout",
                    key=f"{key}__st_all_w_out_r_gen_plots__smrw"):
         st.markdown(
             "Show the standard deviation of the generalized reservoir state (r_gen) "
@@ -583,8 +589,8 @@ def st_dist_in_std_for_r_gen_states(r_gen_train: np.ndarray,
                                     save_session_state: bool = False):
 
     dist_in_std_log = resmeas.distance_in_std(x=r_gen_train,
-                                               y=r_gen_pred,
-                                               log_bool=True)
+                                              y=r_gen_pred,
+                                              log_bool=True)
     dist_in_std = resmeas.distance_in_std(x=r_gen_train,
                                           y=r_gen_pred,
                                           log_bool=False)
@@ -617,3 +623,91 @@ def st_dist_in_std_for_r_gen_states(r_gen_train: np.ndarray,
         """
     )
     st.write("Dist in std without log", dist_in_std)
+
+
+def st_investigate_partial_w_out_influence(r_gen_train: np.ndarray,
+                                           x_train: np.ndarray,
+                                           t_train_sync: int,
+                                           w_out: np.ndarray,
+                                           key: str | None = None) -> None:
+
+    st.markdown(
+        r"""
+        Take the esn r_gen states used for training and split the states at some 
+        r_gen dimensions. For each side of the split (i.e. the first and the last r_gen 
+        states) calculate the partial output that they produce. 
+        """
+    )
+
+    r_gen_states = r_gen_train
+    r_gen_dim = r_gen_states.shape[1]
+    sys_dim = x_train.shape[1]
+    inp = x_train[t_train_sync:-1, :]
+    out = x_train[t_train_sync + 1:, :]
+    diff = out - inp
+    w_out = copy.deepcopy(w_out)
+
+    i_rgen_dim_split = int(
+        st.number_input("split r_gen_dim", value=sys_dim, min_value=0,
+                        max_value=r_gen_dim - 1,
+                        key=f"{key}__st_investigate_partial_w_out_influence__srgd"))
+
+    r_gen_first = r_gen_states[:, :i_rgen_dim_split]
+    r_gen_last = r_gen_states[:, i_rgen_dim_split:]
+    esn_output_first = (w_out[:, :i_rgen_dim_split] @ r_gen_first.T).T
+    esn_output_last = (w_out[:, i_rgen_dim_split:] @ r_gen_last.T).T
+
+    # to_corr_esn_dict = {"esn output first": esn_output_first,
+    #                     "esn output last": esn_output_last}
+
+    st.write("nr of first r_gen dims", r_gen_first.shape[1])
+    st.write("nr of last r_gen dims", r_gen_last.shape[1])
+
+    st.markdown(r"**Partial ESN output:**")
+
+    to_plot_esn_dict = {"esn output first": esn_output_first,
+                        "esn output last": esn_output_last,
+                        "esn output summed": esn_output_first + esn_output_last}
+    with st.expander("Show: "):
+        plot.st_default_simulation_plot_dict(to_plot_esn_dict)
+
+    st.markdown(r"**Real input, output and difference:**")
+    to_plot_real_dict = {"real input": inp,
+                         "real output": out,
+                         "real difference": diff}
+    with st.expander("Show: "):
+        plot.st_default_simulation_plot_dict(to_plot_real_dict)
+
+    st.markdown(r"**All in one:**")
+    to_plot_all = to_plot_esn_dict | to_plot_real_dict
+    with st.expander("Show: "):
+        plot.st_default_simulation_plot_dict(to_plot_all)
+        plot.st_plot_dim_selection(to_plot_all,
+                                   key=f"{key}__st_investigate_partial_w_out_influence__ds")
+
+    st.markdown(r"**Dimension wise correlation:**")
+    if st.checkbox("Dimension wise correlation: ",
+                   key=f"{key}__st_investigate_partial_w_out_influence__dwc"):
+
+        corr_data_dict = {"correlation x": [], "correlation y": [],
+                          "corr value": [], "dim": []}
+        for x_name, x_data in to_plot_real_dict.items():
+            for y_name, y_data in to_plot_esn_dict.items():
+                corr_multidim = esnexp.correlate_input_and_r_gen(x_data,
+                                                                 y_data,
+                                                                 time_delay=0)
+
+                for i_dim in range(corr_multidim.shape[0]):
+                    corr_value = corr_multidim[i_dim, i_dim]
+                    corr_data_dict["dim"].append(i_dim)
+                    corr_data_dict["correlation x"].append(x_name)
+                    corr_data_dict["correlation y"].append(y_name)
+                    corr_data_dict["corr value"].append(corr_value)
+        df_corr = pd.DataFrame.from_dict(corr_data_dict)
+
+        fig = px.bar(df_corr, x="correlation x",
+                     y="corr value",
+                     color="correlation y",
+                     barmode="group",
+                     facet_row="dim")
+        st.plotly_chart(fig)

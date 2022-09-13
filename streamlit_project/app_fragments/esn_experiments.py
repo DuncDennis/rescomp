@@ -6,10 +6,25 @@ from streamlit_project.app_fragments import streamlit_utilities as utils
 from streamlit_project.app_fragments import esn_build_train_predict as esnbuild
 
 
-def correlate_input_and_r_gen(inp: np.ndarray, r_gen: np.ndarray, time_delay: int
+@st.experimental_memo
+def correlate_input_and_r_gen(inp: np.ndarray,
+                              r_gen: np.ndarray,
+                              time_delay: int = 0
                               ) -> np.ndarray:
-    """Correlate the reservoir input with the driven r_gen states. Add a timedelay.
-    # TODO: proper docstring """
+    """Correlate the reservoir input with the driven r_gen states and add a time_delay.
+
+    Correlate every r_gen dimension with every input dimension.
+
+    Args:
+        inp: The input time series used to drive the reservoir of shape (drive steps, sys_dim).
+        r_gen: The r_gen states created during driving of shape (drive steps, r_gen_dim).
+        time_delay: An optional time delay to apply r_gen before correlating. A positive time
+                    delay correlates r_gen with past input values, a negative correlates r_gen
+                    with future input values.
+
+    Returns:
+        The correlation matrix of shape (r_gen_dim, input_dim).
+    """
     if time_delay == 0:
         r_gen_slice = r_gen
         inp = inp
