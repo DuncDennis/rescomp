@@ -54,3 +54,46 @@ def drive_reservoir(esn_obj: esnbuild.ESN_TYPING, x_drive: np.ndarray
     r_gen_driven = esn_obj.get_r_gen()
 
     return r_gen_driven, esn_obj
+
+
+@st.cache(hash_funcs=esnbuild.ESN_HASH_FUNC, allow_output_mutation=False,
+          max_entries=utils.MAX_CACHE_ENTRIES)
+def train_on_subsets(esn_obj: esnbuild.ESN_TYPING,
+                     x_train: np.ndarray,
+                     t_train_sub: int,
+                     t_train_sync_sub: int,
+                     seperate_factor: float = 0.5
+                     ):
+    """Train the esn_obj on multiple subsets of x_train.
+    # TODO: not finished what to output.
+    """
+
+    if seperate_factor < 0.1:
+        raise ValueError("seperate factor has to be bigger than 0.1")
+
+    total_time_steps = x_train.shape[0]
+    x_train_subs = []
+    starting_step = 0
+    while True:
+        end_step = starting_step + (t_train_sub + t_train_sync_sub)
+        if end_step >= total_time_steps:
+            break
+        x_train_sub = x_train[starting_step: end_step, :]
+        x_train_subs.append(x_train_sub)
+        starting_step += int((t_train_sub + t_train_sync_sub) * seperate_factor)
+
+    r_gen_train_list = []
+    w_out_list = []
+    for i_x, x_train_sub in enumerate(x_train_subs):
+        esn_obj.train(x_train_sub,
+                      sync_steps=t_train_sync_sub,
+                      save_y_train=True,
+                      save_out=True,
+                      save_res_inp=True,
+                      save_r_internal=True,
+                      save_r=True,
+                      save_r_gen=True
+                      )
+        r_gen_train_list.append(esn_obj.get_r_gen())
+        w_out_list.append(esn_obj.get_w_out())
+    return r_gen_train_list, w_out_list
