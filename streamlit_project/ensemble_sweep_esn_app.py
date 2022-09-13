@@ -295,32 +295,9 @@ if __name__ == '__main__':
 
             with w_out_r_gen_tab:
                 w_out = esn_obj.get_w_out()
-                if st.checkbox("Output coupling", key="output_coupling_cb"):
-                    st.markdown("Sum the absolute value of the W_out matrix over all generalized "
-                                "reservoir indices, to see which output dimension has the "
-                                "strongest coupling to the reservoir states.")
-                    esnplot.st_plot_output_w_out_strength(w_out)
-                utils.st_line()
-                if st.checkbox("W_out matrix as barchart", key="w_out_as_bar"):
-                    st.markdown(
-                        "Show the w_out matrix as a stacked barchart, where the x axis is the "
-                        "index of the generalized reservoir dimension.")
-                    esnplot.st_plot_w_out_as_barchart(w_out)
-                utils.st_line()
-                if st.checkbox("R_gen std", key="r_gen_std"):
-                    st.markdown(
-                        "Show the standard deviation of the generalized reservoir state (r_gen) "
-                        "during training and prediction.")
-                    esnplot.st_r_gen_std_barplot(r_gen_train=res_train_dict["r_gen"],
-                                                 r_gen_pred=res_pred_dict["r_gen"])
-                utils.st_line()
-                if st.checkbox("R_gen std times w_out", key="r_gen_std_wout"):
-                    st.markdown(
-                        "Show the standard deviation of the generalized reservoir state (r_gen) "
-                        "times w_out during training and prediction.")
-                    esnplot.st_r_gen_std_times_w_out_barplot(r_gen_train=res_train_dict["r_gen"],
-                                                             r_gen_pred=res_pred_dict["r_gen"],
-                                                             w_out=w_out)
+                r_gen_dict = {"r_gen_train": res_train_dict["r_gen"],
+                              "r_gen_pred": res_pred_dict["r_gen"]}
+                esnplot.st_all_w_out_r_gen_plots(r_gen_dict, w_out)
 
             with res_time_tab:
                 if st.checkbox("Reservoir states", key="r_states_3d"):
