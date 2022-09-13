@@ -95,7 +95,11 @@ def st_one_dim_time_delay(time_series_dict: dict[str, np.ndarray],
             time_series_new[:, 2] = val[2:-time_delay * 3 + 2, i_dim]
             sub_dict[key] = time_series_new
 
-        fig = plpl.multiple_3d_time_series(sub_dict, mode=scatter_or_line)
+        fig = plpl.multiple_3d_time_series(sub_dict,
+                                           mode=scatter_or_line,
+                                           x_label="value(t)",
+                                           y_label="value(t+1)",
+                                           z_label="value(t+2)")
         st.plotly_chart(fig)
 
 
@@ -176,12 +180,24 @@ def st_all_timeseries_plots(time_series_dict: dict[str, np.ndarray],
         key: Provide a unique key if this streamlit element is used multiple times.
 
     """
-    if st.checkbox("Attractor", key=f"{key}__st_all_plots__attr"):
+    if st.checkbox("Attractor",
+                   key=f"{key}__st_all_plots__attr",
+                   help="If timeseries is 1D: value vs time. If 2D or 3D: trajectory. If "
+                        "ND where N>3: As a colored array vs time."):
         st_default_simulation_plot_dict(time_series_dict)
+
     utils.st_line()
-    if st.checkbox("Time series", key=f"{key}__st_all_plots__ts"):
+    if st.checkbox("Time series",
+                   key=f"{key}__st_all_plots__ts",
+                   help="Plot the value vs. time for each dimension."):
         st.markdown("**Plot individual dimensions:**")
         st_plot_dim_selection(time_series_dict, key=f"{key}__st_all_plots")
+
+    utils.st_line()
+    if st.checkbox("Time delay plot",
+                   key=f"{key}__st_all_plots__td",
+                   help="Plot a 3D plot a selected dimension with time delay."):
+        st_one_dim_time_delay(time_series_dict, key=f"{key}__st_all_plots")
 
 
 def st_timeseries_as_three_dim_plot(time_series_dict: dict[str, np.ndarray],
