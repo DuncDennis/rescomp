@@ -13,6 +13,8 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 import plotly.express as px
 
+import rescomp.measures_new as resmeas
+
 from streamlit_project.generalized_plotting import plotly_plots as plpl
 from streamlit_project.app_fragments import streamlit_utilities as utils
 from streamlit_project.app_fragments import timeseries_measures as meas_app
@@ -574,3 +576,44 @@ def st_all_w_out_r_gen_plots(r_gen_dict: dict[str, np.ndarray],
             """)
         st_r_gen_times_w_out_stat_measure(r_gen_dict, w_out,
                                           key=f"{key}__st_all_w_out_r_gen_plots__smr2")
+
+
+def st_dist_in_std_for_r_gen_states(r_gen_train: np.ndarray,
+                                    r_gen_pred: np.ndarray,
+                                    save_session_state: bool = False):
+
+    dist_in_std_log = resmeas.distance_in_std(x=r_gen_train,
+                                               y=r_gen_pred,
+                                               log_bool=True)
+    dist_in_std = resmeas.distance_in_std(x=r_gen_train,
+                                          y=r_gen_pred,
+                                          log_bool=False)
+    if save_session_state:
+        utils.st_add_to_state_category("dist in std", "MEASURES", dist_in_std)
+        utils.st_add_to_state_category("dist in std log", "MEASURES", dist_in_std_log)
+
+    st.markdown(
+        r"""
+        Calculate the difference in the standard deviation of r_gen_pred and r_gen_train. 
+        """
+    )
+
+    st.latex(
+        r"""
+        \|f(\text{std}_\text{time}(r_\text{gen, train})) - f(\text{std}_\text{time}(r_\text{gen, pred}))\|
+        """
+    )
+
+    st.markdown(
+        r"""
+        When $f = \log$:
+        """
+    )
+    st.write("Dist in std with log", dist_in_std_log)
+
+    st.markdown(
+        r"""
+        When $f = \text{Id}$:
+        """
+    )
+    st.write("Dist in std without log", dist_in_std)

@@ -407,22 +407,22 @@ def average_valid_time_index(iterator_func: Callable[[np.ndarray], np.ndarray],
     return valid_times_results
 
 
-def difference_in_std(x: np.ndarray,
-                      y: np.ndarray,
-                      log_bool: bool = False) -> float:
-    """Calculate the norm between the dim-wise standard deviation of two time series x and y.
+def distance_in_std(x: np.ndarray,
+                    y: np.ndarray,
+                    log_bool: bool = False) -> float:
+    """Calculate the distance between the dim-wise standard deviation of two time series x and y.
 
     # TODO: Check how well this measure can be used.
-
     Optionally calculate the logarithm after calculating the std.
+    Also remove nan (is the case, when std is 0 and np.log is used.
 
     Args:
-        x: The x time series of shape (time steps x, sysdim).
-        y: The y time series of shape (time steps y, sysdim).
-        log_bool: If true, calculate the bool of the std before calculating the diff.
+        x: The x time series of shape (time steps x, sys dim).
+        y: The y time series of shape (time steps y, sys dim).
+        log_bool: If true, calculate the log of the std before calculating the diff.
 
     Returns:
-        A float representing the norm between the standard deviations of the time series.
+        A float representing the distance between the standard deviations of the time series.
     """
     if x.shape[1] != y.shape[1]:
         raise ValueError("x and y must have the same dimension in axis = 1.")
@@ -433,4 +433,7 @@ def difference_in_std(x: np.ndarray,
         std_y = np.log(std_y)
 
     diff = std_x - std_y
+
+    # remove nan:
+    diff = diff[np.isfinite(diff)]
     return np.linalg.norm(diff)
