@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import inspect
 from typing import Any
 
@@ -63,6 +64,8 @@ def build(esn_type: str, seed: int, x_dim: int, build_args: dict[str, Any]) -> E
         esn = ESN_DICT[esn_type]()
     else:
         raise Exception("This esn_type is not accounted for")
+
+    build_args = copy.deepcopy(build_args)
 
     seed_args = _get_seed_args_in_build(esn)
     rng = np.random.default_rng(seed)
