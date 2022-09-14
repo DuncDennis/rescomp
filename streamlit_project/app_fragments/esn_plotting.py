@@ -711,3 +711,27 @@ def st_investigate_partial_w_out_influence(r_gen_train: np.ndarray,
                      barmode="group",
                      facet_row="dim")
         st.plotly_chart(fig)
+
+
+@st.experimental_memo
+def get_pca_transformed_quantities(r_gen_train: np.ndarray,
+                                   r_gen_pred: np.ndarray,
+                                   w_out: np.ndarray
+                                   ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Perform a PCA transform on r_gen_states and transform r_gen_train, pred and w_out.
+
+    Args:
+        r_gen_train: The generalized train reservoir states of shape (train steps, r_gen_dim).
+        r_gen_pred: The generalized pred reservoir states of shape (pred steps, r_gen_dim).
+        w_out: The output matrix of shape (out_dim, r_gen_dim).
+
+    Returns:
+        A tuple with the transformed r_gen_train_pca, r_gen_pred_pca and w_out_pca.
+    """
+    pca = PCA()
+    r_gen_train_pca = pca.fit_transform(r_gen_train)
+    r_gen_pred_pca = pca.transform(r_gen_pred)
+    p = pca.components_
+    w_out_pca = w_out @ p.T
+
+    return r_gen_train_pca, r_gen_pred_pca, w_out_pca
