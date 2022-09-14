@@ -14,6 +14,7 @@ import streamlit_project.app_fragments.streamlit_utilities as utils
 import streamlit_project.app_fragments.timeseries_plotting as plot
 import streamlit_project.app_fragments.esn_build_train_predict as esn
 import streamlit_project.app_fragments.esn_plotting as esnplot
+import streamlit_project.app_fragments.esn_comparisons as esncomp
 
 # TODO: FOR EXPERIMENTAL:
 import streamlit_project.app_fragments.esn_experiments as esnexp
@@ -85,7 +86,7 @@ if __name__ == '__main__':
         measures_container = st.container()
         utils.st_line()
 
-    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, comp_tab, tbd_tab = \
+    main_tabs = \
         st.tabs(
             ["🌀 Simulation",
              "🛠️ Architecture",
@@ -95,6 +96,7 @@ if __name__ == '__main__':
              "📊 Compare",
              "🚧 Under Construction"
              ])
+    sim_data_tab, build_tab, train_tab, predict_tab, other_vis_tab, comp_tab, tbd_tab = main_tabs
 
     with sim_data_tab:
         if simulate_bool:
@@ -374,7 +376,107 @@ if __name__ == '__main__':
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with comp_tab:
-        pass
+        if predict_bool:
+            st.markdown(
+                r"""
+                **Compare different ESNs**:
+                
+                Build, train and predict different ESNs with the same seed, and compare its 
+                properties.
+                """)
+            compare_build_args_cont = st.container()
+            comp_sub_tabs = st.tabs(["🛠️🦾🔮 Build-Train-Predict", "🌊 Attractor", "🔍 Properties"])
+            with comp_sub_tabs[0]:
+                nr_of_comparisons = int(st.number_input("Nr. of comparisons",
+                                                        value=0,
+                                                        min_value=0,))
+
+                esn_parameters = build_args.copy()
+                esn_parameters["esn_type"] = esn_type
+                different_esn_parameters = {}
+                different_esn_parameters["base"] = esn_parameters
+
+                different_esn_outputs = {}
+                different_esn_outputs["base"] = ((y_train_fit, y_train_true, res_train_dict),
+                                                 (y_pred, y_pred_true, res_pred_dict))
+
+                for i_comp in range(nr_of_comparisons):
+                    default_name = str(i_comp+1)
+                    with st.expander(f"Parameters of comparison ESN: {default_name}"):
+                        name = st.text_input("Name",
+                                             value=default_name,
+                                             key=f"ESN_comparisons__{default_name}")
+                        if name in different_esn_outputs.keys():
+                            raise ValueError("Name already taken.")
+                        utils.st_line()
+
+                        # BUILD parameters
+                        st.markdown("**ESN type:**")
+                        esn_type = esn.st_select_esn_type(key=default_name)
+                        st.markdown("**Basic parameters:**")
+                        build_args = esn.st_basic_esn_build(key=default_name)
+                        st.markdown("**Network parameters:**")
+                        build_args = build_args | esn.st_network_build_args(key=default_name)
+                        if esn_type == "ESN_pca":
+                            st.markdown("**ESN_pca settings:**")
+                            build_args = build_args | esn.st_pca_build_args(build_args["r_dim"],
+                                                                            key=default_name)
+                        utils.st_line()
+
+                        # BUILD TRAIN PREDICT:
+                        esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
+                        esn_obj = copy.deepcopy(esn_obj)
+
+                        y_train_fit, y_train_true, res_train_dict, esn_obj = esn.train_return_res(esn_obj,
+                                                                                                  x_train,
+                                                                                                  t_train_sync,
+                                                                                                  )
+                        esn_obj = copy.deepcopy(esn_obj)
+                        y_pred, y_pred_true, res_pred_dict, esn_obj = esn.predict_return_res(esn_obj,
+                                                                                             x_pred,
+                                                                                             t_pred_sync)
+                        esn_obj = copy.deepcopy(esn_obj)
+                        different_esn_outputs[name] = ((y_train_fit, y_train_true, res_train_dict),
+                                                       (y_pred, y_pred_true, res_pred_dict))
+                        esn_parameters = build_args.copy()
+                        esn_parameters["esn_type"] = esn_type
+                        print(build_args)
+                        different_esn_parameters[name] = esn_parameters
+
+                # Summary of different build args:
+                with compare_build_args_cont:
+                    with st.expander("Differences in ESN parameters"):
+                        df_parameters_comparison = esncomp.compare_esn_parameters(different_esn_parameters,
+                                                                                  mode="difference")
+                        st.table(df_parameters_comparison)
+
+            with comp_sub_tabs[1]:
+                time_series_dict_comp = {"True": y_pred_true}
+                for k, v in different_esn_outputs.items():
+                    time_series_dict_comp[k] = v[1][0]
+                # time_series_dict_comp = {k: v[1][2]["r_gen"] for k, v in different_esn_outputs.items()}
+                plot.st_all_timeseries_plots(time_series_dict_comp, key="timeseries_comp")
+
+            with comp_sub_tabs[2]:
+
+                r_gen_train_dict_compare = {k+"_train": v[0][2]["r_gen"] for k, v in different_esn_outputs.items()}
+                r_gen_pred_dict_compare = {k+"_pred": v[1][2]["r_gen"] for k, v in different_esn_outputs.items()}
+
+                r_gen_dict_compare = r_gen_train_dict_compare | r_gen_pred_dict_compare
+
+                if st.checkbox("Statistical measures on Rgen", key="comparison_r_gen"):
+                    measures.st_statistical_measures(r_gen_dict_compare,
+                                                     bar_or_line="line",
+                                                     x_label="r_gen_dim",
+                                                     default_abs=False,
+                                                     default_log_y=True,
+                                                     default_measure="std",
+                                                     key=f"compare_esns_train")
+
+
+
+        else:
+            st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with tbd_tab:
         tbd_tabs = st.tabs(["💡 PCA", "🧹 Sweeping", "🔰 Theory"])
