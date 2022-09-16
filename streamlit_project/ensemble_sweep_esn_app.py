@@ -283,7 +283,8 @@ if __name__ == '__main__':
             tabs = st.tabs(["Internal reservoir states",
                             "W_out and R_gen",
                             "Reservoir time series",
-                            "Reservoir based measures"])
+                            "Reservoir based measures",
+                            "Partial w_out connections"])
 
             res_train_dict_no_rgen = {k: v for k, v in res_train_dict.items() if k != "r_gen"}
             res_pred_dict_no_rgen = {k: v for k, v in res_pred_dict.items() if k != "r_gen"}
@@ -342,17 +343,9 @@ if __name__ == '__main__':
                     w_out_to_use = w_out_pca
                 else:
                     raise ValueError("This choice is not accounted for. ")
-                utils.st_line()
-                esnplot.st_all_w_out_r_gen_plots(r_gen_dict_to_use, w_out_to_use)
 
                 utils.st_line()
-                if st.checkbox("Investigate partial wout connections", key="pwoutcon"):
-                    esnplot.st_investigate_partial_w_out_influence(
-                        r_gen_train=res_train_dict["r_gen"],
-                        x_train=x_train,
-                        t_train_sync=t_train_sync,
-                        w_out=w_out,
-                        key="invwout")
+                esnplot.st_all_w_out_r_gen_plots(r_gen_dict_to_use, w_out_to_use)
 
             with tabs[2]:  # reservoir time series
                 if st.checkbox("Reservoir states", key="r_states_3d"):
@@ -381,7 +374,14 @@ if __name__ == '__main__':
                     esnplot.st_dist_in_std_for_r_gen_states(r_gen_dict["r_gen_train"],
                                                             r_gen_dict["r_gen_pred"],
                                                             save_session_state=True)
-
+            with tabs[4]:
+                if st.checkbox("Investigate partial wout connections", key="pwoutcon"):
+                    esnplot.st_investigate_partial_w_out_influence(
+                        r_gen_train=res_train_dict["r_gen"],
+                        x_train=x_train,
+                        t_train_sync=t_train_sync,
+                        w_out=w_out,
+                        key="invwout")
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
@@ -394,95 +394,65 @@ if __name__ == '__main__':
                 Build, train and predict different ESNs with the same seed, and compare its 
                 properties.
                 """)
-            compare_build_args_cont = st.container()
-            comp_sub_tabs = st.tabs(["🛠️🦾🔮 Build-Train-Predict", "🌊 Attractor", "🔍 Properties"])
+
+            compare_esn_parms_container = st.container()
+            comp_sub_tabs = st.tabs(["🛠️🦾🔮 Build-Train-Predict",
+                                     "🌊 Attractor",
+                                     "🔍 Properties",
+                                     "⌛ Valid time",
+                                     "🧪 Cross lyapunov exponent"])
+
             with comp_sub_tabs[0]:
-                nr_of_comparisons = int(st.number_input("Nr. of comparisons",
-                                                        value=0,
-                                                        min_value=0,))
-
-                esn_parameters = build_args.copy()
-                esn_parameters["esn_type"] = esn_type
-                different_esn_parameters = {}
-                different_esn_parameters["base"] = esn_parameters
-
-                different_esn_outputs = {}
-                different_esn_outputs["base"] = ((y_train_fit, y_train_true, res_train_dict),
-                                                 (y_pred, y_pred_true, res_pred_dict))
-
-                for i_comp in range(nr_of_comparisons):
-                    default_name = str(i_comp+1)
-                    with st.expander(f"Parameters of comparison ESN: {default_name}"):
-                        name = st.text_input("Name",
-                                             value=default_name,
-                                             key=f"ESN_comparisons__{default_name}")
-                        if name in different_esn_outputs.keys():
-                            raise ValueError("Name already taken.")
-                        utils.st_line()
-
-                        # BUILD parameters
-                        st.markdown("**ESN type:**")
-                        esn_type = esn.st_select_esn_type(key=default_name)
-                        st.markdown("**Basic parameters:**")
-                        build_args = esn.st_basic_esn_build(key=default_name)
-                        st.markdown("**Network parameters:**")
-                        build_args = build_args | esn.st_network_build_args(key=default_name)
-                        if esn_type == "ESN_pca":
-                            st.markdown("**ESN_pca settings:**")
-                            build_args = build_args | esn.st_pca_build_args(build_args["r_dim"],
-                                                                            key=default_name)
-                        if esn_type == "ESN_hybrid":
-                            st.markdown("**ESN_hybrid settings:**")
-                            build_args = build_args | esn.st_hybrid_build_args(
-                                system_name=system_name,
-                                system_parameters=system_parameters,
-                                key=default_name)
-                            build_args["scale_shift_vector_input"] = scale_shift_vector
-                            build_args["scale_shift_vector_output"] = scale_shift_vector
-                        utils.st_line()
-
-                        # BUILD TRAIN PREDICT:
-                        esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
-                        esn_obj = copy.deepcopy(esn_obj)
-
-                        y_train_fit, y_train_true, res_train_dict, esn_obj = esn.train_return_res(esn_obj,
-                                                                                                  x_train,
-                                                                                                  t_train_sync,
-                                                                                                  )
-                        esn_obj = copy.deepcopy(esn_obj)
-                        y_pred, y_pred_true, res_pred_dict, esn_obj = esn.predict_return_res(esn_obj,
-                                                                                             x_pred,
-                                                                                             t_pred_sync)
-                        esn_obj = copy.deepcopy(esn_obj)
-                        different_esn_outputs[name] = ((y_train_fit, y_train_true, res_train_dict),
-                                                       (y_pred, y_pred_true, res_pred_dict))
-                        esn_parameters = build_args.copy()
-                        esn_parameters["esn_type"] = esn_type
-                        print(build_args)
-                        different_esn_parameters[name] = esn_parameters
-
-                # Summary of different build args:
-                with compare_build_args_cont:
-                    with st.expander("Differences in ESN parameters"):
-                        df_parameters_comparison = esncomp.compare_esn_parameters(different_esn_parameters,
-                                                                                  mode="difference")
-                        st.table(df_parameters_comparison)
+                different_esn_outputs = esncomp.st_comparison_build_train_predict(
+                    esn_type=esn_type,
+                    build_args=build_args,
+                    y_train_fit=y_train_fit,
+                    y_train_true=y_train_true,
+                    res_train_dict=res_train_dict,
+                    y_pred=y_pred,
+                    y_pred_true=y_pred_true,
+                    res_pred_dict=res_pred_dict,
+                    w_out=w_out,
+                    system_name=system_name,
+                    system_parameters=system_parameters,
+                    scale_shift_vector=scale_shift_vector,
+                    seed=seed,
+                    x_dim=x_dim,
+                    x_train=x_train,
+                    t_train_sync=t_train_sync,
+                    x_pred=x_pred,
+                    t_pred_sync=t_pred_sync,
+                    compare_esn_parms_container=compare_esn_parms_container
+                )
 
             with comp_sub_tabs[1]:
                 time_series_dict_comp = {"True": y_pred_true}
                 for k, v in different_esn_outputs.items():
-                    time_series_dict_comp[k] = v[1][0]
-                # time_series_dict_comp = {k: v[1][2]["r_gen"] for k, v in different_esn_outputs.items()}
+                    time_series_dict_comp["Predict: " + k] = v["predict"][0]
                 plot.st_all_timeseries_plots(time_series_dict_comp, key="timeseries_comp")
 
             with comp_sub_tabs[2]:
+                r_gen_w_out_dict_comp = esncomp.transform_to_r_gen_w_out(different_esn_outputs)
 
-                r_gen_train_dict_compare = {k+"_train": v[0][2]["r_gen"] for k, v in different_esn_outputs.items()}
-                r_gen_pred_dict_compare = {k+"_pred": v[1][2]["r_gen"] for k, v in different_esn_outputs.items()}
+                r_gen_w_out_dict_comp = esncomp.st_pca_transformed_quantites_comp(r_gen_w_out_dict_comp)
 
-                r_gen_dict_compare = r_gen_train_dict_compare | r_gen_pred_dict_compare
+                utils.st_line()
+                if st.checkbox("Simple w_out plot", key="comparison_wout_simple"):
+                    fig = go.Figure()
+                    for k, v in r_gen_w_out_dict_comp.items():
+                        w_out = v["w_out"].copy()
+                        w_out_to_plot = np.sum(np.abs(w_out), axis=0)
+                        fig.add_trace(
+                            go.Scatter(y=w_out_to_plot, name=k)
+                        )
+                    st.plotly_chart(fig)
 
+                utils.st_line()
                 if st.checkbox("Statistical measures on Rgen", key="comparison_r_gen"):
+                    r_gen_dict_compare = {}
+                    for k, v in r_gen_w_out_dict_comp.items():
+                        r_gen_dict_compare[f"{k} train"] = v["r_gen_train"]
+                        r_gen_dict_compare[f"{k} predict"] = v["r_gen_pred"]
                     measures.st_statistical_measures(r_gen_dict_compare,
                                                      bar_or_line="line",
                                                      x_label="r_gen_dim",
@@ -491,7 +461,27 @@ if __name__ == '__main__':
                                                      default_measure="std",
                                                      key=f"compare_esns_train")
 
+            with comp_sub_tabs[3]:
+                if st.checkbox("Valid time index", key="valid time index compare"):
+                    for k, v in different_esn_outputs.items():
+                        st.markdown(f"**{k}:**")
+                        pred_vs_true.st_show_valid_times_vs_error_threshold(
+                            y_true_traj=v["predict"][0],
+                            y_pred_traj=v["predict"][1],
+                            dt=dt,
+                            key=f"{k}__vt_compare")
 
+            with comp_sub_tabs[4]:
+                if st.checkbox("Cross Lyapunov exponent", key="cle_compare"):
+                    for k, v in different_esn_outputs.items():
+                        st.markdown(f"**{k}:**")
+                        sysmeas.st_largest_cross_lyapunov_exponent(iterator_func,
+                                                                   v["predict"][0],
+                                                                   scale_shift_vector=scale_shift_vector,
+                                                                   dt=dt,
+                                                                   save_session_state=False,
+                                                                   key=f"{k}__cle_compare")
+                        utils.st_line()
 
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
