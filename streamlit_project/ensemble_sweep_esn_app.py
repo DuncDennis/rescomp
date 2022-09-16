@@ -74,6 +74,10 @@ if __name__ == '__main__':
         if esn_type == "ESN_pca":
             with st.expander("ESN_pca settings: "):
                 build_args = build_args | esn.st_pca_build_args(build_args["r_dim"])
+        if esn_type == "ESN_hybrid":
+            with st.expander("ESN_hybrid settings: "):
+                build_args = build_args | esn.st_hybrid_build_args(system_name=system_name,
+                                                                   system_parameters=system_parameters)
         utils.st_line()
 
     with st.sidebar:
@@ -112,6 +116,9 @@ if __name__ == '__main__':
                                                                            seed,
                                                                            scale_shift_params=scale_shift_params,
                                                                            noise_scale=noise_scale)
+            if esn_type == "ESN_hybrid":  # TODO:  not nice here.
+                build_args["scale_shift_vector_input"] = scale_shift_vector
+                build_args["scale_shift_vector_output"] = scale_shift_vector
 
             time_series_dict = {"time series": time_series}
 
@@ -168,6 +175,9 @@ if __name__ == '__main__':
         if build_bool:
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
             esn_obj = copy.deepcopy(esn_obj)  # needed for the streamlit caching to work correctly.
+
+            st.write("ESN_obj win shape", esn_obj._w_in.shape)
+
             st.markdown("Explore the Echo State Network architecture.")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
             with tabs[0]:
@@ -421,6 +431,14 @@ if __name__ == '__main__':
                             st.markdown("**ESN_pca settings:**")
                             build_args = build_args | esn.st_pca_build_args(build_args["r_dim"],
                                                                             key=default_name)
+                        if esn_type == "ESN_hybrid":
+                            st.markdown("**ESN_hybrid settings:**")
+                            build_args = build_args | esn.st_hybrid_build_args(
+                                system_name=system_name,
+                                system_parameters=system_parameters,
+                                key=default_name)
+                            build_args["scale_shift_vector_input"] = scale_shift_vector
+                            build_args["scale_shift_vector_output"] = scale_shift_vector
                         utils.st_line()
 
                         # BUILD TRAIN PREDICT:

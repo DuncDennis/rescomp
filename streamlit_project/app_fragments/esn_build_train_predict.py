@@ -12,6 +12,7 @@ import streamlit as st
 import rescomp
 import rescomp.esn_new_update_code as esn
 from streamlit_project.app_fragments import streamlit_utilities as utils
+from streamlit_project.app_fragments import system_simulation as syssim
 
 
 def esn_hash(obj):
@@ -21,6 +22,7 @@ def esn_hash(obj):
 
 ESN_DICT = {"ESN_normal": esn.ESN_normal,
             "ESN_pca": esn.ESN_pca,
+            "ESN_hybrid": esn.ESN_hybrid,
             "ESN_pca_after_rgen": esn.ESN_pca_after_rgen,
             "ESN_normal_centered": esn.ESN_normal_centered,
             # "ESN_factor_analysis": esn.ESN_factor_analysis,
@@ -272,6 +274,54 @@ def st_pca_build_args(r_dim: int,
                         key=f"{key}__st_pca_build_args__pc")
     )
     return pca_build_args
+
+
+def st_hybrid_build_args(system_name: str,
+                         system_parameters: dict[str, Any],
+                         # scale_shift_vector: tuple[np.ndarray, np.ndarray] | None = None,
+                         key: str | None = None) -> dict[str, object]:
+    """Streamlit elements to specify the Settings for ESN_pca.
+
+    Args:
+        system_name: The name of the system, which must be part of syssim.SYSTEM_DICT.
+        system_parameters: The system parameter dictionary used to simulate the data.
+        scale_shift_vectors: Either None or a tuple where the first element is the shift-vector
+                             used to shift, and the second is the scale-vector used to scale the
+                             esn input data. Since the models use the original data, these two
+                             vectors are used to recreate the original scale and shift of the
+                             data.
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        A dictionary containing the hybrid esn build args.
+    """
+    hybrid_build_args = {}
+    # hybrid_build_args = {"scale_shift_vector_input": scale_shift_vector,
+    #                      "scale_shift_vector_output": scale_shift_vector}
+
+    if st.checkbox("Add input model",
+                   value=False,
+                   key=f"{key}__st_hybrid_build_args__inputcheck"):
+        input_model, input_system_parameters = syssim.st_get_model_system(
+            system_name, system_parameters, key=f"{key}__st_hybrid_build_args__input")
+
+        hybrid_build_args["input_model_to_res_factor"] = st.number_input(
+            "input_model_to_res_factor",
+            value=0.5, min_value=0.0,
+            max_value=1.0,
+            key=f"{key}__st_hybrid_build_args__input_to_res")
+
+        hybrid_build_args["input_model"] = input_model
+
+    utils.st_line()
+    if st.checkbox("Add output model",
+                   value=True,
+                   key=f"{key}__st_hybrid_build_args__outcheck"):
+        output_model, output_system_parameters = syssim.st_get_model_system(
+            system_name, system_parameters, key=f"{key}__st_hybrid_build_args__out")
+        hybrid_build_args["output_model"] = output_model
+
+    return hybrid_build_args
 
 
 @st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=False,
