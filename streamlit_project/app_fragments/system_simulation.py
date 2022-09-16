@@ -469,8 +469,10 @@ def st_embed_timeseries(x_dim: int, key: str | None = None) -> tuple[int, int, l
 
 
 @st.experimental_memo
-def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
-                             delay: int, dimension_selection: list[int] | None) -> np.ndarray:
+def get_embedded_time_series(time_series: np.ndarray,
+                             embedding_dimension: int,
+                             delay: int,
+                             dimension_selection: list[int] | None) -> np.ndarray:
     """Embed the time series.
 
     Args:
@@ -481,7 +483,7 @@ def get_embedded_time_series(time_series: np.ndarray, embedding_dimension: int,
                              If None: Take all dimensions.
 
     Returns:
-        The embedded time series of shape (timesteps - delay, len(dimension_selection)).
+        The embedded time series of shape (timesteps - delay, embedding_dimension * len(dimension_selection)).
     """
 
     return datapre.embedding(time_series,
