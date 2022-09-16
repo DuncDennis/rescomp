@@ -133,6 +133,11 @@ def st_statistical_measures(time_series_dict: dict[str, np.ndarray],
     Args:
         time_series_dict: The time series data.
         key: Provide a unique key if this streamlit element is used multiple times.
+        x_label: The name of the x_axis.
+        bar_or_line: Whether to plot a line or bar plot.
+        default_log_y: Whether log_y checkbox is already checked or not by default.
+        default_abs: Whether abs checkbox is already checked or not.
+        default_measure: The initial measure to use.
     """
     cols = st.columns(2)
     with cols[0]:
