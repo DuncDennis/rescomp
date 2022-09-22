@@ -20,16 +20,18 @@ def esn_hash(obj):
     return hash((type(obj),) + tuple(items))
 
 
-ESN_DICT = {"ESN_normal": esn.ESN_normal,
-            "ESN_pca": esn.ESN_pca,
-            "ESN_hybrid": esn.ESN_hybrid,
-            "ESN_pca_after_rgen": esn.ESN_pca_after_rgen,
-            "ESN_normal_centered": esn.ESN_normal_centered,
-            # "ESN_factor_analysis": esn.ESN_factor_analysis,
-            # "ESN_fast_ica": esn.ESN_fast_ica,
-            "ESN_output_hybrid": esn.ESN_output_hybrid,
-            "ESN_strong": esn.ESN_strong
-            }
+ESN_DICT = {
+    "ESN_r_process": esn.ESN_r_process,
+    "ESN_normal": esn.ESN_normal,
+    "ESN_pca": esn.ESN_pca,
+    "ESN_hybrid": esn.ESN_hybrid,
+    "ESN_pca_after_rgen": esn.ESN_pca_after_rgen,
+    "ESN_normal_centered": esn.ESN_normal_centered,
+    # "ESN_factor_analysis": esn.ESN_factor_analysis,
+    # "ESN_fast_ica": esn.ESN_fast_ica,
+    "ESN_output_hybrid": esn.ESN_output_hybrid,
+    "ESN_strong": esn.ESN_strong
+}
 
 # ESN_HASH_FUNCS = {val: hash for val in ESN_DICT.values()}
 
@@ -167,6 +169,43 @@ def st_esn_strong_args(key: str | None = None) -> dict[str, object]:
                                                                    key=f"{key}__st_esn_strong_build_args__r_noise",
                                                                    format="%f")
     return esn_strong_build_args
+
+
+def st_esn_r_process_args(r_dim: int,
+                          key: str | None = None) -> dict[str, object]:
+    """Streamlit elements to specify the additional settings of ESN_r_process.
+
+    Args:
+        key: Provide a unique key if this streamlit element is used multiple times.
+
+    Returns:
+        A dictionary containing the ESN_r_process build args.
+    """
+    esn_r_process_build_args = {}
+
+    esn_r_process_build_args["center_r_train"] = st.checkbox('center_r_train',
+                                                             value=False,
+                                                             key=f"{key}__st_esn_r_process_build_args__cent")
+
+    esn_r_process_build_args["rescale_r_train"] = st.checkbox('rescale_r_train',
+                                                              value=False,
+                                                              key=f"{key}__st_esn_r_process_build_args__resc")
+
+    esn_r_process_build_args["perform_pca"] = st.checkbox('perform_pca',
+                                                          value=False,
+                                                          key=f"{key}__st_esn_r_process_build_args__pca")
+
+    if esn_r_process_build_args["perform_pca"]:
+        esn_r_process_build_args["pca_components"] = int(st.number_input('pca_components',
+                                                                         value=r_dim,
+                                                                         step=1,
+                                                                         key=f"{key}__st_esn_r_process_build_args__pca_components"))
+
+        esn_r_process_build_args["center_pca_input"] = st.checkbox('center_pca_input',
+                                                                   value=True,
+                                                                   key=f"{key}__st_esn_r_process_build_args__centpca")
+
+    return esn_r_process_build_args
 
 
 def st_select_esn_type(esn_sub_section: tuple[str, ...] | None = None,
@@ -326,7 +365,9 @@ def st_hybrid_build_args(system_name: str,
 
 @st.cache(hash_funcs=ESN_HASH_FUNC, allow_output_mutation=False,
           max_entries=utils.MAX_CACHE_ENTRIES)
-def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int,
+def train_return_res(esn_obj: ESN_TYPING,
+                     x_train: np.ndarray,
+                     t_train_sync: int,
                      ) -> tuple[np.ndarray, np.ndarray, dict[str, np.ndarray], ESN_TYPING]:
     """Train the esn_obj with a given x_train and t_train-sync and return internal reservoir states.
 
@@ -341,6 +382,7 @@ def train_return_res(esn_obj: ESN_TYPING, x_train: np.ndarray, t_train_sync: int
         Tuple with the fitted output, the real output and reservoir dictionary containing states
         for r_act_fct_inp, r_internal, r_input, r, r_gen, and the esn_obj.
     """
+    x_train = x_train.copy()
     esn_obj.train(x_train,
                   sync_steps=t_train_sync,
                   save_y_train=True,
@@ -381,6 +423,7 @@ def predict_return_res(esn_obj: ESN_TYPING, x_pred: np.ndarray, t_pred_sync: int
         Tuple with the fitted output, the real output and reservoir dictionary containing states
         for r_act_fct_inp, r_internal, r_input, r, r_gen, and the esn_obj.
     """
+    x_pred = x_pred.copy()
     y_pred, y_pred_true = esn_obj.predict(x_pred,
                                           sync_steps=t_pred_sync,
                                           save_res_inp=True,
