@@ -51,6 +51,7 @@ def compare_esn_parameters(different_esn_parameters: dict[str, Any],
 
 def st_comparison_build_train_predict(esn_type: str,
                                       build_args: dict[str, Any],
+                                      esn_obj: esnbuild.ESN_TYPING,
                                       y_train_fit: np.ndarray,
                                       y_train_true: np.ndarray,
                                       res_train_dict: dict[str, np.ndarray],
@@ -69,12 +70,15 @@ def st_comparison_build_train_predict(esn_type: str,
                                       t_pred_sync: int,
                                       compare_esn_parms_container: st.container | None = None,
                                       key: str | None = None
-                                      ) -> dict[str, dict[str, Any]]:
+                                      ) -> tuple[dict[str, dict[str, Any]],
+                                                 dict[str, dict[str, Any]],
+                                                 dict[str, esnbuild.ESN_TYPING]]:
     """Streamlit element to build additional ESNs and train and predict with them.
 
     Args:
         esn_type: The name of the base esn.
         build_args: The build args of the base esn.
+        esn_obj: The base ens_object.
         y_train_fit: The fitted y_train of the base esn.
         y_train_true: The true y_train of the base esn.
         res_train_dict: The reservoir states dict of the base esn during training.
@@ -95,11 +99,13 @@ def st_comparison_build_train_predict(esn_type: str,
                                      parameters.
         key: An optional key if this function is used multiple times.
 
-    Returns:
-        A dictionary with an entry for each esn, where one of them is the base esn with the key
+    Returns: A tuple of three dictionaries:
+        1. A dictionary with an entry for each esn, where one of them is the base esn with the key
         "base". Each value for each esn, is a dictionary with the keys "train", "predict" and
         "w_out". The first two contain a 3-tuple: (pred/fit, true, res_states). The "w_out" key
         contains the w_out matrix.
+        2. A dictionary with a pca_parameter dictionary for each key.
+        3. A dictionary with the esn_obj for each key.
     """
     nr_of_comparisons = int(st.number_input("Nr. of comparisons",
                                             value=0,
@@ -115,6 +121,9 @@ def st_comparison_build_train_predict(esn_type: str,
     different_esn_outputs["base"] = {"train": (y_train_fit, y_train_true, res_train_dict),
                                      "predict": (y_pred, y_pred_true, res_pred_dict),
                                      "w_out": w_out}
+
+    different_esn_objects = {}
+    different_esn_objects["base"] = copy.deepcopy(esn_obj)
 
     for i_comp in range(nr_of_comparisons):
         default_name = str(i_comp + 1)
@@ -133,6 +142,12 @@ def st_comparison_build_train_predict(esn_type: str,
             build_args = esnbuild.st_basic_esn_build(key=default_name)
             st.markdown("**Network parameters:**")
             build_args = build_args | esnbuild.st_network_build_args(key=default_name)
+
+            if esn_type == "ESN_r_process":
+                st.markdown("**ESN_r_process settings:**")
+                build_args = build_args | esnbuild.st_esn_r_process_args(build_args["r_dim"],
+                                                                         key=default_name)
+
             if esn_type == "ESN_pca":
                 st.markdown("**ESN_pca settings:**")
                 build_args = build_args | esnbuild.st_pca_build_args(build_args["r_dim"],
@@ -171,6 +186,8 @@ def st_comparison_build_train_predict(esn_type: str,
             esn_parameters["esn_type"] = esn_type
             different_esn_parameters[name] = esn_parameters
 
+            different_esn_objects[name] = copy.deepcopy(esn_obj)
+
     # Summary of different build args:
     if compare_esn_parms_container is not None:
         with compare_esn_parms_container:
@@ -179,7 +196,7 @@ def st_comparison_build_train_predict(esn_type: str,
                                                                   mode="difference")
                 st.table(df_parameters_comparison)
 
-    return different_esn_outputs
+    return different_esn_outputs, different_esn_parameters, different_esn_objects
 
 
 def transform_to_r_gen_w_out(different_esn_outputs) -> dict[str, dict[str, Any]]:

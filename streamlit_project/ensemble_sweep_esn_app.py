@@ -71,6 +71,9 @@ if __name__ == '__main__':
             build_args = esn.st_basic_esn_build()
         with st.expander("Network parameters: "):
             build_args = build_args | esn.st_network_build_args()
+        if esn_type == "ESN_r_process":
+            with st.expander("ESN_r_process settings: "):
+                build_args = build_args | esn.st_esn_r_process_args(build_args["r_dim"])
         if esn_type == "ESN_pca":
             with st.expander("ESN_pca settings: "):
                 build_args = build_args | esn.st_pca_build_args(build_args["r_dim"])
@@ -175,8 +178,6 @@ if __name__ == '__main__':
         if build_bool:
             esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
             esn_obj = copy.deepcopy(esn_obj)  # needed for the streamlit caching to work correctly.
-
-            st.write("ESN_obj win shape", esn_obj._w_in.shape)
 
             st.markdown("Explore the Echo State Network architecture.")
             tabs = st.tabs(["Dimensions", "Input matrix", "Network"])
@@ -400,12 +401,14 @@ if __name__ == '__main__':
                                      "🌊 Attractor",
                                      "🔍 Properties",
                                      "⌛ Valid time",
-                                     "🧪 Cross lyapunov exponent"])
+                                     "🧪 Cross lyapunov exponent",
+                                     "👾 Other"])
 
             with comp_sub_tabs[0]:
-                different_esn_outputs = esncomp.st_comparison_build_train_predict(
+                comparison_outs = esncomp.st_comparison_build_train_predict(
                     esn_type=esn_type,
                     build_args=build_args,
+                    esn_obj=esn_obj,
                     y_train_fit=y_train_fit,
                     y_train_true=y_train_true,
                     res_train_dict=res_train_dict,
@@ -425,6 +428,8 @@ if __name__ == '__main__':
                     compare_esn_parms_container=compare_esn_parms_container
                 )
 
+                different_esn_outputs, different_esn_parameters, different_esn_objects = comparison_outs
+
             with comp_sub_tabs[1]:
                 time_series_dict_comp = {"True": y_pred_true}
                 for k, v in different_esn_outputs.items():
@@ -434,7 +439,8 @@ if __name__ == '__main__':
             with comp_sub_tabs[2]:
                 r_gen_w_out_dict_comp = esncomp.transform_to_r_gen_w_out(different_esn_outputs)
 
-                r_gen_w_out_dict_comp = esncomp.st_pca_transformed_quantites_comp(r_gen_w_out_dict_comp)
+                r_gen_w_out_dict_comp = esncomp.st_pca_transformed_quantites_comp(
+                    r_gen_w_out_dict_comp)
 
                 utils.st_line()
                 if st.checkbox("Simple w_out plot", key="comparison_wout_simple"):
@@ -445,6 +451,8 @@ if __name__ == '__main__':
                         fig.add_trace(
                             go.Scatter(y=w_out_to_plot, name=k)
                         )
+                    fig.update_yaxes(title="summed abs of w_out")
+                    fig.update_xaxes(title="r_gen dim")
                     st.plotly_chart(fig)
 
                 utils.st_line()
@@ -482,6 +490,42 @@ if __name__ == '__main__':
                                                                    save_session_state=False,
                                                                    key=f"{k}__cle_compare")
                         utils.st_line()
+            with comp_sub_tabs[5]:
+                if st.checkbox("test"):
+                    save = []
+                    for k, v in different_esn_objects.items():
+                        st.write(k)
+                        # v._r_train_mean
+                        # v._pca_input_mean
+
+                        if v._pca_matrix is not None:
+                            w_out_pca = v._w_out  # out x components (+ 1)
+                            M = v._pca_matrix  # components x features
+                            nr_pca_comps = M.shape[1]
+                            nr_r_gen = w_out_pca.shape[1]
+                            if nr_pca_comps == nr_r_gen:
+                                M_tilde = M
+                            elif nr_r_gen == nr_pca_comps + 1:
+                                M_tilde = np.eye(nr_r_gen)  # components (+1) x features (+1)
+                                M_tilde[:nr_r_gen-1, :nr_r_gen-1] = M
+                            else:
+                                raise ValueError("nr_r_gen is not compatible with match nr_pca_comps")
+                            # M_tilde
+
+                            # check if unitarian:
+                            # checkval = np.max(np.abs(M.T - np.linalg.inv(M)))
+                            # st.write(checkval)
+
+                            w_out_pca_back = w_out_pca @ M_tilde
+                            w_out_pca_back
+                        else:
+                            w_out_normal = v._w_out
+                            w_out_normal
+
+                    checkval = np.max(np.abs(w_out_pca_back - w_out_normal))
+                    st.write(checkval)
+                if st.checkbox("test 2"):
+                    pass
 
         else:
             st.info('Activate [🔮 Predict] checkbox to see something.')
@@ -549,6 +593,8 @@ if __name__ == '__main__':
                 time_delay = int(st.number_input("time_delay", value=0))
 
                 correlation = esnexp.correlate_input_and_r_gen(inp, r_gen, time_delay)
+                max_index = int(st.number_input("max index to show: ", value=5, step=1,
+                                                key="corr__max_index"))
 
                 l, m, r = st.columns(3)
                 with l:
@@ -562,7 +608,7 @@ if __name__ == '__main__':
                 y_axis = "input_dim"
                 value_name = "correlation"
                 st.info("Plot correlation as a bar plot:")
-                fig = plpl.matrix_as_barchart(correlation,
+                fig = plpl.matrix_as_barchart(correlation[:max_index, :],
                                               log_y=log_y,
                                               barmode=barmode,
                                               abs_bool=abs_bool,
@@ -948,13 +994,6 @@ if __name__ == '__main__':
                                                   value_name="n", log_y=log_y, abs_bool=abs_bool)
                     st.plotly_chart(fig)
 
-                    st.markdown("**w_out plot:**")
-
-                    fig = plpl.matrix_as_barchart(w_out[:, :max_index].T, x_axis="r_gen index",
-                                                  y_axis="out dim",
-                                                  value_name="w_out", log_y=log_y,
-                                                  abs_bool=abs_bool)
-                    st.plotly_chart(fig)
 
                     st.markdown("**Correlation:**")
 
@@ -963,8 +1002,38 @@ if __name__ == '__main__':
                                                   value_name="correlation", log_y=log_y,
                                                   abs_bool=abs_bool)
                     st.plotly_chart(fig)
+
+                    st.markdown("**w_out plot:**")
+
+                    fig = plpl.matrix_as_barchart(w_out[:, :max_index].T, x_axis="r_gen index",
+                                                  y_axis="out dim",
+                                                  value_name="w_out", log_y=log_y,
+                                                  abs_bool=abs_bool)
+                    st.plotly_chart(fig)
                     st.info("We can see clearly that the first pca nodes get the input dimensions "
                             "in the same relations as w_out fitting the output dimensions. ")
+
+                    with st.expander("Latex: "):
+                        st.markdown(
+                            r"""
+                            $$
+                               r_\text{pca} = M (r - r_\text{mean}) \approx Mr
+                            $$
+                            
+                            $$
+                                r = \tanh (W_\text{in}x + W r_\text{prev} + bias) \approx W_\text{in} x
+                            $$
+                            
+                            $$
+                                \rightarrow r_\text{pca} \approx M W_\text{in} x = M_\text{in} x
+                            $$
+                            
+                            PCA to input correlation: 
+                            
+                            $$
+                                C_{ij} = \text{correlation}(r_{\text{pca}, i}, x_j)
+                            $$
+                            """)
 
             utils.st_line()
             if st.checkbox("Analyize which reservoir nodes go into the pca components"):
@@ -1270,7 +1339,8 @@ if __name__ == '__main__':
                                 res_states_pca = pca.fit_transform(res_states_sweep)
                                 res_states_pca_dims = res_states_pca.shape[1]
 
-                                results_dict["pca index"] += np.arange(res_states_pca_dims).tolist()
+                                results_dict["pca index"] += np.arange(
+                                    res_states_pca_dims).tolist()
 
                                 # var = np.var(res_states_pca, axis=0)
                                 # results_dict["var"] += var.tolist()
@@ -1278,7 +1348,8 @@ if __name__ == '__main__':
                                 results_dict[sweep_name] += [sweep_value, ] * res_states_pca_dims
 
                                 results_dict["ensemble"] += [i_ens, ] * res_states_pca_dims
-                                results_dict["explained variance"] += pca.explained_variance_.tolist()
+                                results_dict[
+                                    "explained variance"] += pca.explained_variance_.tolist()
                         df = pd.DataFrame.from_dict(results_dict)
 
                         fig = px.line(df,
@@ -1340,7 +1411,7 @@ if __name__ == '__main__':
                             x_pred,
                             t_pred_sync)
                         esn_pca = copy.deepcopy(esn_pca)
-                        r_pred_pca_pca = res_pred_dict_pca["r_gen"][:, :-1]   # remove output bias
+                        r_pred_pca_pca = res_pred_dict_pca["r_gen"][:, :-1]  # remove output bias
 
                         # Plotting:
                         log_y = st.checkbox("log y", key=f"logy_r_gen_std")
@@ -1359,7 +1430,7 @@ if __name__ == '__main__':
                                             key=f"statistical_measures__std_of_pca_vs_normal")
                         out = measures.get_statistical_measure(r_pca_dict, mode=mode)
 
-                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y,)
+                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y, )
 
                         # fig = px.bar(out, x="x_axis", y="std", color="label", log_y=log_y,
                         #              barmode="group")
@@ -1369,7 +1440,8 @@ if __name__ == '__main__':
                             fig.update_yaxes(type="log", exponentformat="E")
                         st.plotly_chart(fig)
 
-                        if st.checkbox("Plot individual dimension as histogram", key="hist_pca_vs_norm"):
+                        if st.checkbox("Plot individual dimension as histogram",
+                                       key="hist_pca_vs_norm"):
                             r_pca_dict_copy = copy.deepcopy(r_pca_dict)
                             del r_pca_dict["r_pred_pca_normal"]
                             measures.st_histograms(r_pca_dict, key="hist_pca_va_norm")
@@ -1379,10 +1451,12 @@ if __name__ == '__main__':
                             res_train_normal_std = np.std(res_train_dict_normal["r"], axis=0)
                             res_train_normal_std_sorted = np.sort(res_train_normal_std)
                             res_pred_normal_std = np.std(res_pred_dict_normal["r"], axis=0)
-                            res_pred_normal_std_sorted = res_pred_normal_std[np.argsort(res_train_normal_std)]
+                            res_pred_normal_std_sorted = res_pred_normal_std[
+                                np.argsort(res_train_normal_std)]
 
-                            r_normal_std_sorted_dict = {"res_train_normal_std_sorted": res_train_normal_std_sorted,
-                                                        "res_pred_normal_std_sorted": res_pred_normal_std_sorted}
+                            r_normal_std_sorted_dict = {
+                                "res_train_normal_std_sorted": res_train_normal_std_sorted,
+                                "res_pred_normal_std_sorted": res_pred_normal_std_sorted}
 
                             figs = plpl.multiple_1d_time_series(r_normal_std_sorted_dict,
                                                                 x_label="reservoir index sorted by "
@@ -1401,15 +1475,16 @@ if __name__ == '__main__':
                                                                                seperate_factor=0.1
                                                                                )
                         # The subsections:
-                        r_gen_train_std_array = np.vstack([np.std(x, axis=0) for x in r_gen_train_list])
+                        r_gen_train_std_array = np.vstack(
+                            [np.std(x, axis=0) for x in r_gen_train_list])
                         r_gen_train_std_array_median = np.mean(r_gen_train_std_array,
-                                                                axis=0)
+                                                               axis=0)
                         r_gen_train_std_array_lower_quart = np.quantile(r_gen_train_std_array,
-                                                                       q=0.25,
-                                                                       axis=0)
+                                                                        q=0.25,
+                                                                        axis=0)
                         r_gen_train_std_array_upper_quart = np.quantile(r_gen_train_std_array,
-                                                                       q=0.75,
-                                                                       axis=0)
+                                                                        q=0.75,
+                                                                        axis=0)
 
                         # The "baseline":
                         r_gen_train_std = np.std(res_train_dict["r_gen"], axis=0)
@@ -1472,15 +1547,20 @@ if __name__ == '__main__':
                         st.write("W_out")
                         esnplot.st_plot_w_out_as_barchart(w_out, key="subsettraining")
                         st.write("W_out median")
-                        esnplot.st_plot_w_out_as_barchart(w_out_array_median, key="subsettraining_median")
+                        esnplot.st_plot_w_out_as_barchart(w_out_array_median,
+                                                          key="subsettraining_median")
                         st.write("W_out mean")
-                        esnplot.st_plot_w_out_as_barchart(w_out_array_mean, key="subsettraining_mean")
+                        esnplot.st_plot_w_out_as_barchart(w_out_array_mean,
+                                                          key="subsettraining_mean")
                         st.write("W_out std")
-                        esnplot.st_plot_w_out_as_barchart(w_out_array_std, key="subsettraining_std")
+                        esnplot.st_plot_w_out_as_barchart(w_out_array_std,
+                                                          key="subsettraining_std")
                         st.write("W_out quartile")
-                        esnplot.st_plot_w_out_as_barchart(w_out_array_quartile, key="subsettraining_quart")
+                        esnplot.st_plot_w_out_as_barchart(w_out_array_quartile,
+                                                          key="subsettraining_quart")
                         st.write("W_out std normed")
-                        esnplot.st_plot_w_out_as_barchart(w_out_array_std_normed, key="subsettraining_stdnormed")
+                        esnplot.st_plot_w_out_as_barchart(w_out_array_std_normed,
+                                                          key="subsettraining_stdnormed")
 
                         st.write(w_out_array.shape)
                     utils.st_line()
@@ -1488,8 +1568,9 @@ if __name__ == '__main__':
                                    key="sweep__input_noise_effect"):
                         # pca esn:
                         mod_build_args = copy.deepcopy(build_args)
-                        mod_build_args["input_noise_scale"] = 10**(st.number_input("log noise scale",
-                                                                                    value=-5))
+                        mod_build_args["input_noise_scale"] = 10 ** (
+                            st.number_input("log noise scale",
+                                            value=-5))
                         mod_build_args["r_to_r_gen_opt"] = "output_bias"
                         esn_pca = esn.build(esn_type="ESN_pca",
                                             seed=seed,
@@ -1502,14 +1583,15 @@ if __name__ == '__main__':
                             t_train_sync,
                         )
                         esn_pca = copy.deepcopy(esn_pca)
-                        r_train_pca_noise = res_train_dict_pca["r_gen"][:, :-1]  # remove output bias
+                        r_train_pca_noise = res_train_dict_pca["r_gen"][:,
+                                            :-1]  # remove output bias
 
                         _, _, res_pred_dict_pca, esn_pca = esn.predict_return_res(
                             esn_pca,
                             x_pred,
                             t_pred_sync)
                         esn_pca = copy.deepcopy(esn_pca)
-                        r_pred_pca_noise = res_pred_dict_pca["r_gen"][:, :-1]   # remove output bias
+                        r_pred_pca_noise = res_pred_dict_pca["r_gen"][:, :-1]  # remove output bias
 
                         # Assume the default esn is a pca esn without noise and output_bias:
                         r_train_pca_no_noise = res_train_dict["r_gen"][:, :-1]
@@ -1532,7 +1614,7 @@ if __name__ == '__main__':
                                             key=f"statistical_measures__std_of_pca_noise vs no noise")
                         out = measures.get_statistical_measure(r_pca_dict, mode=mode)
 
-                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y,)
+                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y, )
 
                         fig.update_xaxes(title="pca component")
                         if log_y:
@@ -1546,7 +1628,9 @@ if __name__ == '__main__':
                         min_r_gen_ind_pred, max_r_gen_ind_pred = st.slider("time range pred",
                                                                            value=(0, 100),
                                                                            min_value=0,
-                                                                           max_value=r_gen_pred_full.shape[0]-1
+                                                                           max_value=
+                                                                           r_gen_pred_full.shape[
+                                                                               0] - 1
                                                                            )
                         min_r_gen_ind_train, max_r_gen_ind_train = st.slider("time range train",
                                                                              value=(0, 100),
@@ -1560,8 +1644,10 @@ if __name__ == '__main__':
                         log_y = st.checkbox("log y", key=f"logy_r_gen_std_window")
                         r_pca_dict = {"r_train_full": r_gen_train_full,
                                       "r_pred_full": r_gen_pred_full,
-                                      "r_train_part": r_gen_train_full[min_r_gen_ind_train: max_r_gen_ind_train, :],
-                                      "r_pred_part": r_gen_pred_full[min_r_gen_ind_pred: max_r_gen_ind_pred, :],
+                                      "r_train_part": r_gen_train_full[
+                                                      min_r_gen_ind_train: max_r_gen_ind_train, :],
+                                      "r_pred_part": r_gen_pred_full[
+                                                     min_r_gen_ind_pred: max_r_gen_ind_pred, :],
                                       }
 
                         # std_diff = resmeas.difference_in_std(r_gen_train_full, r_gen_pred_full,
@@ -1579,7 +1665,7 @@ if __name__ == '__main__':
                         out = measures.get_statistical_measure(r_pca_dict, mode=mode)
                         with st.expander("Show df: "):
                             st.write(out)
-                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y,)
+                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y, )
 
                         fig.update_xaxes(title="pca component")
                         if log_y:
@@ -1588,10 +1674,12 @@ if __name__ == '__main__':
                     utils.st_line()
                     if st.checkbox("Large time period change of res dynamics: ",
                                    key="sweep__slow change of res dynamics"):
-                        st.info("In the checkbox above I found out that the reservoir quantites like"
-                                "std of r_gen states actually are not constant over a large time frame."
-                                "This might have something todo with stability.")
-                        st.info("I could also calculate the cross-lyapunov exponent for these windows.")
+                        st.info(
+                            "In the checkbox above I found out that the reservoir quantites like"
+                            "std of r_gen states actually are not constant over a large time frame."
+                            "This might have something todo with stability.")
+                        st.info(
+                            "I could also calculate the cross-lyapunov exponent for these windows.")
                         st.info("TBD")
 
                     utils.st_line()
@@ -1615,14 +1703,15 @@ if __name__ == '__main__':
                             t_train_sync,
                         )
                         esn_pca = copy.deepcopy(esn_pca)
-                        r_train_pca_noise = res_train_dict_pca["r_gen"][:, :-1]  # remove output bias
+                        r_train_pca_noise = res_train_dict_pca["r_gen"][:,
+                                            :-1]  # remove output bias
 
                         _, _, res_pred_dict_pca, esn_pca = esn.predict_return_res(
                             esn_pca,
                             x_pred,
                             t_pred_sync)
                         esn_pca = copy.deepcopy(esn_pca)
-                        r_pred_pca_noise = res_pred_dict_pca["r_gen"][:, :-1]   # remove output bias
+                        r_pred_pca_noise = res_pred_dict_pca["r_gen"][:, :-1]  # remove output bias
 
                         # Assume the default esn is a pca esn without noise and output_bias:
                         r_train_pca_no_noise = res_train_dict["r_gen"][:, :-1]
@@ -1645,7 +1734,7 @@ if __name__ == '__main__':
                                             key=f"statistical_measures__r_gen_std_vs_r_dim")
                         out = measures.get_statistical_measure(r_pca_dict, mode=mode)
 
-                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y,)
+                        fig = px.line(out, x="x_axis", y=mode, color="label", log_y=log_y, )
 
                         fig.update_xaxes(title="pca component")
                         if log_y:
@@ -1721,8 +1810,9 @@ if __name__ == '__main__':
                     """)
 
                     st.markdown("These two relationships will now be tested numerically:")
-                    st.info("Please select r_to_r_gen_opt = output_bias, act_fct_opt=linear, node_bias_opt=random_bias,"
-                            " n_rad=0.0")
+                    st.info(
+                        "Please select r_to_r_gen_opt = output_bias, act_fct_opt=linear, node_bias_opt=random_bias,"
+                        " n_rad=0.0")
                     # normal esn:
                     normal_esn = esn.build(esn_type="ESN_normal",
                                            seed=seed,
@@ -1773,15 +1863,18 @@ if __name__ == '__main__':
                     normal_vector = w_out_res_normal @ b_normal + w_out_vec_normal
                     st.write("Differences of vectors: ", pca_vector - normal_vector)
 
-                    st.info("For small regulation parameters the difference in matrices gets bigger, "
-                            "due to nummerical errors.")
-                    st.info("The equations above assume that the output can be written as an affine "
-                            "function of the input. This is for only for linear systems the case. "
-                            "Thus there is a bigger difference if tried on non-linear systems. ")
+                    st.info(
+                        "For small regulation parameters the difference in matrices gets bigger, "
+                        "due to nummerical errors.")
+                    st.info(
+                        "The equations above assume that the output can be written as an affine "
+                        "function of the input. This is for only for linear systems the case. "
+                        "Thus there is a bigger difference if tried on non-linear systems. ")
 
-                    st.markdown("Also the first x_dim pca components will explain 100% of the variance"
-                                ", i.e. the data in the high dimensional r_dim space spans the same "
-                                "dimensions as the input: ")
+                    st.markdown(
+                        "Also the first x_dim pca components will explain 100% of the variance"
+                        ", i.e. the data in the high dimensional r_dim space spans the same "
+                        "dimensions as the input: ")
                     cols = st.columns(2)
                     with cols[0]:
                         st.write("Explained variance: ", pca_esn._pca.explained_variance_ratio_.T)
@@ -1860,9 +1953,9 @@ if __name__ == '__main__':
 
                     # PCA esn:
                     pca_esn = esn.build(esn_type="ESN_pca",
-                                           seed=seed,
-                                           x_dim=x_dim,
-                                           build_args=build_args)
+                                        seed=seed,
+                                        x_dim=x_dim,
+                                        build_args=build_args)
                     pca_esn = copy.deepcopy(pca_esn)
                     _, _, pca_res_dict, pca_esn = esn.train_return_res(
                         pca_esn,
@@ -1885,7 +1978,6 @@ if __name__ == '__main__':
                     pca_vector = w_out_vec_pca - w_out_res_pca @ pca_components @ r_mean
                     normal_vector = w_out_vec_normal
                     st.write("Differences of vectors: ", pca_vector - normal_vector)
-
 
                 utils.st_line()
                 if st.checkbox("Moment Matrix: ",
