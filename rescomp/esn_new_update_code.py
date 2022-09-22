@@ -791,7 +791,9 @@ class _add_pca_r_to_rgen():
         self._input_data_mean = None
         self._matrix = None
 
-    def set_pca_components(self, pca_components, pca_comps_to_skip=0, norm_with_expl_var=False,
+    def set_pca_components(self, pca_components,
+                           pca_comps_to_skip=0,
+                           norm_with_expl_var=False,
                            centering_pre_trans=True):
         self._pca_components = pca_components
         self._pca_comps_to_skip = pca_comps_to_skip
@@ -937,6 +939,108 @@ class _add_centered_r_to_rgen():
         self._r_to_r_gen_fct = lambda r, x: _r_to_r_gen_fct_no_model(
             r - self._input_data_mean,
             x)
+
+        self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[
+            0]
+
+
+class _add_preprocess_r_to_rgen():
+    """
+    1. Scaler and/or center r_train.
+        - specify if you want to scale
+        - specify if you want to center
+    2. Add a pca transformation.
+        - specify the number of components
+        - specify if you want to center
+    """
+
+    def __init__(self):
+
+        self._r_to_r_gen_opt = None
+        self._r_to_r_gen_synonyms = utilities._SynonymDict()
+        self._r_to_r_gen_synonyms.add_synonyms(0, ["linear_r", "simple", "linear"])
+        self._r_to_r_gen_synonyms.add_synonyms(1, "linear_and_square_r")
+        self._r_to_r_gen_synonyms.add_synonyms(2, ["output_bias", "bias"])
+        self._r_to_r_gen_synonyms.add_synonyms(3, ["bias_and_square_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(4, ["linear_and_square_r_alt"])
+        self._r_to_r_gen_synonyms.add_synonyms(5, ["exponential_r"])
+        self._r_to_r_gen_synonyms.add_synonyms(6, ["bias_and_exponential_r"])
+
+        self._r_train_std = None
+        self._r_train_mean = None
+
+        self._pca = None
+        self._pca_matrix = None
+        self._pca_input_mean = None
+
+    def set_r_train_preprocessing(self,
+                                  center_r_train: bool = False,
+                                  rescale_r_train: bool = False,
+                                  perform_pca: bool = False,
+                                  pca_components: int | None = None,
+                                  center_pca_input: bool = True,
+                                  ):
+        self.center_r_train = center_r_train
+        self.rescale_r_train = rescale_r_train
+        self.perform_pca = perform_pca
+        self.pca_components = pca_components
+        self.center_pca_input = center_pca_input
+
+    def set_r_to_r_gen_fct(self,
+                           r_train: np.ndarray,
+                           r_to_r_gen_opt="linear"
+                           ):
+        if type(r_to_r_gen_opt) == str:
+            self._r_to_r_gen_opt = r_to_r_gen_opt
+            r_to_r_gen_flag = self._r_to_r_gen_synonyms.get_flag(r_to_r_gen_opt)
+            if r_to_r_gen_flag == 0:
+                basic_rrgen_fct = lambda r, x: r
+            elif r_to_r_gen_flag == 1:
+                basic_rrgen_fct = lambda r, x: np.hstack((r, r ** 2))
+            elif r_to_r_gen_flag == 2:
+                basic_rrgen_fct = lambda r, x: np.hstack((r, 1))
+            elif r_to_r_gen_flag == 3:
+                basic_rrgen_fct = lambda r, x: np.hstack((np.hstack((r, r ** 2)), 1))
+            elif r_to_r_gen_flag == 4:
+                def temp(r, x):
+                    r_gen = np.copy(r).T
+                    r_gen[::2] = r.T[::2] ** 2
+                    return r_gen.T
+
+                basic_rrgen_fct = temp
+            elif r_to_r_gen_flag == 5:
+                basic_rrgen_fct = lambda r, x: np.hstack((r, np.exp(r)))
+            elif r_to_r_gen_flag == 6:
+                basic_rrgen_fct = lambda r, x: np.hstack((np.hstack((r, np.exp(r))), 1))
+        else:
+            self._r_to_r_gen_opt = "CUSTOM"
+            basic_rrgen_fct = r_to_r_gen_opt
+
+        if self.center_r_train:
+            self._r_train_mean = np.mean(r_train, axis=0)
+            r_train = r_train - self._r_train_mean
+        else:
+            self._r_train_mean = 0
+        if self.rescale_r_train:
+            self._r_train_scale = np.std(r_train, axis=0)
+            r_train = r_train/self._r_train_scale
+        else:
+            self._r_train_scale = 1
+        if self.perform_pca:
+            self._pca = decomposition.PCA(n_components=self.pca_components)
+            self._pca.fit(r_train)
+            self._pca_matrix = self._pca.components_
+            if self.center_pca_input:
+                self._pca_input_mean = np.mean(r_train, axis=0)
+            else:
+                self._pca_input_mean = 0
+
+            preprocess_fct = lambda r: self._pca_matrix @ (
+                        ((r - self._r_train_mean) / self._r_train_scale) - self._pca_input_mean)
+        else:
+            preprocess_fct = lambda r: (r - self._r_train_mean) / self._r_train_scale
+
+        self._r_to_r_gen_fct = lambda r, x: basic_rrgen_fct(preprocess_fct(r), x)
 
         self._r_gen_dim = self._r_to_r_gen_fct(np.zeros(self._r_dim), np.zeros(self._x_dim)).shape[
             0]
@@ -1706,8 +1810,13 @@ class _add_model_input_coupling_with_preprocess():
             self._w_in = w_in_opt
 
 
-class ESN_normal(_ResCompCore, _add_basic_defaults, _add_network_update_fct, _add_basic_r_to_rgen,
-                 _add_w_in, _add_standard_input_coupling, _add_standard_y_to_x):
+class ESN_normal(_ResCompCore,
+                 _add_basic_defaults,
+                 _add_network_update_fct,
+                 _add_basic_r_to_rgen,
+                 _add_w_in,
+                 _add_standard_input_coupling,
+                 _add_standard_y_to_x):
     """
     Pretty standard ESN class
     """
@@ -4193,6 +4302,150 @@ class ESN_hybrid(_ResCompCore,
             self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
                                 network_creation_attempts=network_creation_attempts)
         self.set_r_to_r_gen_fct(r_to_r_gen_opt=r_to_r_gen_opt)
+        self.set_activation_function(act_fct_opt=act_fct_opt)
+
+        if bias_seed is not None:
+            with utilities.temp_seed(bias_seed):
+                self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+        else:
+            self.set_node_bias(node_bias_opt=node_bias_opt, bias_scale=bias_scale)
+
+        self.set_leak_factor(leak_factor=leak_factor)
+
+        if w_in_seed is not None:
+            with utilities.temp_seed(w_in_seed):
+                self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+        else:
+            self.create_w_in(w_in_opt=w_in_opt, w_in_scale=w_in_scale)
+
+        self.set_default_res_state(default_res_state=default_res_state)
+        self.set_reg_param(reg_param=reg_param)
+
+
+class ESN_r_process(_ResCompCore,
+                    _add_basic_defaults,
+                    _add_network_update_fct,
+                    _add_preprocess_r_to_rgen,
+                    _add_w_in,
+                    _add_standard_input_coupling,
+                    _add_standard_y_to_x):
+    """
+    Train and r_to_r_gen definition is intertwined so we cant just predefine r_to_r_gen -> its all in train
+    """
+
+    def __init__(self):
+        _ResCompCore.__init__(self)
+        _add_basic_defaults.__init__(self)
+        _add_network_update_fct.__init__(self)
+        _add_preprocess_r_to_rgen.__init__(self)
+        _add_w_in.__init__(self)
+        _add_standard_input_coupling.__init__(self)
+        _add_standard_y_to_x.__init__(self)
+
+        self._input_noise_scale = None
+        self._input_noise_seed = None
+
+    def train(self,
+              use_for_train,
+              sync_steps=0,
+              reset_res_state=True,
+              save_y_train=False,
+              **kwargs):
+        sync = use_for_train[:sync_steps]
+        train = use_for_train[sync_steps:]
+
+        x_train = train[:-1]
+        y_train = train[1:]
+
+        # add input noise:
+        if self._input_noise_scale is not None:
+            inp_rng = np.random.default_rng(self._input_noise_seed)
+            x_train += inp_rng.standard_normal(x_train.shape) * self._input_noise_scale
+
+        if save_y_train:
+            self._saved_y_train = y_train
+
+        # r to r_gen with pca
+        if reset_res_state:
+            self.reset_r()
+
+        self.drive(sync)
+
+        kwargs["save_r"] = True
+        kwargs["save_r_gen"] = False
+
+        save_out = False
+        if "save_out" in kwargs.keys():
+            if kwargs["save_out"]:  # can not save out during training before w_out is calculated
+                save_out = True
+                kwargs["save_out"] = False
+
+        self.drive(x_train, **kwargs)
+        r_train = self.get_r()
+
+        self.set_r_to_r_gen_fct(r_train,
+                                r_to_r_gen_opt=self._r_to_r_gen_opt)
+
+        train_steps = r_train.shape[0]
+        r_gen = np.zeros((train_steps, self._r_gen_dim))
+        for i in range(train_steps):
+            r_gen[i, :] = self._r_to_r_gen_fct(r_train[i, :], None)
+
+        self._saved_r_gen = r_gen
+        self._fit_w_out(y_train, self._saved_r_gen)
+
+        if save_out:
+            self._saved_out = (self._w_out @ self._saved_r_gen.T).T
+
+    def build(self,
+              x_dim,
+              r_dim=500,
+              n_rad=0.1,
+              n_avg_deg=6.0,
+              n_type_opt="erdos_renyi",
+              network_creation_attempts=10,
+              center_r_train: bool = False,
+              rescale_r_train: bool = False,
+              perform_pca: bool = False,
+              pca_components: int | None = None,
+              center_pca_input: bool = False,
+              r_to_r_gen_opt="linear",
+              act_fct_opt="tanh",
+              node_bias_opt="no_bias",
+              bias_scale=1.0,
+              leak_factor=0.0,
+              w_in_opt="random_sparse",
+              w_in_scale=1.0,
+              default_res_state=None,
+              reg_param=1e-8,
+              network_seed=None,
+              bias_seed=None,
+              w_in_seed=None,
+              input_noise_scale: float | None = None,
+              input_noise_seed: int | None = None):
+
+        self._input_noise_scale = input_noise_scale
+        self._input_noise_seed = input_noise_seed
+
+        self.set_r_train_preprocessing(center_r_train,
+                                       rescale_r_train,
+                                       perform_pca,
+                                       pca_components,
+                                       center_pca_input)
+
+        self._r_to_r_gen_opt = r_to_r_gen_opt
+
+        self._x_dim = x_dim
+        self._y_dim = x_dim
+        self._r_dim = r_dim
+
+        if network_seed is not None:
+            with utilities.temp_seed(network_seed):
+                self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                    network_creation_attempts=network_creation_attempts)
+        else:
+            self.create_network(n_rad=n_rad, n_avg_deg=n_avg_deg, n_type_opt=n_type_opt,
+                                network_creation_attempts=network_creation_attempts)
         self.set_activation_function(act_fct_opt=act_fct_opt)
 
         if bias_seed is not None:
