@@ -42,7 +42,7 @@ BIAS_TYPES = ["no_bias", "random_bias", "constant_bias"]
 NETWORK_TYPES = ["erdos_renyi", "scale_free", "small_world", "random_directed",
                  "random_dense_gaussian",
                  "scipy_sparse"]
-ACTIVATION_FUNCTIONS = ["tanh", "sigmoid", "relu", "linear"]
+ACTIVATION_FUNCTIONS = ["tanh", "sigmoid", "relu", "linear", "relu_and_tanh"]
 R_TO_R_GEN_TYPES = ["linear_r", "linear_and_square_r", "output_bias", "bias_and_square_r",
                     "linear_and_square_r_alt",
                     "exponential_r", "bias_and_exponential_r"]

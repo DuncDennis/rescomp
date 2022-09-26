@@ -22,6 +22,21 @@ from . import simulations
 # from ._version import __version__
 
 
+def get_relu_and_tanh(r_dim: int,
+                      relu_fraction: float = 0.5
+                      ) -> Callable[[np.ndarray], np.ndarray]:
+    split = int(relu_fraction * r_dim)
+
+    def act_fct(r: np.ndarray):
+        relu_out = utilities.relu(r[:split])
+        tanh_out = np.tanh(r[split:])
+        out = np.zeros(r_dim)
+        out[:split] = relu_out
+        out[split:] = tanh_out
+        return out
+
+    return act_fct
+
 class _ResCompCore():  # utilities._ESNLogging
     """
     TBD
@@ -326,6 +341,7 @@ class _add_basic_defaults():
         self._act_fct_flag_synonyms.add_synonyms(1, ["sigmoid"])
         self._act_fct_flag_synonyms.add_synonyms(2, ["relu"])
         self._act_fct_flag_synonyms.add_synonyms(3, ["identity", "linear"])
+        self._act_fct_flag_synonyms.add_synonyms(4, ["relu_and_tanh"])
 
         self._node_bias_opt = None
         self._node_bias_flag_synonyms = utilities._SynonymDict()
@@ -346,6 +362,8 @@ class _add_basic_defaults():
                 self._act_fct = utilities.relu
             elif act_fct_flag == 3:
                 self._act_fct = lambda x: x
+            elif act_fct_flag == 4:
+                self._act_fct = get_relu_and_tanh(self._r_dim, relu_fraction=0.1)
         else:
             self._act_fct_opt = "CUSTOM"
             self._act_fct = act_fct_opt
