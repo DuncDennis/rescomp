@@ -583,6 +583,13 @@ def st_all_w_out_r_gen_plots(r_gen_dict: dict[str, np.ndarray],
         st_r_gen_times_w_out_stat_measure(r_gen_dict, w_out,
                                           key=f"{key}__st_all_w_out_r_gen_plots__smr2")
 
+    utils.st_line()
+    if st.checkbox("Mean frequency of Rgen states",
+                   key=f"{key}__st_all_w_out_r_gen_plots__mf"):
+        st.markdown("**Plot the mean frequency of the r_gen components.**")
+        meas_app.st_mean_frequency(r_gen_dict,
+                                   x_label="r_gen_dim")
+
 
 def st_dist_in_std_for_r_gen_states(r_gen_train: np.ndarray,
                                     r_gen_pred: np.ndarray,

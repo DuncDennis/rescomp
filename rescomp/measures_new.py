@@ -61,7 +61,9 @@ def valid_time_index(error_series: np.ndarray, error_threshold: float) -> int:
         return int(np.argmax(error_step_bigger_than_thresh))
 
 
-def power_spectrum_componentwise(data: np.ndarray, period: bool = False, dt: float = 1.0
+def power_spectrum_componentwise(data: np.ndarray,
+                                 period: bool = False,
+                                 dt: float = 1.0
                                  ) -> tuple[np.ndarray, np.ndarray]:
     """Calculates the fourier power spectrum of the n-dimensional time_series.
 
@@ -96,6 +98,25 @@ def power_spectrum_componentwise(data: np.ndarray, period: bool = False, dt: flo
         xout = half_freq
 
     return xout, yout
+
+
+def mean_frequency(data: np.ndarray,
+                   dt: float = 1.0) -> np.ndarray:
+    """Calculate the componentwise mean frequency of a multi-dim signal.
+
+    Args:
+        data: Time series to transform, shape (time_steps, sys_dim).
+        dt: The time step.
+
+    Returns:
+        The mean frequency for each dimension of shape (sys_dim, ).
+    """
+    sys_dim = data.shape[1]
+    freq, power = power_spectrum_componentwise(data, period=False, dt=dt)
+    mean_freq = np.zeros(sys_dim)
+    for i in range(sys_dim):
+        mean_freq[i] = np.sum(freq * power[:, i]) / np.sum(power[:, i])
+    return mean_freq
 
 
 def largest_lyapunov_exponent(

@@ -258,8 +258,10 @@ def get_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
     return pd.DataFrame.from_dict(power_spectrum_dict)
 
 
-def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
-                      key: str | None = None) -> None:
+def st_power_spectrum(time_series_dict: dict[str, np.ndarray],
+                      dt: float = 1.0,
+                      key: str | None = None
+                      ) -> None:
     """Streamlit element to plot the power spectrum of a timeseries.
 
     Args:
@@ -303,6 +305,61 @@ def st_power_spectrum(time_series_dict: dict[str, np.ndarray], dt: float = 1.0,
                                            color="label", mode="line",
                                            title_i=f"Power Spectrum, dim = {i_dim}", log_x=log_x)
         st.plotly_chart(fig)
+
+
+@st.experimental_memo
+def get_mean_frequency(time_series_dict: dict[str, np.ndarray],
+                       dt: float = 1.0) -> dict[str, np.ndarray]:
+    """Get the mean frequency for each time series in the timeseries dict.
+
+    Args:
+        time_series_dict: The dictionary containing the time series data. Each time
+                          series has the shape (time_steps, sysdim).
+        dt: The time step to get an accurate frequency.
+
+    Returns:
+        A dictionary containing the mean frequency for each dimension for each dict key.
+    """
+    mean_frequency_dict = {}
+    for k, v in time_series_dict.items():
+        mean_frequency_dict[k] = meas.mean_frequency(v, dt=dt)
+    return mean_frequency_dict
+
+
+def st_mean_frequency(time_series_dict: dict[str, np.ndarray],
+                      dt: float | None = None,
+                      x_label: str = "dimension") -> None:
+    """Streamlit element to plot the mean frequency of a dictionary of timeseries.
+
+    Args:
+        time_series_dict: The dictionary containing the time series data. Each time
+                          series has the shape (time_steps, sysdim).
+        dt: The time step to get an accurate frequency.
+
+    """
+    sys_dim = list(time_series_dict.values())[0].shape[1]
+
+    if dt is None:
+        dt_use = 1.0
+    else:
+        dt_use = dt
+    mean_frequency_dict = get_mean_frequency(time_series_dict,
+                                             dt=dt_use)
+    fig = go.Figure()
+    for key, val in mean_frequency_dict.items():
+        fig.add_trace(
+            go.Scatter(y=val, mode="lines", name=f"{key}")
+        )
+    fig.update_xaxes(title=x_label)
+    if sys_dim < 10:
+        fig.update_xaxes(tickmode='array', tickvals=np.arange(sys_dim),)
+
+    if dt is None:
+        title = "mean frequency (dt not accounted)"
+    else:
+        title = "mean frequency"
+    fig.update_yaxes(title=title)
+    st.plotly_chart(fig)
 
 
 @st.experimental_memo(max_entries=utils.MAX_CACHE_ENTRIES)
@@ -456,6 +513,12 @@ def st_all_data_measures(data_dict: dict[str, np.ndarray], dt: float = 1.0, key:
         st_power_spectrum(data_dict,
                           dt=dt,
                           key=f"{key}__st_all_data_measures")
+    utils.st_line()
+    if st.checkbox("Mean frequency",
+                   key=f"{key}__st_all_data_measures__mf"):
+        st.markdown("**Plot the mean frequency for each dimension:**")
+        st_mean_frequency(data_dict,
+                          dt=dt)
     utils.st_line()
     if st.checkbox("Lyapunov from data",
                    key=f"{key}__st_all_data_measures__ledata"):
