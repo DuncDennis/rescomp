@@ -22,6 +22,9 @@ import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from PIL import Image
+
 import rescomp.data_preprocessing as datapre
 import streamlit_project.generalized_plotting.plotly_plots as plpl
 import streamlit_project.latex_formulas.esn_pca_formulas as pcalatex
@@ -442,6 +445,11 @@ if __name__ == '__main__':
                 r_gen_w_out_dict_comp = esncomp.st_pca_transformed_quantites_comp(
                     r_gen_w_out_dict_comp)
 
+                r_gen_dict_compare = {}
+                for k, v in r_gen_w_out_dict_comp.items():
+                    r_gen_dict_compare[f"{k} train"] = v["r_gen_train"]
+                    r_gen_dict_compare[f"{k} predict"] = v["r_gen_pred"]
+
                 utils.st_line()
                 if st.checkbox("Simple w_out plot", key="comparison_wout_simple"):
                     fig = go.Figure()
@@ -457,10 +465,6 @@ if __name__ == '__main__':
 
                 utils.st_line()
                 if st.checkbox("Statistical measures on Rgen", key="comparison_r_gen"):
-                    r_gen_dict_compare = {}
-                    for k, v in r_gen_w_out_dict_comp.items():
-                        r_gen_dict_compare[f"{k} train"] = v["r_gen_train"]
-                        r_gen_dict_compare[f"{k} predict"] = v["r_gen_pred"]
                     measures.st_statistical_measures(r_gen_dict_compare,
                                                      bar_or_line="line",
                                                      x_label="r_gen_dim",
@@ -468,7 +472,11 @@ if __name__ == '__main__':
                                                      default_log_y=True,
                                                      default_measure="std",
                                                      key=f"compare_esns_train")
-
+                utils.st_line()
+                if st.checkbox("Mean frequency of Rgen", key="comparison_r_gen_meanfreq"):
+                    measures.st_mean_frequency(r_gen_dict_compare,
+                                               dt=dt,
+                                               x_label="r_gen_dim")
             with comp_sub_tabs[3]:
                 if st.checkbox("Valid time index", key="valid time index compare"):
                     for k, v in different_esn_outputs.items():
@@ -531,7 +539,7 @@ if __name__ == '__main__':
             st.info('Activate [🔮 Predict] checkbox to see something.')
 
     with tbd_tab:
-        tbd_tabs = st.tabs(["💡 PCA", "🧹 Sweeping", "🔰 Theory"])
+        tbd_tabs = st.tabs(["💡 PCA", "🧹 Sweeping", "🔰 Theory", "📖 Publication Plots"])
         with tbd_tabs[0]:
             st.info("The following functionalities make sense for PCA_ens where the "
                     "generalized reservoir states represent the PCA components.")
@@ -1287,6 +1295,77 @@ if __name__ == '__main__':
 
                 st.write("ESN offset: ", esn_to_test._input_data_mean)
 
+            utils.st_line()
+            if st.checkbox("Meaning of PCA components 2", key="meaning_two"):
+                # TODO: EXPERIMENTAL
+                st.warning("EXPERIMENTAL")
+
+                if hasattr(esn_obj, "_pca"):
+                    pca_components = esn_obj._pca.components_  # shape: [n_components, r_dim]
+                else:
+                    raise Exception("ESN object does not have _pca. ")
+
+                w_in = esn_obj._w_in  # Shape: [r_dim, input_dim].
+                # fig = px.line(w_in)
+                # fig.update_xaxes(title="Reservoir index")
+                # fig.update_yaxes(title="Input dimension")
+                # st.plotly_chart(fig)
+                fig = go.Figure()
+                for i_inp in range(w_in.shape[1]):
+                    fig.add_trace(
+                        go.Scatter(y=w_in[:, i_inp], mode="lines", name=f"w_in dim {i_inp}")
+                    )
+
+                max_pca_dim = st.number_input("max component", value=1, min_value=0,
+                                              key="max_pca_dim_meaning")
+                for i_pc in range(max_pca_dim):
+                    fig.add_trace(
+                        go.Scatter(y=pca_components[i_pc, :], mode="lines", name=f"pc: {i_pc}")
+                    )
+
+                st.plotly_chart(fig)
+            utils.st_line()
+            if st.checkbox("Meaning of PCA components 3", key="meaning_three"):
+                # TODO: EXPERIMENTAL
+                st.warning("EXPERIMENTAL")
+
+                if hasattr(esn_obj, "_pca"):
+                    pca_components = esn_obj._pca.components_  # shape: [n_components, r_dim]
+                else:
+                    raise Exception("ESN object does not have _pca. ")
+
+                w = esn_obj.return_network()
+                # fig = px.line(w)
+                # st.plotly_chart(fig)
+
+                # w_pca = w @ pca_components
+                # # st.write(w_pca)
+                # fig = px.line(w_pca)
+                # st.plotly_chart(fig)
+
+                r_gen = res_train_dict["r_gen"]
+                r = res_train_dict["r"]
+
+                max_dim = 500
+                r = r[:, :max_dim]
+
+                corr = esnexp.correlate_input_and_r_gen(r, r_gen, time_delay=1)
+                corr_summed = np.sum(np.abs(corr), axis=1)
+                fig = px.line(corr_summed)
+                # st.write(corr.shape)
+                # fig = px.line(corr.T)
+                st.plotly_chart(fig)
+            utils.st_line()
+            if st.checkbox("Meaning of PCA components: r_gen - ", key="meaning_four"):
+                # TODO: EXPERIMENTAL
+                st.warning("EXPERIMENTAL")
+
+                if hasattr(esn_obj, "_pca"):
+                    pca_components = esn_obj._pca.components_  # shape: [n_components, r_dim]
+                else:
+                    raise Exception("ESN object does not have _pca. ")
+
+
         with tbd_tabs[1]:
             if predict_bool:
                 tabs = st.tabs(["PCA on reservoir states"])
@@ -2008,6 +2087,260 @@ if __name__ == '__main__':
             else:
                 st.info('Activate [🔮 Predict] checkbox to see something.')
 
+        with tbd_tabs[3]:
+            if st.checkbox("M_in with error bars", key="pub_min_errorbars"):
+
+                n_ens = 3
+                # Get data:
+                seeds = np.arange(n_ens)
+                results = np.zeros((n_ens, build_args["r_dim"], x_dim))
+                for i_ens, seed in enumerate(seeds):
+                    # build:
+                    esn_obj = esn.build(esn_type, seed=seed, x_dim=x_dim, build_args=build_args)
+                    esn_obj = copy.deepcopy(esn_obj)
+
+                    # train:
+                    y_train_fit, y_train_true, res_train_dict, esn_obj = esn.train_return_res(
+                        esn_obj,
+                        x_train,
+                        t_train_sync,
+                        )
+                    esn_obj = copy.deepcopy(esn_obj)
+
+                    # get w_in:
+                    w_in = esn_obj._w_in
+
+                    # get pca components:
+                    pca = PCA()
+                    pca.fit(res_train_dict["r"])
+                    pca_components = pca.components_
+
+                    # calculate w_in_pca:
+                    w_in_pca = pca_components @ w_in
+
+                    # save results:
+                    results[i_ens, :, :] = w_in_pca
+
+                # Post process data:
+                results = np.abs(results)
+                # avg_w_in_pca = np.mean(results, axis=0)
+                # error_w_in_pca_up = np.std(results, axis=0)/2
+                # error_w_in_pca_down = np.std(results, axis=0)/2
+
+                avg_w_in_pca = np.median(results, axis=0)
+                error_w_in_pca_up = np.quantile(results, q=1, axis=0) - avg_w_in_pca
+                error_w_in_pca_down = avg_w_in_pca - np.quantile(results, q=0, axis=0)
+
+                ### Plot data:
+
+                # Additional plotting data:
+                max_r_dim = 15
+                x_range = np.arange(max_r_dim)
+
+                # All plotting settings:
+                yaxis_title = r'$|W_\text{in, pca}|$'
+                xaxis_title = r'$\text{Principal Component}$'
+                font_size = 15
+                legend_font_size = 11
+                xrange = None  # [0, 0.105]
+                yrange = [0, 8]  # [0, 12]
+                x_size = 600
+                y_size = int(1.0 * x_size)
+                log_y = False
+                figsize = (y_size, x_size)
+
+                # fig = go.Figure()
+                fig = make_subplots(3, 1,
+                                    shared_xaxes=True,
+                                    shared_yaxes=True,
+                                    # subplot_titles=[f"Input Dim: {i+1}" for i in range(x_dim)]
+                                    )
+                for i in range(x_dim):
+
+                    fig.add_trace(
+                        go.Bar(
+                            name=f"Input Dim: {i + 1}",
+                            x=x_range,
+                            y=avg_w_in_pca[:, i],
+                            error_y=dict(
+                                type="data",
+                                symmetric=False,
+                                array=error_w_in_pca_up[:, i],
+                                arrayminus=error_w_in_pca_down[:, i])),
+                        row=i + 1, col=1
+                    )
+                    # fig.add_trace(go.Scatter(
+                    #     name=f"Input Dim: {i+1}",
+                    #     x=x_range,
+                    #     y=avg_w_in_pca[:, i],
+                    #     mode="lines",
+                    #     error_y=dict(
+                    #         type="data",
+                    #         symmetric=False,
+                    #         array=error_w_in_pca_up[:, i],
+                    #         arrayminus=error_w_in_pca_down[:, i])
+                    # ))
+                # fig.update_layout(barmode='group')
+                # fig.update_layout(barmode='stack')
+                fig.update_xaxes(title=xaxis_title,
+                                 row=x_dim,
+                                 col=1)
+                fig.update_yaxes(title=yaxis_title,
+                                 row=2,
+                                 col=1)
+                fig.update_layout(
+                    font=dict(
+                        size=font_size,
+                        family="Times New Roman"
+                    ),
+                    width=x_size,
+                    height=y_size
+                )
+
+                fig.update_yaxes(range=yrange)
+                fig.update_xaxes(range=xrange)
+
+                fig.update_layout(legend=dict(
+                    orientation="h",
+                    yanchor="bottom",
+                    y=1.01,  # 0.99
+                    xanchor="left",
+                    # x=0.2,
+                    font=dict(size=legend_font_size)
+                ))
+
+                if log_y:
+                    fig.update_layout(
+                        xaxis={
+                            'exponentformat': 'E'}
+                    )
+
+                # fig.update_layout(paper_bgcolor="black")
+                # fig.update_layout(plot_bgcolor="white")
+                fig.update_layout(template="plotly_white")
+
+                # fig.update_yaxes(type="log", exponentformat="E")
+                fig.write_image("test_fig.png", scale=3)
+                # fig.write_image("test_fig.pdf")
+                image = Image.open('test_fig.png')
+                st.image(image)
+                st.plotly_chart(fig)
+
+            utils.st_line()
+            if st.checkbox("PCA vs Input trajectory plot 2D", key="pca_input_traj_plot"):
+                #### WORKS ONLY FOR 3d:
+                # Note: you should perform pca on input so that it looks good.
+
+                ### GET DATA:
+                # Get reservoir states:
+                r = res_train_dict["r"]
+
+                # Perform pca transformation:
+                pca = PCA()
+                r_pca = pca.fit_transform(r)
+
+                ### Plot:
+
+                y_axis_title_input = r"Input"
+                y_axis_title_pca = r"PCA"
+                color = "black"
+                linewidth = 0.2
+                dims_to_plot = ((0, 1), (0, 2), (1, 2))
+
+                fig = make_subplots(rows=2,
+                                    cols=3,
+                                    subplot_titles=["1 - 2", "1 - 3", "2 - 3"])
+                for i in range(3):
+                    x_dim, y_dim = dims_to_plot[i]
+                    fig.add_trace(
+                        go.Scatter(x=y_train_true[:, x_dim],
+                                   y=y_train_true[:, y_dim],
+                                   line=dict(
+                                       color=color,
+                                       width=linewidth
+                                   )),
+                        col=i + 1, row=1,
+                    )
+
+                for i in range(3):
+                    x_dim, y_dim = dims_to_plot[i]
+                    fig.add_trace(
+                        go.Scatter(x=r_pca[:, x_dim],
+                                   y=r_pca[:, y_dim],
+                                   line=dict(
+                                       color=color,
+                                       width=linewidth
+                                   )
+                                   ),
+                        col=i+1, row=2
+                    )
+                fig.update_layout(template="none", showlegend=False)
+                fig.update_yaxes(title=y_axis_title_input, col=1, row=1)
+                fig.update_yaxes(title=y_axis_title_pca, col=1, row=2)
+
+                # fig.
+
+                st.plotly_chart(fig)
+            utils.st_line()
+            if st.checkbox("PCA vs Input trajectory plot 3d", key="pca_input_traj_plot3d"):
+                ### GET DATA:
+                # Get reservoir states:
+                r = res_train_dict["r"]
+
+                # Perform pca transformation:
+                pca = PCA()
+                r_pca = pca.fit_transform(r)
+
+                ### Plot:
+                color = "black"
+                linewidth = 0.2
+                fig = make_subplots(cols=2, rows=1,
+                                    # column_widths=[60]*2,
+                                    subplot_titles=["Lorenz", "First 3 PCs"],
+                                    specs=[[{"type": "scatter3d"}, ]*2],
+                                    horizontal_spacing=0.2
+                                    )
+
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=y_train_true[:, 0], y=y_train_true[:, 1], z=y_train_true[:, 2],
+                        line=dict(
+                            color=color,
+                            width=linewidth
+                        ),
+                        mode="lines",
+                        meta=dict()
+                    ),
+                    row=1, col=1
+                )
+
+                fig.add_trace(
+                    go.Scatter3d(
+                        x=r_pca[:, 0], y=r_pca[:, 1], z=r_pca[:, 2],
+                        line=dict(
+                            color=color,
+                            width=linewidth
+                        ),
+                        mode="lines"
+                    ),
+                    row=1, col=2
+                )
+
+                fig.update_layout(template="plotly_white",
+                                  showlegend=False,
+                                  )
+                # see https://plotly.com/python/reference/#layout-scene-xaxis-title
+                fig.update_scenes(
+                    xaxis_title="",
+                    yaxis_title="",
+                    zaxis_title="",
+
+                    xaxis_showticklabels=False,
+                    yaxis_showticklabels=False,
+                    zaxis_showticklabels=False
+                )
+
+                st.plotly_chart(fig)
     #  Container code at the end:
     if build_bool:
         x_dim, r_dim, r_gen_dim, y_dim = esn_obj.get_dimensions()
